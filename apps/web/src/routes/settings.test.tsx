@@ -43,6 +43,8 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   notificationSettings: () => Promise.resolve({ url: null }),
   saveNotifyUrl: () => Promise.resolve(),
   sendTestNotification: () => Promise.resolve({ delivered: true }),
+  baseUrl: () => Promise.resolve({ url: "https://halero.example.com/" }),
+  saveBaseUrl: () => Promise.resolve(),
   ...overrides,
 });
 
@@ -447,6 +449,76 @@ test("reports a test notification that could not be delivered", async () => {
   );
 
   expect(await view.findByText(/could not be delivered/)).toBeTruthy();
+});
+
+test("shows the server address with the redirect URI warning", async () => {
+  const view = renderSettings(stubApi());
+
+  const input = await view.findByLabelText("Server address");
+  expect(input.getAttribute("value")).toBe("https://halero.example.com/");
+  // The inline warning: changing the address changes the OAuth redirect
+  // URI, which must be updated in Google Cloud before reconnecting.
+  expect(view.getByText(/Google Cloud console/)).toBeTruthy();
+});
+
+test("saves the server address trimmed and confirms", async () => {
+  const saved: string[] = [];
+  const view = renderSettings(
+    stubApi({
+      saveBaseUrl: (url: string) => {
+        saved.push(url);
+        return Promise.resolve();
+      },
+    }),
+  );
+
+  const input = await view.findByLabelText("Server address");
+  fireEvent.change(input, {
+    target: { value: "  https://moved.example.com  " },
+  });
+  fireEvent.click(view.getByRole("button", { name: "Save address" }));
+
+  expect(await view.findByText("Server address saved.")).toBeTruthy();
+  expect(saved).toEqual(["https://moved.example.com"]);
+});
+
+test("shows the readable rejection when the server address is invalid", async () => {
+  const view = renderSettings(
+    stubApi({
+      saveBaseUrl: () =>
+        Promise.reject(
+          new Error("Base URL must start with http:// or https://."),
+        ),
+    }),
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: "Save address" }));
+
+  expect(
+    await view.findByText("Base URL must start with http:// or https://."),
+  ).toBeTruthy();
+});
+
+test("plain buttons default to type=button so they never submit forms", async () => {
+  const view = renderSettings(stubApi());
+
+  const copy = await view.findByRole("button", { name: "Copy" });
+  expect(copy.getAttribute("type")).toBe("button");
+  // Forms still opt in explicitly.
+  const save = view.getByRole("button", { name: "Save client" });
+  expect(save.getAttribute("type")).toBe("submit");
+});
+
+test("busy spinners are hidden from assistive tech", async () => {
+  const view = renderSettings(stubApi());
+
+  // The initial status query is still pending, so the standalone
+  // spinner is on screen; it carries no information a screen reader
+  // could use, so it must be aria-hidden.
+  const spinner = view.container.querySelector("svg.animate-spin");
+  expect(spinner?.getAttribute("aria-hidden")).toBe("true");
+  // Let the queries settle before teardown.
+  await view.findByText(/Connect Google Calendar/);
 });
 
 test("turns the connected query param into a success banner", async () => {

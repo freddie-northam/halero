@@ -47,6 +47,8 @@ const CALLBACK_ERRORS: Record<string, string> = {
     "That connection attempt expired or was already used. Start it again from this page.",
   client_not_configured:
     "The saved Google client details went missing partway through. Save them again below, then reconnect.",
+  client_unreadable:
+    "The saved Google client details could not be read, usually because the server's encryption key changed. Save the client ID and secret again below, then reconnect.",
   token_exchange_failed:
     "Google rejected the connection attempt. Check that the client ID, client secret, and redirect URI in Google Cloud match exactly, then try again.",
   no_refresh_token:
@@ -283,7 +285,9 @@ const ClientForm = ({
             disabled={save.isPending}
             className="self-start"
           >
-            {save.isPending ? <Loader2 className="animate-spin" /> : null}
+            {save.isPending ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : null}
             Save client
           </Button>
         </form>
@@ -498,7 +502,9 @@ const SyncControls = ({
           onClick={() => sync.mutate()}
           disabled={sync.isPending}
         >
-          {sync.isPending ? <Loader2 className="animate-spin" /> : null}
+          {sync.isPending ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : null}
           {sync.isPending ? "Syncing" : "Sync now"}
         </Button>
         {sync.isPending ? null : (
@@ -634,7 +640,9 @@ const NotificationsForm = ({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={save.isPending}>
-          {save.isPending ? <Loader2 className="animate-spin" /> : null}
+          {save.isPending ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : null}
           Save URL
         </Button>
         <Button
@@ -643,7 +651,9 @@ const NotificationsForm = ({
           disabled={savedUrl === null || test.isPending}
           onClick={() => test.mutate()}
         >
-          {test.isPending ? <Loader2 className="animate-spin" /> : null}
+          {test.isPending ? (
+            <Loader2 aria-hidden="true" className="animate-spin" />
+          ) : null}
           {test.isPending ? "Sending" : "Send test notification"}
         </Button>
       </div>
@@ -688,12 +698,112 @@ const NotificationsSection = (): ReactElement => {
       </CardHeader>
       <CardContent>
         {settings.data === undefined ? (
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <Loader2
+            aria-hidden="true"
+            className="size-4 animate-spin text-muted-foreground"
+          />
         ) : (
           <NotificationsForm
             savedUrl={settings.data.url}
             onSaved={() => {
               void settings.refetch();
+            }}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const ServerAddressForm = ({
+  savedUrl,
+  onSaved,
+}: {
+  readonly savedUrl: string;
+  readonly onSaved: () => void;
+}): ReactElement => {
+  const api = useApi();
+  const save = useMutation({
+    mutationFn: (url: string) => api.saveBaseUrl(url),
+    onSuccess: onSaved,
+  });
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    if (save.isPending) {
+      return;
+    }
+    const url = new FormData(event.currentTarget).get("url");
+    save.mutate(String(url ?? "").trim());
+  };
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="server-address">Server address</Label>
+        <Input
+          id="server-address"
+          name="url"
+          type="url"
+          autoComplete="off"
+          placeholder="https://halero.example.com"
+          defaultValue={savedUrl}
+        />
+      </div>
+      <Alert className="border-amber-300 bg-amber-50 text-amber-900">
+        <AlertDescription className="text-inherit">
+          Changing this address changes the Google OAuth redirect URI. Update
+          the authorized redirect URI in the Google Cloud console to match
+          before reconnecting Google Calendar, or connecting will fail.
+        </AlertDescription>
+      </Alert>
+      <Button type="submit" disabled={save.isPending} className="self-start">
+        {save.isPending ? (
+          <Loader2 aria-hidden="true" className="animate-spin" />
+        ) : null}
+        Save address
+      </Button>
+      {save.error !== null ? (
+        <p role="status" className="text-sm text-destructive">
+          {readableError(save.error)}
+        </p>
+      ) : null}
+      {save.isSuccess && save.error === null ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Server address saved.
+        </p>
+      ) : null}
+    </form>
+  );
+};
+
+const ServerAddressSection = (): ReactElement => {
+  const api = useApi();
+  const address = useQuery({
+    queryKey: ["base-url"],
+    queryFn: () => api.baseUrl(),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-sm">Server address</h2>
+        </CardTitle>
+        <CardDescription>
+          The public address this Halero instance is reached at. It decides
+          which browser origins may make changes and the exact Google OAuth
+          redirect URI.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {address.data === undefined ? (
+          <Loader2
+            aria-hidden="true"
+            className="size-4 animate-spin text-muted-foreground"
+          />
+        ) : (
+          <ServerAddressForm
+            savedUrl={address.data.url}
+            onSaved={() => {
+              void address.refetch();
             }}
           />
         )}
@@ -756,7 +866,12 @@ export const SettingsScreen = ({
         </Alert>
       );
     }
-    return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
+    return (
+      <Loader2
+        aria-hidden="true"
+        className="size-4 animate-spin text-muted-foreground"
+      />
+    );
   };
 
   return (
@@ -774,6 +889,9 @@ export const SettingsScreen = ({
       <div className="mt-6">{body()}</div>
       <div className="mt-6">
         <NotificationsSection />
+      </div>
+      <div className="mt-6">
+        <ServerAddressSection />
       </div>
     </div>
   );

@@ -25,6 +25,11 @@ export const saveGoogleClient = (
   setSetting(db, CLIENT_SECRET_KEY, Buffer.from(blob).toString("base64"));
 };
 
+const CLIENT_SECRET_UNREADABLE_MESSAGE =
+  "The saved Google client secret could not be read, usually because " +
+  "the encryption key changed. Enter the client ID and secret again in " +
+  "Settings.";
+
 export const readGoogleClient = (
   db: Db,
   key: Uint8Array,
@@ -34,18 +39,25 @@ export const readGoogleClient = (
   if (clientId === null || secretEnc === null) {
     return null;
   }
-  const clientSecret = decryptCredentials(
-    key,
-    Uint8Array.from(Buffer.from(secretEnc, "base64")),
-  );
-  return { clientId, clientSecret };
+  try {
+    const clientSecret = decryptCredentials(
+      key,
+      Uint8Array.from(Buffer.from(secretEnc, "base64")),
+    );
+    return { clientId, clientSecret };
+  } catch (error) {
+    throw new Error(CLIENT_SECRET_UNREADABLE_MESSAGE, { cause: error });
+  }
 };
 
 export const isGoogleClientConfigured = (db: Db): boolean =>
   getSetting(db, CLIENT_ID_KEY) !== null &&
   getSetting(db, CLIENT_SECRET_KEY) !== null;
 
-const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
+// URL.hostname keeps the brackets around IPv6 literals, so [::1] is
+// matched exactly as it appears in a base URL. Google's plain-http
+// loopback exception covers all three of these.
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
  * Google rejects OAuth redirect URIs on plain-http origins unless the host

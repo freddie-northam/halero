@@ -1,5 +1,5 @@
 import type { HaleroDatabase } from "@halero/db";
-import { type HaleroConfig, isParseableUrl } from "./config";
+import { type HaleroConfig, isHttpUrl } from "./config";
 import { getSetting } from "./settings";
 
 type Db = HaleroDatabase["db"];
@@ -14,7 +14,7 @@ type Db = HaleroDatabase["db"];
  */
 export const resolveBaseUrl = (db: Db, config: HaleroConfig): URL => {
   const stored = getSetting(db, "base_url");
-  if (stored !== null && isParseableUrl(stored)) {
+  if (stored !== null && isHttpUrl(stored)) {
     return new URL(stored);
   }
   return config.baseUrl;

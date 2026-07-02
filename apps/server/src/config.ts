@@ -6,9 +6,16 @@ export interface HaleroConfig {
   readonly baseUrl: URL;
 }
 
-export const isParseableUrl = (value: string): boolean => {
+/**
+ * Base URLs must be http(s): anything else (including "localhost:4253",
+ * which parses with the scheme "localhost:") has an origin of "null",
+ * and a null allowed origin would wave through sandboxed-iframe
+ * requests whose Origin header is also "null".
+ */
+export const isHttpUrl = (value: string): boolean => {
   try {
-    return Boolean(new URL(value));
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
@@ -31,8 +38,9 @@ const envSchema = z.object({
   HALERO_BASE_URL: z
     .string()
     .refine(
-      isParseableUrl,
-      'HALERO_BASE_URL must be a full URL, like "https://halero.example.com".',
+      isHttpUrl,
+      "HALERO_BASE_URL must be a full URL starting with http:// or " +
+        'https://, like "https://halero.example.com".',
     )
     .optional(),
 });

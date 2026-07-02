@@ -59,6 +59,11 @@ export interface TestNotificationResult {
   readonly delivered: boolean;
 }
 
+export interface BaseUrlSettings {
+  /** The address this instance is currently reached at. */
+  readonly url: string;
+}
+
 /**
  * The narrow surface of the CORE server API that the UI consumes.
  * Components depend on this interface instead of the raw tRPC client so
@@ -79,6 +84,8 @@ export interface HaleroApi {
   /** An empty string turns notifications off. */
   readonly saveNotifyUrl: (url: string) => Promise<void>;
   readonly sendTestNotification: () => Promise<TestNotificationResult>;
+  readonly baseUrl: () => Promise<BaseUrlSettings>;
+  readonly saveBaseUrl: (url: string) => Promise<void>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -102,4 +109,8 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
     await client.notifications.save.mutate({ url });
   },
   sendTestNotification: () => client.notifications.sendTest.mutate(),
+  baseUrl: () => client.system.baseUrl.query(),
+  saveBaseUrl: async (url) => {
+    await client.system.setBaseUrl.mutate({ baseUrl: url });
+  },
 });

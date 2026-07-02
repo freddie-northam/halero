@@ -79,6 +79,35 @@ describe("system.setup", () => {
     );
   });
 
+  test("rejects a base URL that is not http or https", async () => {
+    const { app, database } = makeTestApp();
+
+    // "localhost:4253" parses as a URL with the scheme "localhost:", so
+    // it must be rejected, not stored as an origin-less base URL.
+    const res = await trpcMutation(app, "system.setup", {
+      ...setupInput,
+      baseUrl: "localhost:4253",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("http:// or https://");
+    expect(readSetting(database, "base_url")).toBeNull();
+  });
+
+  test("two concurrent setup calls cannot both succeed", async () => {
+    const { app, database } = makeTestApp();
+
+    // Both calls pass the early check while the first is still hashing
+    // its password; only one may win the write.
+    const [first, second] = await Promise.all([
+      trpcMutation(app, "system.setup", setupInput),
+      trpcMutation(app, "system.setup", setupInput),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([200, 403]);
+    expect(readSetting(database, "setup_complete")).toBe("1");
+  });
+
   test("rejects a second setup attempt with a readable error", async () => {
     const { app } = makeTestApp();
     await trpcMutation(app, "system.setup", setupInput);
@@ -111,6 +140,62 @@ describe("system.setup", () => {
 
     expect(res.status).toBe(400);
     expect(await res.text()).toContain("timezone");
+  });
+});
+
+describe("system.baseUrl and system.setBaseUrl", () => {
+  const signedInApp = async (): Promise<TestApp & { cookie: string }> => {
+    const testApp = makeTestApp();
+    const res = await trpcMutation(testApp.app, "system.setup", setupInput);
+    return { ...testApp, cookie: sessionCookieFrom(res) };
+  };
+
+  test("require a session", async () => {
+    const { app } = await signedInApp();
+
+    const query = await trpcQuery(app, "system.baseUrl");
+    const mutation = await trpcMutation(app, "system.setBaseUrl", {
+      baseUrl: "https://halero.example.com",
+    });
+
+    expect(query.status).toBe(401);
+    expect(mutation.status).toBe(401);
+  });
+
+  test("reads the current base URL and stores a new one", async () => {
+    const { app, cookie, database } = await signedInApp();
+
+    const before = await trpcQuery(app, "system.baseUrl", { cookie });
+    expect(before.status).toBe(200);
+    expect(await before.text()).toContain("http://localhost:4253");
+
+    const res = await trpcMutation(
+      app,
+      "system.setBaseUrl",
+      { baseUrl: "https://halero.example.com" },
+      { cookie },
+    );
+
+    expect(res.status).toBe(200);
+    expect(readSetting(database, "base_url")).toBe(
+      "https://halero.example.com",
+    );
+  });
+
+  test("rejects a base URL that is not http or https", async () => {
+    const { app, cookie, database } = await signedInApp();
+
+    for (const baseUrl of ["localhost:4253", "ftp://halero.example.com"]) {
+      const res = await trpcMutation(
+        app,
+        "system.setBaseUrl",
+        { baseUrl },
+        { cookie },
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain("http:// or https://");
+    }
+    expect(readSetting(database, "base_url")).toBeNull();
   });
 });
 

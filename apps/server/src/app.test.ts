@@ -28,11 +28,19 @@ describe("healthz", () => {
 });
 
 describe("security headers", () => {
-  test("are present on every response", async () => {
+  // Pinned on purpose: loosening the policy must show up as a failing
+  // test, with the observed violation recorded next to the relaxation.
+  const EXPECTED_CSP =
+    "default-src 'self'; script-src 'self'; style-src 'self'; " +
+    "img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+
+  test("are present on every response, including the SPA and API", async () => {
     const { app } = makeTestApp();
 
     for (const path of ["/healthz", "/", "/api/trpc/system.status"]) {
       const res = await app.fetch(new Request(`http://localhost${path}`));
+      expect(res.headers.get("content-security-policy")).toBe(EXPECTED_CSP);
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
       expect(res.headers.get("referrer-policy")).toBe("same-origin");
     }
@@ -140,6 +148,54 @@ describe("base URL authority", () => {
 
     expect(sessionCookieFrom(res)).toStartWith("halero_session=");
     expect(res.headers.getSetCookie().join("; ")).toContain("Secure");
+  });
+
+  test("changing the base URL from Settings moves CSRF origin and redirect URI immediately", async () => {
+    const { app, cookie } = await setupWithDomain();
+    const saved = await trpcMutation(
+      app,
+      "connections.google.saveClient",
+      { clientId: "id-1.apps.googleusercontent.com", clientSecret: "shh" },
+      { cookie, origin: "https://halero.example.com" },
+    );
+    expect(saved.status).toBe(200);
+
+    const changed = await trpcMutation(
+      app,
+      "system.setBaseUrl",
+      { baseUrl: "https://moved.example.com" },
+      { cookie, origin: "https://halero.example.com" },
+    );
+    expect(changed.status).toBe(200);
+
+    // The very next requests already follow the new single authority:
+    // CSRF only accepts the new origin...
+    const oldOrigin = await trpcMutation(
+      app,
+      "auth.login",
+      { password: setupInput.password },
+      { origin: "https://halero.example.com" },
+    );
+    const newOrigin = await trpcMutation(
+      app,
+      "auth.login",
+      { password: setupInput.password },
+      { origin: "https://moved.example.com" },
+    );
+    expect(oldOrigin.status).toBe(403);
+    expect(newOrigin.status).toBe(200);
+
+    // ...and the OAuth redirect URI is built from the same value.
+    const start = await app.fetch(
+      new Request("http://localhost/api/oauth/google/start", {
+        headers: { cookie },
+      }),
+    );
+    expect(start.status).toBe(302);
+    const location = new URL(start.headers.get("location") ?? "");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "https://moved.example.com/api/oauth/google/callback",
+    );
   });
 
   test("OAuth redirect URI and CSRF origin derive from the same settings value", async () => {

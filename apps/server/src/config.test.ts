@@ -41,6 +41,16 @@ describe("loadConfig", () => {
     );
   });
 
+  test("rejects a base URL without an http(s) scheme", () => {
+    // "localhost:4253" parses as scheme "localhost:", which would make
+    // the origin "null" and let sandboxed-iframe requests pass CSRF.
+    for (const value of ["localhost:4253", "ftp://halero.example.com"]) {
+      expect(() => loadConfig({ HALERO_BASE_URL: value })).toThrow(
+        /http:\/\/ or https:\/\//,
+      );
+    }
+  });
+
   test("rejects a non-numeric port with a readable error", () => {
     expect(() => loadConfig({ HALERO_PORT: "banana" })).toThrow(
       /HALERO_PORT must be a whole number/,
