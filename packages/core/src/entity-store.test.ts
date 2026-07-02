@@ -172,6 +172,49 @@ describe("upsertExternal", () => {
   });
 });
 
+describe("upsertExternal stream provenance", () => {
+  const refRow = (handle: HaleroDatabase, entityId: string) =>
+    handle.db
+      .select()
+      .from(externalRefs)
+      .where(eq(externalRefs.entityId, entityId))
+      .get();
+
+  test("stores the stream on create and null when omitted", () => {
+    const { handle, store } = makeStore();
+
+    const withStream = store.upsertExternal(eventInput({ stream: "work" }));
+    const withoutStream = store.upsertExternal(
+      eventInput({ externalId: "evt-2" }),
+    );
+
+    expect(refRow(handle, withStream.entityId)?.stream).toBe("work");
+    expect(refRow(handle, withoutStream.entityId)?.stream).toBeNull();
+  });
+
+  test("a changed version moves the ref to the new stream", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.upsertExternal(eventInput({ stream: "work" }));
+
+    store.upsertExternal(eventInput({ version: "v2", stream: "personal" }));
+
+    expect(refRow(handle, entityId)?.stream).toBe("personal");
+  });
+
+  test("a version-equal upsert still moves the ref to the new stream", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.upsertExternal(eventInput({ stream: "work" }));
+
+    // An event moved between calendars can arrive version-equal from the
+    // new stream; the stream must still follow it so a stale delete from
+    // the old stream cannot tombstone it.
+    const result = store.upsertExternal(eventInput({ stream: "personal" }));
+
+    expect(result.action).toBe("unchanged");
+    expect(refRow(handle, entityId)?.stream).toBe("personal");
+  });
+});
+
 describe("tombstoneExternal", () => {
   test("sets deleted_at and keeps the ref row", () => {
     const { handle, store } = makeStore();

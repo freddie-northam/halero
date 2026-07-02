@@ -29,6 +29,12 @@ export interface SpineInput {
 
 export interface UpsertExternalInput extends ExternalRefKey {
   readonly version?: string | null;
+  /**
+   * The connection stream that observed this item (e.g. a calendar id).
+   * Recorded on every upsert, including version-equal ones, so a moved
+   * item's ref always names the stream that saw it last.
+   */
+  readonly stream?: string | null;
   readonly spine: SpineInput;
 }
 
@@ -105,6 +111,7 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
         entityId,
         version: input.version ?? null,
         lastSeenAt: now,
+        stream: input.stream ?? null,
       })
       .run();
     return { entityId, action: "created" };
@@ -120,7 +127,11 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
       .where(eq(entities.id, entityId))
       .run();
     db.update(externalRefs)
-      .set({ version: input.version ?? null, lastSeenAt: now })
+      .set({
+        version: input.version ?? null,
+        lastSeenAt: now,
+        stream: input.stream ?? null,
+      })
       .where(refWhere(input))
       .run();
     return { entityId, action: "updated" };
@@ -136,9 +147,12 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
       if (version !== null && existing.version === version) {
         // last_seen_at records observation, not mutation: a full resync
         // sweeps refs not seen since it started, so live-but-unchanged
-        // items must still refresh it to survive the sweep.
+        // items must still refresh it to survive the sweep. The stream
+        // follows for the same reason: a version-equal sighting from a
+        // new stream must move the ref there so stale deletes from the
+        // old stream cannot win.
         db.update(externalRefs)
-          .set({ lastSeenAt: Date.now() })
+          .set({ lastSeenAt: Date.now(), stream: input.stream ?? null })
           .where(refWhere(input))
           .run();
         return { entityId: existing.entityId, action: "unchanged" };

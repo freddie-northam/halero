@@ -113,6 +113,9 @@ export const externalRefs = sqliteTable(
       .references(() => entities.id),
     version: text("version"),
     lastSeenAt: integer("last_seen_at").notNull(),
+    // Added by migrations/0003_external_ref_streams.sql: the stream of
+    // the connection that last saw this item (e.g. a calendar id).
+    stream: text("stream"),
   },
   (table) => [
     primaryKey({

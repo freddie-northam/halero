@@ -49,10 +49,15 @@ describe("runMigrations", () => {
       backupsDir,
     });
 
-    expect(first.applied).toEqual(["0001_core", "0002_connection_backoff"]);
+    expect(first.applied).toEqual([
+      "0001_core",
+      "0002_connection_backoff",
+      "0003_external_ref_streams",
+    ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
       "0002_connection_backoff",
+      "0003_external_ref_streams",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -67,6 +72,7 @@ describe("runMigrations", () => {
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
       "0002_connection_backoff",
+      "0003_external_ref_streams",
     ]);
   });
 
@@ -143,24 +149,25 @@ describe("runMigrations", () => {
     const extended: Migration[] = [
       ...coreMigrations,
       {
-        name: "0003_widgets",
+        name: "0004_widgets",
         sql: "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       },
     ];
 
     const result = runMigrations(sqlite, { migrations: extended, backupsDir });
 
-    expect(result.applied).toEqual(["0003_widgets"]);
+    expect(result.applied).toEqual(["0004_widgets"]);
     if (result.snapshotPath === null) {
       throw new Error("expected a snapshot path");
     }
-    expect(basename(result.snapshotPath)).toStartWith("pre-0003_widgets-");
+    expect(basename(result.snapshotPath)).toStartWith("pre-0004_widgets-");
     expect(existsSync(result.snapshotPath)).toBe(true);
 
     const snapshot = new Database(result.snapshotPath, { readonly: true });
     expect(ledgerNames(snapshot)).toEqual([
       "0001_core",
       "0002_connection_backoff",
+      "0003_external_ref_streams",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -203,7 +210,7 @@ describe("runMigrations", () => {
       backupsDir,
     });
 
-    expect(result.applied).toEqual(["0002_connection_backoff"]);
+    expect(result.applied).toContain("0002_connection_backoff");
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
       .query<{ consecutive_failures: number }, []>(
@@ -214,18 +221,64 @@ describe("runMigrations", () => {
     sqlite.close();
   });
 
+  test("0003_external_ref_streams backfills stream from the calendar satellite", () => {
+    const { sqlite, backupsDir } = makeContext();
+    const preStream = coreMigrations.filter(
+      (migration) => migration.name !== "0003_external_ref_streams",
+    );
+    runMigrations(sqlite, { migrations: preStream, backupsDir });
+    const insertEntity = (id: string): void => {
+      sqlite.run(
+        `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+         VALUES (?, 'calendar.event', 1, 'connector', 1, 1)`,
+        [id],
+      );
+    };
+    const insertRef = (externalId: string, entityId: string): void => {
+      sqlite.run(
+        `INSERT INTO external_refs (connector_id, account_key, external_id, entity_id, last_seen_at)
+         VALUES ('google-calendar', 'sub-1', ?, ?, 1)`,
+        [externalId, entityId],
+      );
+    };
+    insertEntity("ent-1");
+    sqlite.run(
+      "INSERT INTO calendar_events (entity_id, calendar_id) VALUES ('ent-1', 'work')",
+    );
+    insertRef("evt-1", "ent-1");
+    // A ref without a calendar satellite must stay NULL, not fail.
+    insertEntity("ent-2");
+    insertRef("evt-2", "ent-2");
+
+    const result = runMigrations(sqlite, {
+      migrations: coreMigrations,
+      backupsDir,
+    });
+
+    expect(result.applied).toEqual(["0003_external_ref_streams"]);
+    const streamOf = (externalId: string): string | null =>
+      sqlite
+        .query<{ stream: string | null }, [string]>(
+          "SELECT stream FROM external_refs WHERE external_id = ?",
+        )
+        .get(externalId)?.stream ?? null;
+    expect(streamOf("evt-1")).toBe("work");
+    expect(streamOf("evt-2")).toBeNull();
+    sqlite.close();
+  });
+
   test("rolls back a failed migration, keeps it out of the ledger, and stops", () => {
     const { sqlite, backupsDir } = makeContext();
     runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
     const broken: Migration = {
-      name: "0003_broken",
+      name: "0004_broken",
       sql: [
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       ].join("\n"),
     };
     const afterBroken: Migration = {
-      name: "0004_never_reached",
+      name: "0005_never_reached",
       sql: "CREATE TABLE gadgets (id TEXT PRIMARY KEY);",
     };
 
@@ -234,13 +287,14 @@ describe("runMigrations", () => {
         migrations: [...coreMigrations, broken, afterBroken],
         backupsDir,
       }),
-    ).toThrow(/0003_broken/);
+    ).toThrow(/0004_broken/);
 
     expect(tableExists(sqlite, "widgets")).toBe(false);
     expect(tableExists(sqlite, "gadgets")).toBe(false);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
       "0002_connection_backoff",
+      "0003_external_ref_streams",
     ]);
   });
 });
