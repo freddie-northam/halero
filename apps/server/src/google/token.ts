@@ -133,6 +133,14 @@ const refreshAccessToken = async (
   return accessToken;
 };
 
+export interface GetGoogleAccessTokenOptions {
+  /**
+   * Skip the cached token and refresh immediately. Used after Google
+   * answers a request with 401 even though the token looked fresh.
+   */
+  readonly forceRefresh?: boolean;
+}
+
 /**
  * Returns a usable access token for the connection, refreshing (and
  * re-encrypting the stored credentials) when the cached one is within
@@ -141,6 +149,7 @@ const refreshAccessToken = async (
 export const getGoogleAccessToken = async (
   ctx: GoogleTokenContext,
   connection: ConnectionRow,
+  options: GetGoogleAccessTokenOptions = {},
 ): Promise<string> => {
   if (connection.credentialsEnc === null) {
     throw new Error(MISSING_CREDENTIALS_MESSAGE);
@@ -151,7 +160,8 @@ export const getGoogleAccessToken = async (
   if (stored === null) {
     throw new Error(MISSING_CREDENTIALS_MESSAGE);
   }
-  if (stored.accessTokenExpiresAt - ctx.now() > EXPIRY_MARGIN_MS) {
+  const fresh = stored.accessTokenExpiresAt - ctx.now() > EXPIRY_MARGIN_MS;
+  if (fresh && options.forceRefresh !== true) {
     return stored.accessToken;
   }
   return refreshAccessToken(ctx, connection, stored);

@@ -47,7 +47,9 @@ interface EventTimes {
   readonly endDate: string | null;
 }
 
-const timeField = (value: unknown): { date: string | null; dateTime: string | null } => {
+const timeField = (
+  value: unknown,
+): { date: string | null; dateTime: string | null } => {
   const record = asRecord(value);
   return {
     date: record === null ? null : stringOrNull(record.date),

@@ -24,3 +24,7 @@ export const asRecord = (value: unknown): Record<string, unknown> | null =>
 
 export const stringOrNull = (value: unknown): string | null =>
   typeof value === "string" && value !== "" ? value : null;
+
+export const googleApiErrorMessage = (status: number): string =>
+  `Google Calendar returned an unexpected response (HTTP ${status}) ` +
+  "while syncing. This is usually temporary; try again shortly.";

@@ -142,6 +142,31 @@ describe("getGoogleAccessToken", () => {
     expect(updated.status).toBe("active");
   });
 
+  test("forceRefresh bypasses a still-fresh cached token", async () => {
+    const testApp = makeTestApp();
+    const row = seedConnection(testApp, {
+      refreshToken: "1//refresh-a",
+      accessToken: "ya29.cached",
+      accessTokenExpiresAt: testApp.clock.value + 10 * 60 * 1000,
+    });
+    const googleFetch = (): Promise<Response> =>
+      Promise.resolve(
+        Response.json({
+          access_token: "ya29.forced",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+      );
+
+    const token = await getGoogleAccessToken(
+      makeContext(testApp, googleFetch),
+      row,
+      { forceRefresh: true },
+    );
+
+    expect(token).toBe("ya29.forced");
+  });
+
   test("flips the connection to reauth_required on invalid_grant", async () => {
     const testApp = makeTestApp();
     const row = seedConnection(testApp, {
