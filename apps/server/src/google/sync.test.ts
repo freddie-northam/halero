@@ -326,8 +326,56 @@ describe("syncConnection initial full sync", () => {
     expect(getCursor(testApp, "primary")).toBeUndefined();
     const run = getRuns(testApp)[0];
     expect(run?.status).toBe("failed");
+    expect(run?.upserts).toBe(1);
     expect(run?.finishedAt).not.toBeNull();
     expect(getConnection(testApp).lastError).toBe(summary.error ?? "");
+  });
+
+  test("records committed work from every stream when a later stream fails", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const fake = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["alpha", "beta"]));
+      }
+      if (isEvents(url, "alpha")) {
+        return json({
+          items: [
+            timedEvent("evt-a1", '"a1-v1"', "Alpha one"),
+            timedEvent("evt-a2", '"a2-v1"', "Alpha two"),
+          ],
+          nextSyncToken: "alpha-sync-1",
+        });
+      }
+      if (!isEvents(url, "beta")) {
+        return null;
+      }
+      if (url.searchParams.get("pageToken") === null) {
+        return json({
+          items: [timedEvent("evt-b1", '"b1-v1"', "Beta one")],
+          nextPageToken: "beta-page-2",
+        });
+      }
+      return new Response("boom", { status: 500 });
+    });
+
+    const summary = await syncConnection(
+      engineContext(testApp, fake.fetchLike),
+      CONNECTION_ID,
+    );
+
+    // Pinned contract: sync_runs counts record ALL work committed during
+    // the run at page granularity, regardless of the run's outcome.
+    // Stream alpha (2 events) plus beta's first page (1 event) committed.
+    expect(summary.status).toBe("failed");
+    expect(summary.upserts).toBe(3);
+    expect(summary.deletes).toBe(0);
+    const run = getRuns(testApp)[0];
+    expect(run?.status).toBe("failed");
+    expect(run?.upserts).toBe(3);
+    expect(run?.deletes).toBe(0);
+    expect(getCursor(testApp, "alpha")?.cursor).toBe("alpha-sync-1");
+    expect(getCursor(testApp, "beta")).toBeUndefined();
   });
 });
 

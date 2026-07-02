@@ -12,6 +12,7 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
+import { CALENDAR_EVENT_KIND } from "@halero/schemas";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { getSetting } from "../settings";
 import {
@@ -70,6 +71,18 @@ export interface SyncRunSummary {
 
 type Db = HaleroDatabase["db"];
 
+/**
+ * Mutable accumulator for the run. Pinned contract: sync_runs counts
+ * record ALL work actually committed during the run, at per-page
+ * granularity, regardless of the run's outcome. Each page transaction
+ * adds its counts here right after it commits, so a failure later in
+ * the run still reports the work that landed.
+ */
+interface RunCounts {
+  upserts: number;
+  deletes: number;
+}
+
 interface StreamDeps {
   readonly db: Db;
   readonly store: EntityStore;
@@ -78,6 +91,7 @@ interface StreamDeps {
   readonly accountKey: string;
   readonly homeTimezone: string;
   readonly now: () => number;
+  readonly runCounts: RunCounts;
 }
 
 interface SyncCounts {
@@ -259,43 +273,39 @@ const processEventsPage = (
   deps: StreamDeps,
   calendarId: string,
   items: readonly Record<string, unknown>[],
-): SyncCounts =>
-  deps.store.withTransaction(() =>
+): void => {
+  const page = deps.store.withTransaction(() =>
     items.reduce(
       (counts, item) => addCounts(counts, applyEvent(deps, calendarId, item)),
       NO_COUNTS,
     ),
   );
+  // Recorded only once the page's transaction has committed.
+  deps.runCounts.upserts += page.upserts;
+  deps.runCounts.deletes += page.deletes;
+};
 
 type PaginationOutcome =
-  | {
-      readonly kind: "complete";
-      readonly syncToken: string;
-      readonly counts: SyncCounts;
-    }
-  | { readonly kind: "gone"; readonly counts: SyncCounts };
+  | { readonly kind: "complete"; readonly syncToken: string }
+  | { readonly kind: "gone" };
 
 const paginateEvents = async (
   deps: StreamDeps,
   calendarId: string,
   baseParams: Readonly<Record<string, string>>,
 ): Promise<PaginationOutcome> => {
-  let counts = NO_COUNTS;
   let pageToken: string | null = null;
   for (;;) {
     const params =
       pageToken === null ? baseParams : { ...baseParams, pageToken };
     const { status, body } = await deps.getJson(eventsUrl(calendarId, params));
     if (status === 410) {
-      return { kind: "gone", counts };
+      return { kind: "gone" };
     }
     if (status !== 200 || body === null) {
       throw new Error(googleApiErrorMessage(status));
     }
-    counts = addCounts(
-      counts,
-      processEventsPage(deps, calendarId, readItems(body)),
-    );
+    processEventsPage(deps, calendarId, readItems(body));
     pageToken = stringOrNull(body.nextPageToken);
     if (pageToken === null) {
       // nextSyncToken only ever arrives on the last page.
@@ -303,7 +313,7 @@ const paginateEvents = async (
       if (syncToken === null) {
         throw new Error(MISSING_SYNC_TOKEN_MESSAGE);
       }
-      return { kind: "complete", syncToken, counts };
+      return { kind: "complete", syncToken };
     }
   }
 };
@@ -311,13 +321,13 @@ const paginateEvents = async (
 const runFullSync = async (
   deps: StreamDeps,
   calendarId: string,
-): Promise<{ readonly syncToken: string; readonly counts: SyncCounts }> => {
+): Promise<string> => {
   const timeMin = new Date(deps.now() - FULL_SYNC_LOOKBACK_MS).toISOString();
   const outcome = await paginateEvents(deps, calendarId, { timeMin });
   if (outcome.kind === "gone") {
     throw new Error(googleApiErrorMessage(410));
   }
-  return { syncToken: outcome.syncToken, counts: outcome.counts };
+  return outcome.syncToken;
 };
 
 const readCursor = (deps: StreamDeps, stream: string): string | null =>
@@ -370,8 +380,8 @@ const sweepStream = (
   deps: StreamDeps,
   calendarId: string,
   resyncStartedAt: number,
-): SyncCounts =>
-  deps.store.withTransaction(() => {
+): void => {
+  const swept = deps.store.withTransaction(() => {
     const stale = deps.db
       .select({ externalId: externalRefs.externalId })
       .from(externalRefs)
@@ -385,51 +395,57 @@ const sweepStream = (
           eq(externalRefs.connectorId, GOOGLE_CONNECTOR_ID),
           eq(externalRefs.accountKey, deps.accountKey),
           eq(calendarEvents.calendarId, calendarId),
+          // The satellite join already implies the kind, but the sweep
+          // deletes data: state the intent explicitly rather than rely
+          // on that implication.
+          eq(entities.kind, CALENDAR_EVENT_KIND),
           isNull(entities.deletedAt),
           lt(externalRefs.lastSeenAt, resyncStartedAt),
         ),
       )
       .all();
     return stale.reduce(
-      (counts, row) =>
+      (deletes, row) =>
         deps.store.tombstoneExternal({
           connectorId: GOOGLE_CONNECTOR_ID,
           accountKey: deps.accountKey,
           externalId: row.externalId,
         }) === null
-          ? counts
-          : addCounts(counts, { upserts: 0, deletes: 1 }),
-      NO_COUNTS,
+          ? deletes
+          : deletes + 1,
+      0,
     );
   });
+  // Recorded only once the sweep's transaction has committed.
+  deps.runCounts.deletes += swept;
+};
 
 const syncStream = async (
   deps: StreamDeps,
   calendarId: string,
-): Promise<SyncCounts> => {
+): Promise<void> => {
   const cursor = readCursor(deps, calendarId);
   if (cursor === null) {
-    const full = await runFullSync(deps, calendarId);
+    const syncToken = await runFullSync(deps, calendarId);
     // The cursor lands only after every page of the stream has committed.
-    saveCursor(deps, calendarId, full.syncToken);
-    return full.counts;
+    saveCursor(deps, calendarId, syncToken);
+    return;
   }
   const incremental = await paginateEvents(deps, calendarId, {
     syncToken: cursor,
   });
   if (incremental.kind === "complete") {
     saveCursor(deps, calendarId, incremental.syncToken);
-    return incremental.counts;
+    return;
   }
   // HTTP 410: Google expired the sync token. Full resync, then sweep.
   clearCursor(deps, calendarId);
   // The boundary must come from Date.now(): the entity store stamps
   // last_seen_at with Date.now(), and mixing clocks would break the sweep.
   const resyncStartedAt = Date.now();
-  const full = await runFullSync(deps, calendarId);
-  const swept = sweepStream(deps, calendarId, resyncStartedAt);
-  saveCursor(deps, calendarId, full.syncToken);
-  return addCounts(addCounts(incremental.counts, full.counts), swept);
+  const syncToken = await runFullSync(deps, calendarId);
+  sweepStream(deps, calendarId, resyncStartedAt);
+  saveCursor(deps, calendarId, syncToken);
 };
 
 const loadSyncableConnection = (
@@ -473,13 +489,11 @@ const readableSyncError = (error: unknown): string =>
     ? error.message
     : "Syncing failed for an unknown reason. Try again shortly.";
 
-const runAllStreams = async (deps: StreamDeps): Promise<SyncCounts> => {
+const runAllStreams = async (deps: StreamDeps): Promise<void> => {
   const calendarIds = await discoverCalendars(deps.getJson);
-  let counts = NO_COUNTS;
   for (const calendarId of calendarIds) {
-    counts = addCounts(counts, await syncStream(deps, calendarId));
+    await syncStream(deps, calendarId);
   }
-  return counts;
 };
 
 const startRun = (db: Db, connectionId: string, startedAt: number): string => {
@@ -517,6 +531,9 @@ export const syncConnection = async (
   if (config === null) {
     throw new Error(CONFIG_MISSING_MESSAGE);
   }
+  // Committed work accumulates here at page granularity so the run row
+  // reports it even when a later stream or page fails (pinned contract).
+  const runCounts: RunCounts = { upserts: 0, deletes: 0 };
   const deps: StreamDeps = {
     db,
     store: createEntityStore(ctx.database),
@@ -525,23 +542,25 @@ export const syncConnection = async (
     accountKey: config.accountKey,
     homeTimezone: getSetting(db, "home_timezone") ?? "UTC",
     now: ctx.now,
+    runCounts,
   };
   const runId = startRun(db, connectionId, ctx.now());
-  let summary: SyncRunSummary = {
-    status: "failed",
-    upserts: 0,
-    deletes: 0,
-    error: INTERRUPTED_MESSAGE,
-  };
+  let error: string | null = INTERRUPTED_MESSAGE;
+  const summarize = (): SyncRunSummary => ({
+    status: error === null ? "success" : "failed",
+    upserts: runCounts.upserts,
+    deletes: runCounts.deletes,
+    error,
+  });
   try {
-    const counts = await runAllStreams(deps);
-    summary = { status: "success", ...counts, error: null };
+    await runAllStreams(deps);
+    error = null;
     setLastError(db, connectionId, null);
-  } catch (error) {
-    summary = { ...summary, error: readableSyncError(error) };
-    setLastError(db, connectionId, summary.error);
+  } catch (caught) {
+    error = readableSyncError(caught);
+    setLastError(db, connectionId, error);
   } finally {
-    finalizeRun(db, runId, summary, ctx.now());
+    finalizeRun(db, runId, summarize(), ctx.now());
   }
-  return summary;
+  return summarize();
 };
