@@ -16,3 +16,15 @@ export const guardEntry = async (
     throw redirect({ to: entry });
   }
 };
+
+/**
+ * Guard for pages inside the signed-in shell (like /settings): anyone who
+ * does not belong at "/" gets sent to where they do belong.
+ */
+export const guardAuthenticated = async (api: HaleroApi): Promise<void> => {
+  const status = await api.systemStatus();
+  const entry = resolveEntryRoute(status);
+  if (entry !== "/") {
+    throw redirect({ to: entry });
+  }
+};

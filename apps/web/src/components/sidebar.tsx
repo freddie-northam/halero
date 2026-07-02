@@ -1,23 +1,23 @@
 import { Button } from "@halero/ui";
-import { type ReactElement, useState } from "react";
+import type { ReactElement } from "react";
 
 const NAV_ITEMS = ["Today", "Calendar", "Settings"] as const;
 
-type NavItem = (typeof NAV_ITEMS)[number];
+export type NavItem = (typeof NAV_ITEMS)[number];
 
 export interface SidebarProps {
+  readonly active: NavItem;
+  readonly onNavigate: (item: NavItem) => void;
   readonly onLogout: () => void;
   readonly logoutPending?: boolean;
 }
 
 export const Sidebar = ({
+  active,
+  onNavigate,
   onLogout,
   logoutPending = false,
 }: SidebarProps): ReactElement => {
-  // Placeholder navigation: the module pages do not exist yet, so the items
-  // only track which one is active. Today is the default landing place.
-  const [active, setActive] = useState<NavItem>("Today");
-
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-surface">
       <div className="flex h-11 shrink-0 items-center border-b border-border px-4 text-sm font-semibold tracking-tight">
@@ -30,7 +30,7 @@ export const Sidebar = ({
               <button
                 type="button"
                 aria-current={item === active ? "page" : undefined}
-                onClick={() => setActive(item)}
+                onClick={() => onNavigate(item)}
                 className={`w-full rounded-control px-2.5 py-1.5 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${
                   item === active
                     ? "bg-stone-100 font-medium text-text"

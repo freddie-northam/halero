@@ -7,10 +7,12 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import type { ReactElement } from "react";
+import type { NavItem } from "./components/sidebar";
 import type { HaleroApi } from "./lib/api";
 import { readableError } from "./lib/errors";
-import { guardEntry } from "./lib/guards";
+import { guardAuthenticated, guardEntry } from "./lib/guards";
 import { LoginScreen } from "./routes/login";
+import { SettingsScreen } from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
 import { ShellScreen } from "./routes/shell";
 
@@ -39,14 +41,35 @@ const ErrorScreen = ({ error }: { readonly error: Error }): ReactElement => (
   </div>
 );
 
-const ShellRoute = (): ReactElement => {
+/** Shared shell wiring: nav items map to routes, logout returns to /login. */
+const useShellProps = (activeNav: NavItem) => {
   const router = useRouter();
+  return {
+    activeNav,
+    onNavigate: (item: NavItem) => {
+      // Today and Calendar pages do not exist yet; both land on the home
+      // placeholder until their modules arrive.
+      void router.navigate({ to: item === "Settings" ? "/settings" : "/" });
+    },
+    onLoggedOut: () => {
+      void router.navigate({ to: "/login" });
+    },
+  };
+};
+
+const ShellRoute = (): ReactElement => (
+  <ShellScreen {...useShellProps("Today")} />
+);
+
+const SettingsRoute = (): ReactElement => {
+  const search = settingsRoute.useSearch();
   return (
-    <ShellScreen
-      onLoggedOut={() => {
-        void router.navigate({ to: "/login" });
-      }}
-    />
+    <ShellScreen {...useShellProps("Settings")}>
+      <SettingsScreen
+        connected={search.connected}
+        errorCode={search.error ?? null}
+      />
+    </ShellScreen>
   );
 };
 
@@ -93,7 +116,36 @@ const setupRoute = createRoute({
   component: SetupRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, loginRoute, setupRoute]);
+interface SettingsSearch {
+  readonly connected: boolean;
+  readonly error?: string;
+}
+
+// The OAuth callback lands here with ?connected=1 or ?error=<code>; anything
+// unexpected in the query string is dropped.
+const validateSettingsSearch = (
+  search: Record<string, unknown>,
+): SettingsSearch => ({
+  connected: search.connected === "1" || search.connected === 1,
+  ...(typeof search.error === "string" && search.error !== ""
+    ? { error: search.error }
+    : {}),
+});
+
+const settingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings",
+  validateSearch: validateSettingsSearch,
+  beforeLoad: ({ context }) => guardAuthenticated(context.api),
+  component: SettingsRoute,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  loginRoute,
+  setupRoute,
+  settingsRoute,
+]);
 
 export const createAppRouter = (api: HaleroApi) =>
   createRouter({

@@ -1,0 +1,165 @@
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, type RenderResult, render } from "@testing-library/react";
+import type { GoogleStatus, HaleroApi } from "../lib/api";
+import { ApiProvider } from "../lib/api-context";
+import { registerHappyDom, unregisterHappyDom } from "../test/happy-dom";
+import { SettingsScreen } from "./settings";
+
+beforeAll(() => {
+  registerHappyDom();
+});
+afterEach(cleanup);
+afterAll(async () => {
+  // Let React's scheduler flush passive-effect callbacks queued by the last
+  // unmount while the DOM globals still exist, then tear happy-dom down.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await unregisterHappyDom();
+});
+
+const googleStatus = (overrides: Partial<GoogleStatus> = {}): GoogleStatus => ({
+  clientConfigured: false,
+  httpsOk: true,
+  redirectUri: "https://halero.example.com/api/oauth/google/callback",
+  connection: null,
+  ...overrides,
+});
+
+const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
+  systemStatus: () =>
+    Promise.resolve({ needsSetup: false, authenticated: true }),
+  setup: () => Promise.resolve(),
+  login: () => Promise.resolve(),
+  logout: () => Promise.resolve(),
+  googleStatus: () => Promise.resolve(googleStatus()),
+  saveGoogleClient: () => Promise.resolve(),
+  ...overrides,
+});
+
+interface RenderOptions {
+  readonly connected?: boolean;
+  readonly errorCode?: string | null;
+}
+
+const renderSettings = (
+  api: HaleroApi,
+  options: RenderOptions = {},
+): RenderResult =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ApiProvider api={api}>
+        <SettingsScreen
+          connected={options.connected ?? false}
+          errorCode={options.errorCode ?? null}
+        />
+      </ApiProvider>
+    </QueryClientProvider>,
+  );
+
+test("shows the blocking HTTPS guidance when the base URL is plain http", async () => {
+  const view = renderSettings(
+    stubApi({
+      googleStatus: () => Promise.resolve(googleStatus({ httpsOk: false })),
+    }),
+  );
+
+  expect(
+    await view.findByText("Google Calendar needs an HTTPS address"),
+  ).toBeTruthy();
+  expect(view.getByText(/Tailscale Serve/)).toBeTruthy();
+  // The gate replaces the client form entirely.
+  expect(view.queryByLabelText("Client ID")).toBeNull();
+});
+
+test("shows the guided stepper and client form when HTTPS is ok", async () => {
+  const view = renderSettings(stubApi());
+
+  expect(
+    await view.findByText(/publishing status .*In production/),
+  ).toBeTruthy();
+  expect(view.getByText(/hasn't verified this app/)).toBeTruthy();
+  expect(
+    view.getByText("https://halero.example.com/api/oauth/google/callback"),
+  ).toBeTruthy();
+  expect(view.getByRole("button", { name: "Copy" })).toBeTruthy();
+  expect(view.getByLabelText("Client ID")).toBeTruthy();
+  const secret = view.getByLabelText("Client secret");
+  expect(secret.getAttribute("type")).toBe("password");
+});
+
+test("shows the connect button once the client is configured", async () => {
+  const view = renderSettings(
+    stubApi({
+      googleStatus: () =>
+        Promise.resolve(googleStatus({ clientConfigured: true })),
+    }),
+  );
+
+  const connect = await view.findByRole("link", {
+    name: "Connect Google Calendar",
+  });
+  expect(connect.getAttribute("href")).toBe("/api/oauth/google/start");
+});
+
+test("shows the connection card with email, badge, and disabled sync placeholder", async () => {
+  const view = renderSettings(
+    stubApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              id: "conn-1",
+              status: "active",
+              email: "person@example.com",
+              lastError: null,
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(await view.findByText("person@example.com")).toBeTruthy();
+  expect(view.getByText("Active")).toBeTruthy();
+  const syncNow = view.getByRole("button", { name: "Sync now" });
+  expect(syncNow.hasAttribute("disabled")).toBe(true);
+  expect(view.getByText(/arrives with the next step/)).toBeTruthy();
+});
+
+test("offers a reconnect link when Google requires a new sign-in", async () => {
+  const view = renderSettings(
+    stubApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              id: "conn-1",
+              status: "reauth_required",
+              email: "person@example.com",
+              lastError: null,
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(await view.findByText("Needs reconnect")).toBeTruthy();
+  const reconnect = view.getByRole("link", { name: "Reconnect" });
+  expect(reconnect.getAttribute("href")).toBe("/api/oauth/google/start");
+});
+
+test("turns the connected query param into a success banner", async () => {
+  const view = renderSettings(stubApi(), { connected: true });
+
+  // Wait for the status query to settle so no update races test teardown.
+  await view.findByText(/Connect Google Calendar/);
+  expect(view.getByText("Google Calendar is connected.")).toBeTruthy();
+});
+
+test("turns a callback error code into a readable banner", async () => {
+  const view = renderSettings(stubApi(), { errorCode: "no_refresh_token" });
+
+  await view.findByText(/Connect Google Calendar/);
+  expect(view.getByText(/offline access/)).toBeTruthy();
+});

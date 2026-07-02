@@ -25,6 +25,14 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   setup: () => Promise.resolve(),
   login: () => Promise.resolve(),
   logout: () => Promise.resolve(),
+  googleStatus: () =>
+    Promise.resolve({
+      clientConfigured: false,
+      httpsOk: true,
+      redirectUri: "http://localhost:4253/api/oauth/google/callback",
+      connection: null,
+    }),
+  saveGoogleClient: () => Promise.resolve(),
   ...overrides,
 });
 
