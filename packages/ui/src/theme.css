@@ -117,18 +117,3 @@
 @utility tnum {
   font-feature-settings: "tnum";
 }
-
-/*
- * Transitional aliases for the pre-shadcn token names. Only the app shell
- * still references these; they disappear once it moves to the sidebar
- * components.
- */
-@theme {
-  --color-bg: #fafaf9;
-  --color-surface: #ffffff;
-  --color-text: #1c1917;
-  --color-text-muted: #78716c;
-  --color-focus-ring: #4f46e5;
-  --radius-control: 6px;
-  --radius-panel: 10px;
-}

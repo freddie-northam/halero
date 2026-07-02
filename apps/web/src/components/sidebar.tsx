@@ -1,58 +1,69 @@
-import { Button } from "@halero/ui";
+import {
+  Button,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@halero/ui";
 import type { ReactElement } from "react";
 
 const NAV_ITEMS = ["Today", "Calendar", "Settings"] as const;
 
 export type NavItem = (typeof NAV_ITEMS)[number];
 
-export interface SidebarProps {
+export interface AppSidebarProps {
   readonly active: NavItem;
   readonly onNavigate: (item: NavItem) => void;
   readonly onLogout: () => void;
   readonly logoutPending?: boolean;
 }
 
-export const Sidebar = ({
+/**
+ * Halero's app sidebar composed from the shadcn sidebar family. It renders
+ * as a static rail (collapsible="none"): the shell has no trigger and the
+ * navigation is always visible, as before the shadcn adoption.
+ */
+export const AppSidebar = ({
   active,
   onNavigate,
   onLogout,
   logoutPending = false,
-}: SidebarProps): ReactElement => {
-  return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-surface">
-      <div className="flex h-11 shrink-0 items-center border-b border-border px-4 text-sm font-semibold tracking-tight">
-        Halero
-      </div>
-      <nav aria-label="Primary" className="flex-1 overflow-y-auto p-2">
-        <ul className="flex flex-col gap-0.5">
+}: AppSidebarProps): ReactElement => (
+  <Sidebar collapsible="none" className="shrink-0 border-r">
+    <SidebarHeader className="h-11 shrink-0 justify-center border-b px-4">
+      <span className="text-sm font-semibold tracking-tight">Halero</span>
+    </SidebarHeader>
+    <SidebarContent>
+      <nav aria-label="Primary" className="p-2">
+        <SidebarMenu>
           {NAV_ITEMS.map((item) => (
-            <li key={item}>
-              <button
+            <SidebarMenuItem key={item}>
+              <SidebarMenuButton
                 type="button"
+                isActive={item === active}
                 aria-current={item === active ? "page" : undefined}
                 onClick={() => onNavigate(item)}
-                className={`w-full rounded-control px-2.5 py-1.5 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${
-                  item === active
-                    ? "bg-stone-100 font-medium text-text"
-                    : "text-text-muted hover:bg-stone-50 hover:text-text"
-                }`}
               >
                 {item}
-              </button>
-            </li>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           ))}
-        </ul>
+        </SidebarMenu>
       </nav>
-      <div className="shrink-0 border-t border-border p-2">
-        <Button
-          size="sm"
-          className="w-full"
-          onClick={onLogout}
-          disabled={logoutPending}
-        >
-          {logoutPending ? "Signing out" : "Sign out"}
-        </Button>
-      </div>
-    </aside>
-  );
-};
+    </SidebarContent>
+    <SidebarFooter className="border-t p-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onLogout}
+        disabled={logoutPending}
+      >
+        {logoutPending ? "Signing out" : "Sign out"}
+      </Button>
+    </SidebarFooter>
+  </Sidebar>
+);
