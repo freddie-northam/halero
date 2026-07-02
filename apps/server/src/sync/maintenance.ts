@@ -75,6 +75,20 @@ const readableBackupError = (error: unknown): string =>
     : "The daily backup failed for an unknown reason.";
 
 /**
+ * The cron tick: one backup pass with the failure contained. A failed
+ * backup must never take the process down; the next day's tick tries
+ * again, and the failure lands in the injected log sink.
+ */
+export const runDailyBackupSafely = (ctx: MaintenanceContext): void => {
+  const log = ctx.log ?? ((message: string) => console.log(message));
+  try {
+    runDailyBackup(ctx);
+  } catch (error) {
+    log(`The daily backup failed: ${readableBackupError(error)}`);
+  }
+};
+
+/**
  * The daily maintenance cron. Started and stopped by the sync
  * scheduler's lifecycle so one switch controls all background work.
  */
@@ -89,15 +103,7 @@ export const createMaintenanceJob = (
       if (job !== null && !job.isStopped()) {
         return;
       }
-      job = new Cron(DAILY_BACKUP_CRON, () => {
-        try {
-          runDailyBackup(ctx);
-        } catch (error) {
-          // A failed backup must never take the process down; the next
-          // day's tick tries again.
-          console.error("The daily backup failed:", readableBackupError(error));
-        }
-      });
+      job = new Cron(DAILY_BACKUP_CRON, () => runDailyBackupSafely(ctx));
     },
     stop: () => {
       job?.stop();

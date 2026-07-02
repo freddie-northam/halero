@@ -546,9 +546,12 @@ const ConnectionCard = ({
           <RecentActivity runs={connection.recentRuns} />
         </CardContent>
       ) : null}
-      {connection.status === "error" && connection.lastError !== null ? (
-        <CardContent>
-          <p className="text-sm text-destructive">{connection.lastError}</p>
+      {connection.status === "error" ? (
+        <CardContent className="flex flex-col gap-3">
+          {connection.lastError === null ? null : (
+            <p className="text-sm text-destructive">{connection.lastError}</p>
+          )}
+          <RecentActivity runs={connection.recentRuns} />
         </CardContent>
       ) : null}
       {connection.status === "active" ? (

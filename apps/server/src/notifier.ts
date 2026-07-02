@@ -41,11 +41,13 @@ export interface Notifier {
 export const createNotifier = (ctx: NotifierContext): Notifier => {
   const log = ctx.log ?? ((message: string) => console.error(message));
   const send = async (payload: NotificationPayload): Promise<boolean> => {
-    const url = getSetting(ctx.db, NOTIFY_URL_SETTING);
-    if (url === null) {
-      return false;
-    }
+    // Everything, including the settings read, sits inside the try:
+    // send() must NEVER throw, or a notification could break a sync.
     try {
+      const url = getSetting(ctx.db, NOTIFY_URL_SETTING);
+      if (url === null) {
+        return false;
+      }
       const res = await ctx.notifyFetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -62,8 +64,8 @@ export const createNotifier = (ctx: NotifierContext): Notifier => {
       return true;
     } catch {
       log(
-        "The notification could not be delivered: the notification URL did " +
-          "not respond within 5 seconds or the request failed.",
+        "The notification could not be delivered: the request failed or " +
+          "did not finish within 5 seconds.",
       );
       return false;
     }

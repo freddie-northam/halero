@@ -338,6 +338,40 @@ test("hides the recent activity list before any runs exist", async () => {
   expect(view.queryByText("Recent activity")).toBeNull();
 });
 
+test("shows recent activity on an errored connection card too", async () => {
+  const now = Date.now();
+  const view = renderSettings(
+    stubApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              ...activeConnection,
+              status: "error",
+              lastError:
+                "The connector produced sync data Halero could not understand.",
+              recentRuns: [
+                {
+                  startedAt: now - 2 * 60_000,
+                  finishedAt: now - 2 * 60_000 + 500,
+                  status: "failed",
+                  upserts: 0,
+                  deletes: 0,
+                  error:
+                    "The connector produced sync data Halero could not understand.",
+                },
+              ],
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(await view.findByText("Recent activity")).toBeTruthy();
+  expect(view.getByText("2 min ago")).toBeTruthy();
+});
+
 test("loads the saved notification URL and mentions ntfy", async () => {
   const view = renderSettings(
     stubApi({

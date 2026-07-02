@@ -7,6 +7,7 @@ import {
   createMaintenanceJob,
   type MaintenanceContext,
   runDailyBackup,
+  runDailyBackupSafely,
 } from "./maintenance";
 import { createSyncRunner } from "./runner";
 import { createScheduler, type SchedulerContext } from "./scheduler";
@@ -108,6 +109,22 @@ describe("runDailyBackup", () => {
       "already made today".length,
     );
     expect(logs.some((line) => line.includes("already exists"))).toBe(true);
+  });
+});
+
+describe("runDailyBackupSafely", () => {
+  test("a failing backup logs through the injected sink and never throws", () => {
+    const testApp = makeTestApp();
+    const { ctx, backupsDir, logs } = makeMaintenance(testApp);
+    // A plain file where the backups directory should be makes the
+    // snapshot's mkdir fail, exercising the cron tick's failure branch.
+    writeFileSync(backupsDir, "not a directory");
+
+    expect(() => runDailyBackupSafely(ctx)).not.toThrow();
+
+    expect(logs.some((line) => line.includes("The daily backup failed"))).toBe(
+      true,
+    );
   });
 });
 
