@@ -45,6 +45,11 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  // Halero: buttons default to type="button" so a stray button inside a
+  // form never submits it; submit buttons opt in with an explicit
+  // type="submit" (upstream leaves type unset, so browsers default to
+  // "submit"). asChild children (links) get no type attribute.
+  type = "button",
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
@@ -58,6 +63,7 @@ function Button({
       data-variant={variant}
       data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
+      type={asChild ? undefined : type}
       {...props}
     />
   );

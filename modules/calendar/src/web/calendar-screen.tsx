@@ -52,7 +52,10 @@ const steppedAnchor = (
     : addDays(anchor, direction * 7);
 
 const LoadingState = (): ReactElement => (
-  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+  <Loader2
+    aria-hidden="true"
+    className="size-4 animate-spin text-muted-foreground"
+  />
 );
 
 const CalendarBody = ({

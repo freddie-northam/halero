@@ -34,7 +34,10 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 
 const PendingScreen = (): ReactElement => (
   <div className="flex min-h-dvh items-center justify-center bg-background">
-    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+    <Loader2
+      aria-hidden="true"
+      className="size-4 animate-spin text-muted-foreground"
+    />
   </div>
 );
 

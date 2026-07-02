@@ -153,7 +153,10 @@ export const createTodayAgendaSection = (api: CalendarApi) => {
       const range = rangeQuery.data;
       if (today === undefined || range === undefined) {
         return (
-          <Loader2 className="mt-2 size-4 animate-spin text-muted-foreground" />
+          <Loader2
+            aria-hidden="true"
+            className="mt-2 size-4 animate-spin text-muted-foreground"
+          />
         );
       }
       // The one-day window groups into at most a single day entry; the

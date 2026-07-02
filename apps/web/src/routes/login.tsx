@@ -66,7 +66,9 @@ export const LoginScreen = ({ onSuccess }: LoginScreenProps): ReactElement => {
               </Alert>
             )}
             <Button type="submit" disabled={login.isPending}>
-              {login.isPending ? <Loader2 className="animate-spin" /> : null}
+              {login.isPending ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : null}
               Sign in
             </Button>
           </form>

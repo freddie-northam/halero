@@ -121,7 +121,10 @@ export const createTodayScreen = (
       }
       if (home.data === undefined) {
         return (
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <Loader2
+            aria-hidden="true"
+            className="size-4 animate-spin text-muted-foreground"
+          />
         );
       }
       return (

@@ -165,7 +165,9 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
               </Alert>
             )}
             <Button type="submit" disabled={setup.isPending}>
-              {setup.isPending ? <Loader2 className="animate-spin" /> : null}
+              {setup.isPending ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : null}
               Finish setup
             </Button>
           </form>
