@@ -9,6 +9,7 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  type RouterHistory,
   useRouter,
 } from "@tanstack/react-router";
 import type { ReactElement } from "react";
@@ -65,16 +66,12 @@ const useShellProps = (activePath: string) => {
   };
 };
 
-// The Today page does not exist yet; it lands on the home placeholder
-// until its module arrives (Task 11).
-const ShellRoute = (): ReactElement => <ShellScreen {...useShellProps("/")} />;
-
 const SettingsRoute = (): ReactElement => {
   const search = settingsRoute.useSearch();
   return (
     <ShellScreen {...useShellProps("/settings")}>
       <SettingsScreen
-        connected={search.connected}
+        connected={search.connected ?? false}
         errorCode={search.error ?? null}
       />
     </ShellScreen>
@@ -103,13 +100,6 @@ const SetupRoute = (): ReactElement => {
   );
 };
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  beforeLoad: ({ context }) => guardEntry(context.api, "/"),
-  component: ShellRoute,
-});
-
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
@@ -125,7 +115,8 @@ const setupRoute = createRoute({
 });
 
 interface SettingsSearch {
-  readonly connected: boolean;
+  /** Optional so plain links to /settings need no query string. */
+  readonly connected?: boolean;
   readonly error?: string;
 }
 
@@ -134,7 +125,9 @@ interface SettingsSearch {
 const validateSettingsSearch = (
   search: Record<string, unknown>,
 ): SettingsSearch => ({
-  connected: search.connected === "1" || search.connected === 1,
+  ...(search.connected === "1" || search.connected === 1
+    ? { connected: true }
+    : {}),
   ...(typeof search.error === "string" && search.error !== ""
     ? { error: search.error }
     : {}),
@@ -173,12 +166,15 @@ const createModulePageRoute = (page: PageContribution) =>
 export const createAppRouter = (
   api: HaleroApi,
   webModules: readonly WebModule[],
+  /** Tests pass a memory history; the app uses the browser default. */
+  history?: RouterHistory,
 ) => {
   const moduleRoutes = webModules.flatMap((module) =>
     (module.pages ?? []).map(createModulePageRoute),
   );
+  // The index route ("/") comes from the today module's page
+  // contribution, guarded like every other module page.
   const routeTree = rootRoute.addChildren([
-    indexRoute,
     loginRoute,
     setupRoute,
     settingsRoute,
@@ -186,6 +182,7 @@ export const createAppRouter = (
   ]);
   return createRouter({
     routeTree,
+    ...(history === undefined ? {} : { history }),
     context: { api, nav: buildNav(webModules) },
     defaultPendingComponent: PendingScreen,
     defaultErrorComponent: ErrorScreen,

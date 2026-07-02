@@ -12,7 +12,7 @@ import { createAppRouter } from "./router";
 const client = createTrpcClient();
 const api = createHaleroApi(client);
 const queryClient = new QueryClient();
-const router = createAppRouter(api, buildWebModules(client));
+const router = createAppRouter(api, buildWebModules(client, api));
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

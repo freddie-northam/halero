@@ -8,7 +8,7 @@ export interface NavContribution {
   readonly label: string;
   readonly icon?: string;
   readonly path: string;
-  /** Nav renders sorted ascending; core reserves 10 (Today) and 100 (Settings). */
+  /** Nav renders sorted ascending; Today ships at 10, core Settings at 100. */
   readonly order: number;
 }
 

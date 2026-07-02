@@ -11,19 +11,9 @@ export interface ShellScreenProps {
   readonly nav: readonly SidebarNavItem[];
   readonly activePath: string;
   readonly onNavigate: (path: string) => void;
-  readonly children?: ReactNode;
+  /** The routed page; every route brings its own (Today owns "/"). */
+  readonly children: ReactNode;
 }
-
-const Placeholder = (): ReactElement => (
-  <div className="flex h-full items-center justify-center">
-    <div className="px-4 text-center">
-      <p className="text-base font-medium">Nothing here yet.</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Connect Google Calendar in Settings to bring your events in.
-      </p>
-    </div>
-  </div>
-);
 
 // 14rem matches the pre-shadcn 224px rail width.
 const SHELL_STYLE = { "--sidebar-width": "14rem" } as CSSProperties;
@@ -52,9 +42,7 @@ export const ShellScreen = ({
       />
       <SidebarInset className="min-w-0">
         <CommandBarSlot />
-        <div className="flex-1 overflow-auto">
-          {children ?? <Placeholder />}
-        </div>
+        <div className="flex-1 overflow-auto">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
