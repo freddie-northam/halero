@@ -1,4 +1,19 @@
-import { Button, FormError, Spinner, TextField } from "@halero/ui";
+import {
+  Alert,
+  AlertDescription,
+  Badge,
+  Button,
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Loader2,
+  Separator,
+} from "@halero/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   type FormEvent,
@@ -49,6 +64,8 @@ const BANNER_CLASSES: Record<BannerTone, string> = {
   error: "border-red-300 bg-red-50 text-red-900",
 };
 
+// Banners announce politely (role=status), unlike Alert's default
+// interrupting role=alert; the OAuth redirect already moved focus.
 const Banner = ({
   tone,
   children,
@@ -56,12 +73,9 @@ const Banner = ({
   readonly tone: BannerTone;
   readonly children: ReactNode;
 }): ReactElement => (
-  <p
-    role="status"
-    className={`mt-4 rounded-panel border px-3 py-2 text-sm ${BANNER_CLASSES[tone]}`}
-  >
-    {children}
-  </p>
+  <Alert role="status" className={`mt-4 ${BANNER_CLASSES[tone]}`}>
+    <AlertDescription className="text-inherit">{children}</AlertDescription>
+  </Alert>
 );
 
 const LinkButton = ({
@@ -71,43 +85,45 @@ const LinkButton = ({
   readonly href: string;
   readonly children: ReactNode;
 }): ReactElement => (
-  <a
-    href={href}
-    className="inline-flex h-8 items-center justify-center rounded-control border border-transparent bg-accent px-3 text-sm font-medium text-accent-fg transition-colors hover:bg-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-  >
-    {children}
-  </a>
+  <Button asChild>
+    <a href={href}>{children}</a>
+  </Button>
 );
 
 const HttpsGatePanel = (): ReactElement => (
-  <section className="rounded-panel border border-amber-300 bg-amber-50 p-4">
-    <h2 className="text-sm font-semibold">
-      Google Calendar needs an HTTPS address
-    </h2>
-    <p className="mt-2 text-sm text-text-muted">
-      This Halero instance is reachable over plain http at an address that is
-      not localhost. Google refuses OAuth redirect URIs like that, so the
-      connection would fail partway through. Pick one of these, then come back:
-    </p>
-    <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-sm text-text-muted">
-      <li>
-        Serve Halero over HTTPS on a domain you own. A reverse proxy such as
-        Caddy or nginx can handle the certificate for you.
-      </li>
-      <li>
-        Use Tailscale Serve, which gives this machine a trusted HTTPS address
-        inside your tailnet with one command.
-      </li>
-      <li>
-        Run Halero on the computer you browse from and open it at
-        http://localhost, which Google does allow without HTTPS.
-      </li>
-    </ul>
-    <p className="mt-2 text-sm text-text-muted">
-      Once the address has changed, update Halero's base URL and reload this
-      page.
-    </p>
-  </section>
+  <Card className="border-amber-300 bg-amber-50">
+    <CardHeader>
+      <CardTitle asChild>
+        <h2 className="text-sm">Google Calendar needs an HTTPS address</h2>
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
+      <p>
+        This Halero instance is reachable over plain http at an address that is
+        not localhost. Google refuses OAuth redirect URIs like that, so the
+        connection would fail partway through. Pick one of these, then come
+        back:
+      </p>
+      <ul className="flex list-disc flex-col gap-1.5 pl-5">
+        <li>
+          Serve Halero over HTTPS on a domain you own. A reverse proxy such as
+          Caddy or nginx can handle the certificate for you.
+        </li>
+        <li>
+          Use Tailscale Serve, which gives this machine a trusted HTTPS address
+          inside your tailnet with one command.
+        </li>
+        <li>
+          Run Halero on the computer you browse from and open it at
+          http://localhost, which Google does allow without HTTPS.
+        </li>
+      </ul>
+      <p>
+        Once the address has changed, update Halero's base URL and reload this
+        page.
+      </p>
+    </CardContent>
+  </Card>
 );
 
 const CopyField = ({ value }: { readonly value: string }): ReactElement => {
@@ -124,10 +140,10 @@ const CopyField = ({ value }: { readonly value: string }): ReactElement => {
   };
   return (
     <span className="mt-2 flex items-center gap-2">
-      <code className="min-w-0 flex-1 truncate rounded-control border border-border bg-bg px-2 py-1.5 text-xs">
+      <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">
         {value}
       </code>
-      <Button size="sm" onClick={copy}>
+      <Button variant="outline" size="sm" onClick={copy}>
         {copied ? "Copied" : "Copy"}
       </Button>
     </span>
@@ -135,17 +151,17 @@ const CopyField = ({ value }: { readonly value: string }): ReactElement => {
 };
 
 const ProductionStatusNote = (): ReactElement => (
-  <span className="mt-2 block rounded-control border border-amber-300 bg-amber-50 p-3">
+  <span className="mt-2 block rounded-md border border-amber-300 bg-amber-50 p-3">
     <span className="block font-medium">
       Set the publishing status to "In production": on the consent screen page,
       click "Publish app".
     </span>
-    <span className="mt-1 block text-text-muted">
+    <span className="mt-1 block text-muted-foreground">
       This step is easy to skip and it matters. While an app stays in Testing,
       Google expires its sign-ins after 7 days and syncing silently stops.
       Publishing needs no review from Google for personal use.
     </span>
-    <span className="mt-1 block text-text-muted">
+    <span className="mt-1 block text-muted-foreground">
       Because your app is unverified, Google shows a one-time "Google hasn't
       verified this app" screen when you connect. That is expected for a
       personal app: click "Advanced", then "Go to (your app's name)" to
@@ -159,41 +175,48 @@ const GoogleSetupGuide = ({
 }: {
   readonly redirectUri: string;
 }): ReactElement => (
-  <section className="rounded-panel border border-border bg-surface p-4">
-    <h2 className="text-sm font-semibold">Connect Google Calendar</h2>
-    <p className="mt-1 text-sm text-text-muted">
-      Halero never ships a shared Google app. You create your own free OAuth
-      client instead, so your calendar data only ever flows between Google and
-      this instance. The steps take about ten minutes, once.
-    </p>
-    <ol className="mt-4 flex list-decimal flex-col gap-3 pl-5 text-sm">
-      <li>
-        Create a Google Cloud project: open console.cloud.google.com, click the
-        project picker in the top bar, then "New project". Any name works.
-      </li>
-      <li>
-        Enable the Calendar API: in the left menu choose "APIs &amp; Services",
-        then "Library", search for "Google Calendar API" and click Enable.
-      </li>
-      <li>
-        Configure the consent screen: under "APIs &amp; Services" choose "OAuth
-        consent screen", pick the External user type, and fill in the app name
-        and your email address.
-        <ProductionStatusNote />
-      </li>
-      <li>
-        Create the OAuth client: under "APIs &amp; Services" choose
-        "Credentials", then "Create credentials", then "OAuth client ID". Pick
-        the application type "Web application". Under "Authorized redirect URIs"
-        add exactly this address:
-        <CopyField value={redirectUri} />
-      </li>
-      <li>
-        Copy the client ID and client secret Google shows you into the form
-        below.
-      </li>
-    </ol>
-  </section>
+  <Card>
+    <CardHeader>
+      <CardTitle asChild>
+        <h2 className="text-sm">Connect Google Calendar</h2>
+      </CardTitle>
+      <CardDescription>
+        Halero never ships a shared Google app. You create your own free OAuth
+        client instead, so your calendar data only ever flows between Google and
+        this instance. The steps take about ten minutes, once.
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
+      <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm">
+        <li>
+          Create a Google Cloud project: open console.cloud.google.com, click
+          the project picker in the top bar, then "New project". Any name works.
+        </li>
+        <li>
+          Enable the Calendar API: in the left menu choose "APIs &amp;
+          Services", then "Library", search for "Google Calendar API" and click
+          Enable.
+        </li>
+        <li>
+          Configure the consent screen: under "APIs &amp; Services" choose
+          "OAuth consent screen", pick the External user type, and fill in the
+          app name and your email address.
+          <ProductionStatusNote />
+        </li>
+        <li>
+          Create the OAuth client: under "APIs &amp; Services" choose
+          "Credentials", then "Create credentials", then "OAuth client ID". Pick
+          the application type "Web application". Under "Authorized redirect
+          URIs" add exactly this address:
+          <CopyField value={redirectUri} />
+        </li>
+        <li>
+          Copy the client ID and client secret Google shows you into the form
+          below.
+        </li>
+      </ol>
+    </CardContent>
+  </Card>
 );
 
 const ClientForm = ({
@@ -219,64 +242,74 @@ const ClientForm = ({
     });
   };
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-4 rounded-panel border border-border bg-surface p-4"
-    >
-      <h2 className="text-sm font-semibold">OAuth client details</h2>
-      <div className="mt-3 flex flex-col gap-4">
-        <TextField
-          id="google-client-id"
-          label="Client ID"
-          required
-          autoComplete="off"
-          placeholder="1234567890-abc.apps.googleusercontent.com"
-          value={clientId}
-          onChange={(event) => setClientId(event.target.value)}
-        />
-        <TextField
-          id="google-client-secret"
-          label="Client secret"
-          type="password"
-          required
-          autoComplete="off"
-          value={clientSecret}
-          onChange={(event) => setClientSecret(event.target.value)}
-        />
-        {save.error === null ? null : (
-          <FormError>{readableError(save.error)}</FormError>
-        )}
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={save.isPending}
-          className="self-start"
-        >
-          {save.isPending ? (
-            <Spinner className="border-white/40 border-t-white" />
-          ) : null}
-          Save client
-        </Button>
-      </div>
-    </form>
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-sm">OAuth client details</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="google-client-id">Client ID</Label>
+            <Input
+              id="google-client-id"
+              required
+              autoComplete="off"
+              placeholder="1234567890-abc.apps.googleusercontent.com"
+              value={clientId}
+              onChange={(event) => setClientId(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="google-client-secret">Client secret</Label>
+            <Input
+              id="google-client-secret"
+              type="password"
+              required
+              autoComplete="off"
+              value={clientSecret}
+              onChange={(event) => setClientSecret(event.target.value)}
+            />
+          </div>
+          {save.error === null ? null : (
+            <Alert variant="destructive">
+              <AlertDescription>{readableError(save.error)}</AlertDescription>
+            </Alert>
+          )}
+          <Button
+            type="submit"
+            disabled={save.isPending}
+            className="self-start"
+          >
+            {save.isPending ? <Loader2 className="animate-spin" /> : null}
+            Save client
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 };
 
 const ConnectCard = (): ReactElement => (
-  <section className="rounded-panel border border-border bg-surface p-4">
-    <h2 className="text-sm font-semibold">Ready to connect</h2>
-    <p className="mt-1 text-sm text-text-muted">
-      Your Google OAuth client is saved. Connecting opens Google's sign-in page.
-      Because the app is your own and unverified, Google shows a one-time
-      "Google hasn't verified this app" screen: click "Advanced", then continue.
-      That is expected.
-    </p>
-    <p className="mt-3">
+  <Card>
+    <CardHeader>
+      <CardTitle asChild>
+        <h2 className="text-sm">Ready to connect</h2>
+      </CardTitle>
+      <CardDescription>
+        Your Google OAuth client is saved. Connecting opens Google's sign-in
+        page. Because the app is your own and unverified, Google shows a
+        one-time "Google hasn't verified this app" screen: click "Advanced",
+        then continue. That is expected.
+      </CardDescription>
+    </CardHeader>
+    <CardContent>
       <LinkButton href="/api/oauth/google/start">
         Connect Google Calendar
       </LinkButton>
-    </p>
-  </section>
+    </CardContent>
+  </Card>
 );
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -297,7 +330,7 @@ const SyncOutcome = ({
 }): ReactElement | null => {
   if (mutationError !== null && mutationError !== undefined) {
     return (
-      <p role="status" className="text-sm text-red-600">
+      <p role="status" className="text-sm text-destructive">
         {readableError(mutationError)}
       </p>
     );
@@ -307,13 +340,13 @@ const SyncOutcome = ({
   }
   if (result.status === "success") {
     return (
-      <p role="status" className="text-sm text-text-muted">
+      <p role="status" className="text-sm text-muted-foreground">
         Synced: {result.upserts} updated, {result.deletes} removed
       </p>
     );
   }
   return (
-    <p role="status" className="text-sm text-red-600">
+    <p role="status" className="text-sm text-destructive">
       {result.error ?? "Syncing failed. Please try again."}
     </p>
   );
@@ -332,14 +365,22 @@ const SyncControls = ({
     onSettled: onSynced,
   });
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      <Button size="sm" onClick={() => sync.mutate()} disabled={sync.isPending}>
-        {sync.isPending ? <Spinner /> : null}
-        {sync.isPending ? "Syncing" : "Sync now"}
-      </Button>
-      {sync.isPending ? null : (
-        <SyncOutcome result={sync.data} mutationError={sync.error} />
-      )}
+    <div className="flex flex-col gap-3">
+      <Separator />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => sync.mutate()}
+          disabled={sync.isPending}
+        >
+          {sync.isPending ? <Loader2 className="animate-spin" /> : null}
+          {sync.isPending ? "Syncing" : "Sync now"}
+        </Button>
+        {sync.isPending ? null : (
+          <SyncOutcome result={sync.data} mutationError={sync.error} />
+        )}
+      </div>
     </div>
   );
 };
@@ -356,37 +397,41 @@ const ConnectionCard = ({
     className: "bg-stone-100 text-stone-700",
   };
   return (
-    <section className="rounded-panel border border-border bg-surface p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Google Calendar</h2>
-          <p className="mt-0.5 truncate text-sm text-text-muted">
-            {connection.email ?? "Connected account"}
-          </p>
-        </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}
-        >
-          {badge.label}
-        </span>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-sm">Google Calendar</h2>
+        </CardTitle>
+        <CardDescription className="truncate">
+          {connection.email ?? "Connected account"}
+        </CardDescription>
+        <CardAction>
+          <Badge variant="secondary" className={badge.className}>
+            {badge.label}
+          </Badge>
+        </CardAction>
+      </CardHeader>
       {connection.status === "reauth_required" ? (
-        <div className="mt-3">
-          <p className="text-sm text-text-muted">
+        <CardContent className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
             Google needs you to sign in again before syncing can continue.
           </p>
-          <p className="mt-2">
+          <div>
             <LinkButton href="/api/oauth/google/start">Reconnect</LinkButton>
-          </p>
-        </div>
+          </div>
+        </CardContent>
       ) : null}
       {connection.status === "error" && connection.lastError !== null ? (
-        <p className="mt-3 text-sm text-red-600">{connection.lastError}</p>
+        <CardContent>
+          <p className="text-sm text-destructive">{connection.lastError}</p>
+        </CardContent>
       ) : null}
       {connection.status === "active" ? (
-        <SyncControls onSynced={onChanged} />
+        <CardContent>
+          <SyncControls onSynced={onChanged} />
+        </CardContent>
       ) : null}
-    </section>
+    </Card>
   );
 };
 
@@ -438,15 +483,19 @@ export const SettingsScreen = ({
       );
     }
     if (status.error !== null) {
-      return <FormError>{readableError(status.error)}</FormError>;
+      return (
+        <Alert variant="destructive">
+          <AlertDescription>{readableError(status.error)}</AlertDescription>
+        </Alert>
+      );
     }
-    return <Spinner />;
+    return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
   };
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-8">
       <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-      <p className="mt-1 text-sm text-text-muted">
+      <p className="mt-1 text-sm text-muted-foreground">
         Connect Google Calendar to bring your events into Halero.
       </p>
       {connected ? (

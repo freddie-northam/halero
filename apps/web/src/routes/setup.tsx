@@ -1,4 +1,21 @@
-import { Button, FormError, Spinner, TextField } from "@halero/ui";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Loader2,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@halero/ui";
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, type ReactElement, useState } from "react";
 import type { SetupInput } from "../lib/api";
@@ -71,83 +88,89 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
     (setup.error === null ? null : readableError(setup.error));
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-4 py-8">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-panel border border-border bg-surface p-6"
-      >
-        <h1 className="text-lg font-semibold tracking-tight">
-          Welcome to Halero
-        </h1>
-        <p className="mt-1 text-sm text-text-muted">
-          Claim this instance by choosing a password.
-        </p>
-        <div className="mt-5 flex flex-col gap-4">
-          <TextField
-            id="password"
-            label="Password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <TextField
-            id="confirm-password"
-            label="Confirm password"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="home-timezone"
-              className="text-xs font-medium text-text-muted"
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-8">
+      <Card className="w-full max-w-sm p-6">
+        <CardHeader className="p-0">
+          <CardTitle asChild>
+            <h1 className="text-lg tracking-tight">Welcome to Halero</h1>
+          </CardTitle>
+          <CardDescription>
+            Claim this instance by choosing a password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirm-password">Confirm password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={confirm}
+                onChange={(event) => setConfirm(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="home-timezone">Home timezone</Label>
+              <Select value={homeTimezone} onValueChange={setHomeTimezone}>
+                <SelectTrigger id="home-timezone" size="sm" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {listTimezones(homeTimezone).map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              aria-expanded={showBaseUrl}
+              onClick={() => setShowBaseUrl((value) => !value)}
+              className="h-auto self-start p-0 text-xs"
             >
-              Home timezone
-            </label>
-            <select
-              id="home-timezone"
-              value={homeTimezone}
-              onChange={(event) => setHomeTimezone(event.target.value)}
-              className="h-8 rounded-control border border-border bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring"
-            >
-              {listTimezones(homeTimezone).map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="button"
-            aria-expanded={showBaseUrl}
-            onClick={() => setShowBaseUrl((value) => !value)}
-            className="self-start rounded-control text-xs text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-          >
-            Hosting behind a domain?
-          </button>
-          {showBaseUrl ? (
-            <TextField
-              id="base-url"
-              label="Base URL"
-              type="url"
-              placeholder="https://halero.example.com"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-          ) : null}
-          {error === null ? null : <FormError>{error}</FormError>}
-          <Button type="submit" variant="primary" disabled={setup.isPending}>
-            {setup.isPending ? (
-              <Spinner className="border-white/40 border-t-white" />
+              Hosting behind a domain?
+            </Button>
+            {showBaseUrl ? (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="base-url">Base URL</Label>
+                <Input
+                  id="base-url"
+                  type="url"
+                  placeholder="https://halero.example.com"
+                  value={baseUrl}
+                  onChange={(event) => setBaseUrl(event.target.value)}
+                />
+              </div>
             ) : null}
-            Finish setup
-          </Button>
-        </div>
-      </form>
+            {error === null ? null : (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button type="submit" disabled={setup.isPending}>
+              {setup.isPending ? <Loader2 className="animate-spin" /> : null}
+              Finish setup
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };

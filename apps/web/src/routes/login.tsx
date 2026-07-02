@@ -1,4 +1,16 @@
-import { Button, FormError, Spinner, TextField } from "@halero/ui";
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Loader2,
+} from "@halero/ui";
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, type ReactElement, useState } from "react";
 import { useApi } from "../lib/api-context";
@@ -25,34 +37,41 @@ export const LoginScreen = ({ onSuccess }: LoginScreenProps): ReactElement => {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-bg px-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-xs rounded-panel border border-border bg-surface p-6"
-      >
-        <h1 className="text-lg font-semibold tracking-tight">Halero</h1>
-        <p className="mt-1 text-sm text-text-muted">Sign in to continue.</p>
-        <div className="mt-5 flex flex-col gap-4">
-          <TextField
-            id="password"
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          {login.error === null ? null : (
-            <FormError>{readableError(login.error)}</FormError>
-          )}
-          <Button type="submit" variant="primary" disabled={login.isPending}>
-            {login.isPending ? (
-              <Spinner className="border-white/40 border-t-white" />
-            ) : null}
-            Sign in
-          </Button>
-        </div>
-      </form>
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-xs p-6">
+        <CardHeader className="p-0">
+          <CardTitle asChild>
+            <h1 className="text-lg tracking-tight">Halero</h1>
+          </CardTitle>
+          <CardDescription>Sign in to continue.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            {login.error === null ? null : (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {readableError(login.error)}
+                </AlertDescription>
+              </Alert>
+            )}
+            <Button type="submit" disabled={login.isPending}>
+              {login.isPending ? <Loader2 className="animate-spin" /> : null}
+              Sign in
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 };

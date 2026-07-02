@@ -1,4 +1,4 @@
-import { Spinner } from "@halero/ui";
+import { Loader2 } from "@halero/ui";
 import {
   createRootRouteWithContext,
   createRoute,
@@ -26,18 +26,20 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
 });
 
 const PendingScreen = (): ReactElement => (
-  <div className="flex min-h-dvh items-center justify-center bg-bg">
-    <Spinner />
+  <div className="flex min-h-dvh items-center justify-center bg-background">
+    <Loader2 className="size-4 animate-spin text-muted-foreground" />
   </div>
 );
 
 const ErrorScreen = ({ error }: { readonly error: Error }): ReactElement => (
-  <div className="flex min-h-dvh items-center justify-center bg-bg px-4">
+  <div className="flex min-h-dvh items-center justify-center bg-background px-4">
     <div className="max-w-sm text-center">
       <p className="text-base font-medium">
         Could not reach your Halero server.
       </p>
-      <p className="mt-1 text-sm text-text-muted">{readableError(error)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {readableError(error)}
+      </p>
     </div>
   </div>
 );
