@@ -1,7 +1,12 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, type RenderResult, render } from "@testing-library/react";
-import type { GoogleStatus, HaleroApi } from "../lib/api";
+import {
+  cleanup,
+  fireEvent,
+  type RenderResult,
+  render,
+} from "@testing-library/react";
+import type { GoogleConnection, GoogleStatus, HaleroApi } from "../lib/api";
 import { ApiProvider } from "../lib/api-context";
 import { registerHappyDom, unregisterHappyDom } from "../test/happy-dom";
 import { SettingsScreen } from "./settings";
@@ -33,8 +38,27 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   logout: () => Promise.resolve(),
   googleStatus: () => Promise.resolve(googleStatus()),
   saveGoogleClient: () => Promise.resolve(),
+  syncGoogleNow: () =>
+    Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
+  agenda: () => Promise.resolve({ homeTimezone: "Europe/London", days: [] }),
   ...overrides,
 });
+
+const activeConnection: GoogleConnection = {
+  id: "conn-1",
+  status: "active",
+  email: "person@example.com",
+  lastError: null,
+};
+
+const connectedApi = (overrides: Partial<HaleroApi> = {}): HaleroApi =>
+  stubApi({
+    googleStatus: () =>
+      Promise.resolve(
+        googleStatus({ clientConfigured: true, connection: activeConnection }),
+      ),
+    ...overrides,
+  });
 
 interface RenderOptions {
   readonly connected?: boolean;
@@ -101,29 +125,84 @@ test("shows the connect button once the client is configured", async () => {
   expect(connect.getAttribute("href")).toBe("/api/oauth/google/start");
 });
 
-test("shows the connection card with email, badge, and disabled sync placeholder", async () => {
-  const view = renderSettings(
-    stubApi({
-      googleStatus: () =>
-        Promise.resolve(
-          googleStatus({
-            clientConfigured: true,
-            connection: {
-              id: "conn-1",
-              status: "active",
-              email: "person@example.com",
-              lastError: null,
-            },
-          }),
-        ),
-    }),
-  );
+test("shows the connection card with email, badge, and a live sync button", async () => {
+  const view = renderSettings(connectedApi());
 
   expect(await view.findByText("person@example.com")).toBeTruthy();
   expect(view.getByText("Active")).toBeTruthy();
   const syncNow = view.getByRole("button", { name: "Sync now" });
-  expect(syncNow.hasAttribute("disabled")).toBe(true);
-  expect(view.getByText(/arrives with the next step/)).toBeTruthy();
+  expect(syncNow.hasAttribute("disabled")).toBe(false);
+});
+
+test("runs a sync and shows the result summary", async () => {
+  let statusCalls = 0;
+  const view = renderSettings(
+    connectedApi({
+      googleStatus: () => {
+        statusCalls += 1;
+        return Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: activeConnection,
+          }),
+        );
+      },
+      syncGoogleNow: () =>
+        Promise.resolve({
+          status: "success",
+          upserts: 3,
+          deletes: 1,
+          error: null,
+        }),
+    }),
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: "Sync now" }));
+
+  expect(await view.findByText("Synced: 3 updated, 1 removed")).toBeTruthy();
+  // The connection status is refetched so a reauth flip shows up.
+  expect(statusCalls).toBeGreaterThan(1);
+});
+
+test("shows the run's readable error when a sync fails", async () => {
+  const view = renderSettings(
+    connectedApi({
+      syncGoogleNow: () =>
+        Promise.resolve({
+          status: "failed",
+          upserts: 0,
+          deletes: 0,
+          error: "Halero could not reach Google Calendar.",
+        }),
+    }),
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: "Sync now" }));
+
+  expect(
+    await view.findByText("Halero could not reach Google Calendar."),
+  ).toBeTruthy();
+});
+
+test("shows the readable rejection when syncing cannot start", async () => {
+  const view = renderSettings(
+    connectedApi({
+      syncGoogleNow: () =>
+        Promise.reject(
+          new Error(
+            "Google needs a fresh sign-in before syncing can continue.",
+          ),
+        ),
+    }),
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: "Sync now" }));
+
+  expect(
+    await view.findByText(
+      "Google needs a fresh sign-in before syncing can continue.",
+    ),
+  ).toBeTruthy();
 });
 
 test("offers a reconnect link when Google requires a new sign-in", async () => {

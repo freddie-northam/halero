@@ -26,6 +26,34 @@ export interface SaveGoogleClientInput {
   readonly clientSecret: string;
 }
 
+export interface SyncNowResult {
+  readonly status: "success" | "failed";
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
+export interface AgendaEvent {
+  readonly entityId: string;
+  readonly title: string;
+  readonly allDay: boolean;
+  /** Epoch ms; for all-day events these are home-timezone midnights. */
+  readonly start: number;
+  readonly end: number;
+  readonly location: string | null;
+  readonly calendarId: string;
+}
+
+export interface AgendaDay {
+  readonly date: string;
+  readonly events: readonly AgendaEvent[];
+}
+
+export interface Agenda {
+  readonly homeTimezone: string;
+  readonly days: readonly AgendaDay[];
+}
+
 /**
  * The narrow surface of the server API that the UI consumes. Components
  * depend on this interface instead of the raw tRPC client so tests can
@@ -38,6 +66,8 @@ export interface HaleroApi {
   readonly logout: () => Promise<void>;
   readonly googleStatus: () => Promise<GoogleStatus>;
   readonly saveGoogleClient: (input: SaveGoogleClientInput) => Promise<void>;
+  readonly syncGoogleNow: () => Promise<SyncNowResult>;
+  readonly agenda: (days?: number) => Promise<Agenda>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -55,4 +85,7 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   saveGoogleClient: async (input) => {
     await client.connections.google.saveClient.mutate(input);
   },
+  syncGoogleNow: () => client.connections.google.syncNow.mutate(),
+  agenda: (days) =>
+    client.calendar.agenda.query(days === undefined ? undefined : { days }),
 });

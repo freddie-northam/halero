@@ -10,6 +10,7 @@ import type {
   GoogleConnection,
   GoogleStatus,
   SaveGoogleClientInput,
+  SyncNowResult,
 } from "../lib/api";
 import { useApi } from "../lib/api-context";
 import { readableError } from "../lib/errors";
@@ -287,10 +288,68 @@ const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   error: { label: "Error", className: "bg-red-100 text-red-700" },
 };
 
+const SyncOutcome = ({
+  result,
+  mutationError,
+}: {
+  readonly result: SyncNowResult | undefined;
+  readonly mutationError: unknown;
+}): ReactElement | null => {
+  if (mutationError !== null && mutationError !== undefined) {
+    return (
+      <p role="status" className="text-sm text-red-600">
+        {readableError(mutationError)}
+      </p>
+    );
+  }
+  if (result === undefined) {
+    return null;
+  }
+  if (result.status === "success") {
+    return (
+      <p role="status" className="text-sm text-text-muted">
+        Synced: {result.upserts} updated, {result.deletes} removed
+      </p>
+    );
+  }
+  return (
+    <p role="status" className="text-sm text-red-600">
+      {result.error ?? "Syncing failed. Please try again."}
+    </p>
+  );
+};
+
+const SyncControls = ({
+  onSynced,
+}: {
+  readonly onSynced: () => void;
+}): ReactElement => {
+  const api = useApi();
+  const sync = useMutation({
+    mutationFn: () => api.syncGoogleNow(),
+    // Refetch the connection either way: a failed run can flip the
+    // status to reauth_required, which swaps in the Reconnect prompt.
+    onSettled: onSynced,
+  });
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+      <Button size="sm" onClick={() => sync.mutate()} disabled={sync.isPending}>
+        {sync.isPending ? <Spinner /> : null}
+        {sync.isPending ? "Syncing" : "Sync now"}
+      </Button>
+      {sync.isPending ? null : (
+        <SyncOutcome result={sync.data} mutationError={sync.error} />
+      )}
+    </div>
+  );
+};
+
 const ConnectionCard = ({
   connection,
+  onChanged,
 }: {
   readonly connection: GoogleConnection;
+  readonly onChanged: () => void;
 }): ReactElement => {
   const badge = STATUS_BADGES[connection.status] ?? {
     label: connection.status,
@@ -324,14 +383,9 @@ const ConnectionCard = ({
       {connection.status === "error" && connection.lastError !== null ? (
         <p className="mt-3 text-sm text-red-600">{connection.lastError}</p>
       ) : null}
-      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
-        <Button size="sm" disabled>
-          Sync now
-        </Button>
-        <span className="text-xs text-text-muted">
-          arrives with the next step
-        </span>
-      </div>
+      {connection.status === "active" ? (
+        <SyncControls onSynced={onChanged} />
+      ) : null}
     </section>
   );
 };
@@ -344,7 +398,9 @@ const GoogleSection = ({
   readonly onChanged: () => void;
 }): ReactElement => {
   if (status.connection !== null) {
-    return <ConnectionCard connection={status.connection} />;
+    return (
+      <ConnectionCard connection={status.connection} onChanged={onChanged} />
+    );
   }
   if (!status.httpsOk) {
     return <HttpsGatePanel />;

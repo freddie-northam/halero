@@ -11,6 +11,7 @@ import type { NavItem } from "./components/sidebar";
 import type { HaleroApi } from "./lib/api";
 import { readableError } from "./lib/errors";
 import { guardAuthenticated, guardEntry } from "./lib/guards";
+import { CalendarScreen } from "./routes/calendar";
 import { LoginScreen } from "./routes/login";
 import { SettingsScreen } from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
@@ -41,15 +42,21 @@ const ErrorScreen = ({ error }: { readonly error: Error }): ReactElement => (
   </div>
 );
 
+// The Today page does not exist yet; it lands on the home placeholder
+// until its module arrives.
+const NAV_ROUTES: Record<NavItem, string> = {
+  Today: "/",
+  Calendar: "/calendar",
+  Settings: "/settings",
+};
+
 /** Shared shell wiring: nav items map to routes, logout returns to /login. */
 const useShellProps = (activeNav: NavItem) => {
   const router = useRouter();
   return {
     activeNav,
     onNavigate: (item: NavItem) => {
-      // Today and Calendar pages do not exist yet; both land on the home
-      // placeholder until their modules arrive.
-      void router.navigate({ to: item === "Settings" ? "/settings" : "/" });
+      void router.navigate({ to: NAV_ROUTES[item] });
     },
     onLoggedOut: () => {
       void router.navigate({ to: "/login" });
@@ -59,6 +66,12 @@ const useShellProps = (activeNav: NavItem) => {
 
 const ShellRoute = (): ReactElement => (
   <ShellScreen {...useShellProps("Today")} />
+);
+
+const CalendarRoute = (): ReactElement => (
+  <ShellScreen {...useShellProps("Calendar")}>
+    <CalendarScreen />
+  </ShellScreen>
 );
 
 const SettingsRoute = (): ReactElement => {
@@ -140,11 +153,19 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 });
 
+const calendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/calendar",
+  beforeLoad: ({ context }) => guardAuthenticated(context.api),
+  component: CalendarRoute,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   setupRoute,
   settingsRoute,
+  calendarRoute,
 ]);
 
 export const createAppRouter = (api: HaleroApi) =>
