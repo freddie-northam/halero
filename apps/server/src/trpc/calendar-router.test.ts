@@ -9,6 +9,7 @@ import {
   trpcMutation,
   trpcQuery,
 } from "../test-utils";
+import { startOfDayInZone } from "../time/zone";
 
 // The test clock (1_700_000_000_000) is 2023-11-14T22:13:20Z; London is on
 // GMT in November, so "today" there is 2023-11-14.
@@ -236,5 +237,31 @@ describe("calendar.agenda", () => {
     expect(agenda.days[0]?.events.map((event) => event.entityId)).toEqual([
       "ev-local-morning",
     ]);
+  });
+
+  test("groups an all-day event under its own date when midnight falls in a DST gap", async () => {
+    const testApp = makeTestApp();
+    // Chile springs forward at local midnight into 2025-09-07; midnight
+    // does not exist that day. The event's occurredStart comes from the
+    // same helper the sync mapping uses, so a start-of-day instant that
+    // leaked onto Sep 6 would group it under the wrong header.
+    testApp.clock.value = Date.UTC(2025, 8, 6, 12, 0, 0);
+    const setupRes = await trpcMutation(testApp.app, "system.setup", {
+      password: "correct horse battery",
+      homeTimezone: "America/Santiago",
+    });
+    const cookie = sessionCookieFrom(setupRes);
+    seedEvent(testApp, {
+      id: "ev-gap-allday",
+      title: "Election day",
+      occurredStart: startOfDayInZone("2025-09-07", "America/Santiago"),
+      occurredEnd: startOfDayInZone("2025-09-08", "America/Santiago"),
+      allDay: true,
+    });
+
+    const agenda = await readAgenda(testApp.app, cookie);
+
+    expect(agenda.days.map((day) => day.date)).toEqual(["2025-09-07"]);
+    expect(agenda.days[0]?.events[0]?.entityId).toBe("ev-gap-allday");
   });
 });

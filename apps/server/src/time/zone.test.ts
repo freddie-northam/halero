@@ -55,6 +55,32 @@ describe("dayBoundsInZone across DST transitions", () => {
   });
 });
 
+describe("startOfDayInZone when midnight falls in a spring-forward gap", () => {
+  test("America/Santiago 2025-09-07 starts at 01:00 local", () => {
+    // Chile springs forward at local midnight: 00:00-00:59 on Sep 7 do
+    // not exist. The day starts at the first instant after the gap,
+    // 01:00 local = 04:00Z, never an instant on the previous local day.
+    const start = startOfDayInZone("2025-09-07", "America/Santiago");
+    expect(start).toBe(Date.UTC(2025, 8, 7, 4, 0, 0));
+    expect(dateStringInZone(start, "America/Santiago")).toBe("2025-09-07");
+  });
+
+  test("Atlantic/Azores 2025-03-30 starts at 01:00 local", () => {
+    // The EU transition at 01:00 UTC is local midnight in the Azores
+    // (UTC-1 in winter), so 00:00-00:59 local do not exist that day.
+    const start = startOfDayInZone("2025-03-30", "Atlantic/Azores");
+    expect(start).toBe(Date.UTC(2025, 2, 30, 1, 0, 0));
+    expect(dateStringInZone(start, "Atlantic/Azores")).toBe("2025-03-30");
+  });
+
+  test("the gap day still spans 23 hours to the next midnight", () => {
+    const bounds = dayBoundsInZone("2025-09-07", "America/Santiago");
+    expect(bounds.start).toBe(Date.UTC(2025, 8, 7, 4, 0, 0));
+    expect(bounds.end).toBe(Date.UTC(2025, 8, 8, 3, 0, 0));
+    expect(bounds.end - bounds.start).toBe(23 * HOUR);
+  });
+});
+
 describe("dateStringInZone", () => {
   test("maps an instant to the calendar date of its zone", () => {
     // 22:00 UTC on the 14th is already the 15th in Tongatapu (UTC+13)

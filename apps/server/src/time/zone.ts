@@ -82,10 +82,41 @@ const parseDateString = (dateString: string): number => {
   return Date.parse(`${dateString}T00:00:00Z`);
 };
 
+const MINUTE_MS = 60_000;
+const SCAN_STEP_MS = 30 * MINUTE_MS;
+const SCAN_LIMIT_MS = 48 * 3_600_000;
+
 /**
- * Epoch ms of local midnight on the given calendar date in the zone.
- * Two-pass offset resolution handles DST: when midnight does not exist
- * (spring-forward at 00:00), this lands on the first instant that does.
+ * First instant at or after `from` whose local calendar date reaches the
+ * requested date. Coarse forward scan, then a minute-level snap back to
+ * the exact boundary (real timezone transitions sit on whole minutes).
+ */
+const firstInstantOfDate = (
+  from: number,
+  dateString: string,
+  timeZone: string,
+): number => {
+  let cursor = from;
+  const limit = from + SCAN_LIMIT_MS;
+  while (dateStringInZone(cursor, timeZone) < dateString && cursor < limit) {
+    cursor += SCAN_STEP_MS;
+  }
+  while (
+    cursor - MINUTE_MS >= from &&
+    dateStringInZone(cursor - MINUTE_MS, timeZone) >= dateString
+  ) {
+    cursor -= MINUTE_MS;
+  }
+  return cursor;
+};
+
+/**
+ * Epoch ms of the first instant of the given calendar date in the zone:
+ * local midnight, or the end of the spring-forward gap in zones whose
+ * transition crosses midnight (America/Santiago, Atlantic/Azores) where
+ * 00:00 does not exist. The two-pass offset resolution alone would land
+ * such days one hour into the PREVIOUS local day, so the result is
+ * verified against the requested date and advanced across the gap.
  */
 export const startOfDayInZone = (
   dateString: string,
@@ -93,7 +124,11 @@ export const startOfDayInZone = (
 ): number => {
   const utcGuess = parseDateString(dateString);
   const firstPass = utcGuess - zoneOffsetAt(timeZone, utcGuess);
-  return utcGuess - zoneOffsetAt(timeZone, firstPass);
+  const secondPass = utcGuess - zoneOffsetAt(timeZone, firstPass);
+  if (dateStringInZone(secondPass, timeZone) >= dateString) {
+    return secondPass;
+  }
+  return firstInstantOfDate(secondPass, dateString, timeZone);
 };
 
 /** Local-midnight-to-next-local-midnight window; 23 to 25 hours over DST. */
