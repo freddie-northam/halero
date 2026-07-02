@@ -4,8 +4,10 @@
  * src/components/ui are not part of the contract.
  */
 
-// The sanctioned busy indicator: lucide's Loader2 with animate-spin.
-export { Loader2 } from "lucide-react";
+// Sanctioned lucide icons: Loader2 with animate-spin is the busy
+// indicator; the chevrons drive prev/next navigation; Repeat marks
+// recurring calendar items.
+export { ChevronLeft, ChevronRight, Loader2, Repeat } from "lucide-react";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
 export { Button, buttonVariants } from "./components/ui/button";
@@ -70,6 +72,12 @@ export {
   useSidebar,
 } from "./components/ui/sidebar";
 export { Skeleton } from "./components/ui/skeleton";
+export {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "./components/ui/tabs";
 export {
   Tooltip,
   TooltipContent,
