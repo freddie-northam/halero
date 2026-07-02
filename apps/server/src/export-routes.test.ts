@@ -172,6 +172,10 @@ describe("GET /api/export redaction", () => {
     const storedSecretEnc = readSetting("google_oauth_client_secret_enc");
     const passwordHash = readSetting("password_hash");
     expect(passwordHash).toStartWith("$argon2id$");
+    // Presence guard, mirroring the argon2id check above: if the setting
+    // ever went missing, the not-contains assertion below would pass
+    // vacuously against the "IMPOSSIBLE" fallback.
+    expect(storedSecretEnc).toMatch(/^[A-Za-z0-9+/]{30,}={0,2}$/);
 
     const res = await fetchExport(testApp.app, cookie);
     const body = await res.text();

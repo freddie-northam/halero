@@ -92,6 +92,14 @@ const runStream = async <TConfig>(
   }
 };
 
+/**
+ * Runs a connector end to end against an injected fetch: stream
+ * discovery (or exactly the streams you pass), then a full sync of each
+ * stream, validating every yielded page against the protocol schema.
+ * Returns the applied pages, each stream's next cursor, and the
+ * connector's log lines, ready for assertions. Pair it with
+ * createFixtureFetch so unexpected requests fail loudly.
+ */
 export const runConnectorFixture = async <TConfig>(
   options: RunConnectorFixtureOptions<TConfig>,
 ): Promise<FixtureRunResult> => {

@@ -1,6 +1,9 @@
 {
   "name": "halero",
   "private": true,
+  "engines": {
+    "bun": ">=1.3.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*",
