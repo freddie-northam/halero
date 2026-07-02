@@ -1,9 +1,17 @@
+// The agenda page, moved from the app's routes. Composes @halero/ui
+// (shadcn) exports only; its data arrives through the narrow CalendarApi
+// interface the host's registry wires up from the tRPC client.
+
 import { Alert, AlertDescription, Badge, Card, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactElement } from "react";
-import type { Agenda, AgendaDay, AgendaEvent } from "../lib/api";
-import { useApi } from "../lib/api-context";
-import { readableError } from "../lib/errors";
+import type { ComponentType, ReactElement } from "react";
+import type { Agenda, AgendaDay, AgendaEvent } from "../contract";
+import { readableError } from "./readable-error";
+
+/** What the calendar page needs from the host: its own agenda query. */
+export interface CalendarApi {
+  readonly agenda: (days?: number) => Promise<Agenda>;
+}
 
 const AGENDA_DAYS = 7;
 
@@ -102,34 +110,37 @@ const AgendaList = ({ agenda }: { readonly agenda: Agenda }): ReactElement => {
   );
 };
 
-export const CalendarScreen = (): ReactElement => {
-  const api = useApi();
-  const agenda = useQuery({
-    queryKey: ["agenda", AGENDA_DAYS],
-    queryFn: () => api.agenda(AGENDA_DAYS),
-  });
+/** Builds the page component around the host-wired agenda query. */
+export const createCalendarScreen = (api: CalendarApi): ComponentType => {
+  const CalendarScreen = (): ReactElement => {
+    const agenda = useQuery({
+      queryKey: ["agenda", AGENDA_DAYS],
+      queryFn: () => api.agenda(AGENDA_DAYS),
+    });
 
-  const body = (): ReactElement => {
-    if (agenda.data !== undefined) {
-      return <AgendaList agenda={agenda.data} />;
-    }
-    if (agenda.error !== null) {
-      return (
-        <Alert variant="destructive">
-          <AlertDescription>{readableError(agenda.error)}</AlertDescription>
-        </Alert>
-      );
-    }
-    return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
+    const body = (): ReactElement => {
+      if (agenda.data !== undefined) {
+        return <AgendaList agenda={agenda.data} />;
+      }
+      if (agenda.error !== null) {
+        return (
+          <Alert variant="destructive">
+            <AlertDescription>{readableError(agenda.error)}</AlertDescription>
+          </Alert>
+        );
+      }
+      return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
+    };
+
+    return (
+      <div className="mx-auto w-full max-w-2xl px-6 py-8">
+        <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          The next {AGENDA_DAYS} days across your connected calendars.
+        </p>
+        <div className="mt-6">{body()}</div>
+      </div>
+    );
   };
-
-  return (
-    <div className="mx-auto w-full max-w-2xl px-6 py-8">
-      <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        The next {AGENDA_DAYS} days across your connected calendars.
-      </p>
-      <div className="mt-6">{body()}</div>
-    </div>
-  );
+  return CalendarScreen;
 };

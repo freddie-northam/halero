@@ -10,13 +10,16 @@ import {
 } from "@halero/ui";
 import type { ReactElement } from "react";
 
-const NAV_ITEMS = ["Today", "Calendar", "Settings"] as const;
-
-export type NavItem = (typeof NAV_ITEMS)[number];
+/** One nav rail entry; the registry's NavContribution satisfies it. */
+export interface SidebarNavItem {
+  readonly label: string;
+  readonly path: string;
+}
 
 export interface AppSidebarProps {
-  readonly active: NavItem;
-  readonly onNavigate: (item: NavItem) => void;
+  readonly items: readonly SidebarNavItem[];
+  readonly activePath: string;
+  readonly onNavigate: (path: string) => void;
   readonly onLogout: () => void;
   readonly logoutPending?: boolean;
 }
@@ -24,10 +27,12 @@ export interface AppSidebarProps {
 /**
  * Halero's app sidebar composed from the shadcn sidebar family. It renders
  * as a static rail (collapsible="none"): the shell has no trigger and the
- * navigation is always visible, as before the shadcn adoption.
+ * navigation is always visible, as before the shadcn adoption. Items come
+ * from the web module registry; the sidebar itself knows no module names.
  */
 export const AppSidebar = ({
-  active,
+  items,
+  activePath,
   onNavigate,
   onLogout,
   logoutPending = false,
@@ -39,15 +44,15 @@ export const AppSidebar = ({
     <SidebarContent>
       <nav aria-label="Primary" className="p-2">
         <SidebarMenu>
-          {NAV_ITEMS.map((item) => (
-            <SidebarMenuItem key={item}>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.path}>
               <SidebarMenuButton
                 type="button"
-                isActive={item === active}
-                aria-current={item === active ? "page" : undefined}
-                onClick={() => onNavigate(item)}
+                isActive={item.path === activePath}
+                aria-current={item.path === activePath ? "page" : undefined}
+                onClick={() => onNavigate(item.path)}
               >
-                {item}
+                {item.label}
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

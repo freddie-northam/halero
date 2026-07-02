@@ -48,31 +48,13 @@ export interface SyncNowResult {
   readonly error: string | null;
 }
 
-export interface AgendaEvent {
-  readonly entityId: string;
-  readonly title: string;
-  readonly allDay: boolean;
-  /** Epoch ms; for all-day events these are home-timezone midnights. */
-  readonly start: number;
-  readonly end: number;
-  readonly location: string | null;
-  readonly calendarId: string;
-}
-
-export interface AgendaDay {
-  readonly date: string;
-  readonly events: readonly AgendaEvent[];
-}
-
-export interface Agenda {
-  readonly homeTimezone: string;
-  readonly days: readonly AgendaDay[];
-}
-
 /**
- * The narrow surface of the server API that the UI consumes. Components
- * depend on this interface instead of the raw tRPC client so tests can
- * inject plain stubs through the provider, without module mocks.
+ * The narrow surface of the CORE server API that the UI consumes.
+ * Components depend on this interface instead of the raw tRPC client so
+ * tests can inject plain stubs through the provider, without module
+ * mocks. Module procedures (modules.<id>.*) are not part of it: the web
+ * module registry wires each module's own narrow API straight from the
+ * tRPC client.
  */
 export interface HaleroApi {
   readonly systemStatus: () => Promise<EntryStatus>;
@@ -82,7 +64,6 @@ export interface HaleroApi {
   readonly googleStatus: () => Promise<GoogleStatus>;
   readonly saveGoogleClient: (input: SaveGoogleClientInput) => Promise<void>;
   readonly syncGoogleNow: () => Promise<SyncNowResult>;
-  readonly agenda: (days?: number) => Promise<Agenda>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -101,6 +82,4 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
     await client.connections.google.saveClient.mutate(input);
   },
   syncGoogleNow: () => client.connections.google.syncNow.mutate(),
-  agenda: (days) =>
-    client.calendar.agenda.query(days === undefined ? undefined : { days }),
 });

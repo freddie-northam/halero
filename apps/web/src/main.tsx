@@ -6,11 +6,13 @@ import { createRoot } from "react-dom/client";
 import { createHaleroApi } from "./lib/api";
 import { ApiProvider } from "./lib/api-context";
 import { createTrpcClient } from "./lib/trpc";
+import { buildWebModules } from "./registry";
 import { createAppRouter } from "./router";
 
-const api = createHaleroApi(createTrpcClient());
+const client = createTrpcClient();
+const api = createHaleroApi(client);
 const queryClient = new QueryClient();
-const router = createAppRouter(api);
+const router = createAppRouter(api, buildWebModules(client));
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

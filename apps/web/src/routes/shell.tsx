@@ -2,13 +2,15 @@ import { SidebarInset, SidebarProvider } from "@halero/ui";
 import { useMutation } from "@tanstack/react-query";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { CommandBarSlot } from "../components/command-bar-slot";
-import { AppSidebar, type NavItem } from "../components/sidebar";
+import { AppSidebar, type SidebarNavItem } from "../components/sidebar";
 import { useApi } from "../lib/api-context";
 
 export interface ShellScreenProps {
   readonly onLoggedOut: () => void;
-  readonly activeNav: NavItem;
-  readonly onNavigate: (item: NavItem) => void;
+  /** Nav entries from the web module registry, already sorted. */
+  readonly nav: readonly SidebarNavItem[];
+  readonly activePath: string;
+  readonly onNavigate: (path: string) => void;
   readonly children?: ReactNode;
 }
 
@@ -28,7 +30,8 @@ const SHELL_STYLE = { "--sidebar-width": "14rem" } as CSSProperties;
 
 export const ShellScreen = ({
   onLoggedOut,
-  activeNav,
+  nav,
+  activePath,
   onNavigate,
   children,
 }: ShellScreenProps): ReactElement => {
@@ -41,7 +44,8 @@ export const ShellScreen = ({
   return (
     <SidebarProvider className="h-dvh" style={SHELL_STYLE}>
       <AppSidebar
-        active={activeNav}
+        items={nav}
+        activePath={activePath}
         onNavigate={onNavigate}
         onLogout={() => logout.mutate()}
         logoutPending={logout.isPending}

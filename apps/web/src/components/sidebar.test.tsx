@@ -17,6 +17,13 @@ afterAll(async () => {
   await unregisterHappyDom();
 });
 
+// The registry drives the items in the app; the tests pin the same shape.
+const NAV_ITEMS = [
+  { label: "Today", path: "/" },
+  { label: "Calendar", path: "/calendar" },
+  { label: "Settings", path: "/settings" },
+] as const;
+
 // The sidebar components read shadcn's sidebar context, so the tests
 // render them inside the provider just like the shell does.
 const renderSidebar = (props: AppSidebarProps): RenderResult =>
@@ -28,7 +35,8 @@ const renderSidebar = (props: AppSidebarProps): RenderResult =>
 
 test("renders the nav items with aria-current on the active one", () => {
   const view = renderSidebar({
-    active: "Today",
+    items: NAV_ITEMS,
+    activePath: "/",
     onNavigate: () => undefined,
     onLogout: () => undefined,
   });
@@ -41,13 +49,27 @@ test("renders the nav items with aria-current on the active one", () => {
   expect(settings.getAttribute("aria-current")).toBeNull();
 });
 
-test("reports the item a click asks to navigate to", () => {
+test("marks a module-contributed item active on its own path", () => {
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/calendar",
+    onNavigate: () => undefined,
+    onLogout: () => undefined,
+  });
+  const calendar = view.getByRole("button", { name: "Calendar" });
+  const today = view.getByRole("button", { name: "Today" });
+  expect(calendar.getAttribute("aria-current")).toBe("page");
+  expect(today.getAttribute("aria-current")).toBeNull();
+});
+
+test("reports the path a click asks to navigate to", () => {
   const visited: string[] = [];
   const view = renderSidebar({
-    active: "Today",
-    onNavigate: (item) => visited.push(item),
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: (path) => visited.push(path),
     onLogout: () => undefined,
   });
   fireEvent.click(view.getByRole("button", { name: "Settings" }));
-  expect(visited).toEqual(["Settings"]);
+  expect(visited).toEqual(["/settings"]);
 });

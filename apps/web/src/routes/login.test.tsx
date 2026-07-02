@@ -35,7 +35,6 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   saveGoogleClient: () => Promise.resolve(),
   syncGoogleNow: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
-  agenda: () => Promise.resolve({ homeTimezone: "Europe/London", days: [] }),
   ...overrides,
 });
 

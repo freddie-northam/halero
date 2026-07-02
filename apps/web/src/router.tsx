@@ -1,3 +1,8 @@
+import type {
+  NavContribution,
+  PageContribution,
+  WebModule,
+} from "@halero/module-sdk/web";
 import { Loader2 } from "@halero/ui";
 import {
   createRootRouteWithContext,
@@ -7,11 +12,10 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import type { ReactElement } from "react";
-import type { NavItem } from "./components/sidebar";
 import type { HaleroApi } from "./lib/api";
 import { readableError } from "./lib/errors";
 import { guardAuthenticated, guardEntry } from "./lib/guards";
-import { CalendarScreen } from "./routes/calendar";
+import { buildNav } from "./registry";
 import { LoginScreen } from "./routes/login";
 import { SettingsScreen } from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
@@ -19,6 +23,8 @@ import { ShellScreen } from "./routes/shell";
 
 export interface RouterContext {
   readonly api: HaleroApi;
+  /** Nav entries from the registry; the shell reads them per route. */
+  readonly nav: readonly NavContribution[];
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
@@ -44,21 +50,14 @@ const ErrorScreen = ({ error }: { readonly error: Error }): ReactElement => (
   </div>
 );
 
-// The Today page does not exist yet; it lands on the home placeholder
-// until its module arrives.
-const NAV_ROUTES: Record<NavItem, string> = {
-  Today: "/",
-  Calendar: "/calendar",
-  Settings: "/settings",
-};
-
-/** Shared shell wiring: nav items map to routes, logout returns to /login. */
-const useShellProps = (activeNav: NavItem) => {
+/** Shared shell wiring: registry nav, path navigation, logout to /login. */
+const useShellProps = (activePath: string) => {
   const router = useRouter();
   return {
-    activeNav,
-    onNavigate: (item: NavItem) => {
-      void router.navigate({ to: NAV_ROUTES[item] });
+    activePath,
+    nav: router.options.context.nav,
+    onNavigate: (path: string) => {
+      void router.navigate({ to: path });
     },
     onLoggedOut: () => {
       void router.navigate({ to: "/login" });
@@ -66,20 +65,14 @@ const useShellProps = (activeNav: NavItem) => {
   };
 };
 
-const ShellRoute = (): ReactElement => (
-  <ShellScreen {...useShellProps("Today")} />
-);
-
-const CalendarRoute = (): ReactElement => (
-  <ShellScreen {...useShellProps("Calendar")}>
-    <CalendarScreen />
-  </ShellScreen>
-);
+// The Today page does not exist yet; it lands on the home placeholder
+// until its module arrives (Task 11).
+const ShellRoute = (): ReactElement => <ShellScreen {...useShellProps("/")} />;
 
 const SettingsRoute = (): ReactElement => {
   const search = settingsRoute.useSearch();
   return (
-    <ShellScreen {...useShellProps("Settings")}>
+    <ShellScreen {...useShellProps("/settings")}>
       <SettingsScreen
         connected={search.connected}
         errorCode={search.error ?? null}
@@ -155,28 +148,47 @@ const settingsRoute = createRoute({
   component: SettingsRoute,
 });
 
-const calendarRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/calendar",
-  beforeLoad: ({ context }) => guardAuthenticated(context.api),
-  component: CalendarRoute,
-});
+/** Wraps a module page in the signed-in shell with its path active. */
+const createModulePageComponent = (page: PageContribution) => {
+  const PageBody = page.component;
+  const ModulePageRoute = (): ReactElement => (
+    <ShellScreen {...useShellProps(page.path)}>
+      <PageBody />
+    </ShellScreen>
+  );
+  return ModulePageRoute;
+};
 
-const routeTree = rootRoute.addChildren([
-  indexRoute,
-  loginRoute,
-  setupRoute,
-  settingsRoute,
-  calendarRoute,
-]);
+/** Module pages live inside the signed-in shell, so they share its guard. */
+const createModulePageRoute = (page: PageContribution) =>
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: page.path,
+    beforeLoad: ({ context }) => guardAuthenticated(context.api),
+    component: createModulePageComponent(page),
+  });
 
-export const createAppRouter = (api: HaleroApi) =>
-  createRouter({
+export const createAppRouter = (
+  api: HaleroApi,
+  webModules: readonly WebModule[],
+) => {
+  const moduleRoutes = webModules.flatMap((module) =>
+    (module.pages ?? []).map(createModulePageRoute),
+  );
+  const routeTree = rootRoute.addChildren([
+    indexRoute,
+    loginRoute,
+    setupRoute,
+    settingsRoute,
+    ...moduleRoutes,
+  ]);
+  return createRouter({
     routeTree,
-    context: { api },
+    context: { api, nav: buildNav(webModules) },
     defaultPendingComponent: PendingScreen,
     defaultErrorComponent: ErrorScreen,
   });
+};
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -1,10 +1,9 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, type RenderResult, render } from "@testing-library/react";
-import type { Agenda, HaleroApi } from "../lib/api";
-import { ApiProvider } from "../lib/api-context";
-import { registerHappyDom, unregisterHappyDom } from "../test/happy-dom";
-import { CalendarScreen } from "./calendar";
+import type { Agenda } from "../contract";
+import { type CalendarApi, createCalendarScreen } from "./calendar-screen";
+import { registerHappyDom, unregisterHappyDom } from "./test/happy-dom";
 
 beforeAll(() => {
   registerHappyDom();
@@ -61,44 +60,24 @@ const sampleAgenda: Agenda = {
   ],
 };
 
-const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
-  systemStatus: () =>
-    Promise.resolve({ needsSetup: false, authenticated: true }),
-  setup: () => Promise.resolve(),
-  login: () => Promise.resolve(),
-  logout: () => Promise.resolve(),
-  googleStatus: () =>
-    Promise.resolve({
-      clientConfigured: true,
-      httpsOk: true,
-      redirectUri: "https://halero.example.com/api/oauth/google/callback",
-      connection: null,
-    }),
-  saveGoogleClient: () => Promise.resolve(),
-  syncGoogleNow: () =>
-    Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
-  agenda: () => Promise.resolve(sampleAgenda),
-  ...overrides,
-});
-
-const renderCalendar = (api: HaleroApi): RenderResult =>
-  render(
+const renderCalendar = (api: CalendarApi): RenderResult => {
+  const CalendarScreen = createCalendarScreen(api);
+  return render(
     <QueryClientProvider client={new QueryClient()}>
-      <ApiProvider api={api}>
-        <CalendarScreen />
-      </ApiProvider>
+      <CalendarScreen />
     </QueryClientProvider>,
   );
+};
 
 test("renders date group headers in a readable long form", async () => {
-  const view = renderCalendar(stubApi());
+  const view = renderCalendar({ agenda: () => Promise.resolve(sampleAgenda) });
 
   expect(await view.findByText("Wednesday 2 July")).toBeTruthy();
   expect(view.getByText("Thursday 3 July")).toBeTruthy();
 });
 
 test("shows an all-day badge and home-timezone time ranges", async () => {
-  const view = renderCalendar(stubApi());
+  const view = renderCalendar({ agenda: () => Promise.resolve(sampleAgenda) });
 
   await view.findByText("Conference");
   expect(view.getByText("all day")).toBeTruthy();
@@ -109,20 +88,16 @@ test("shows an all-day badge and home-timezone time ranges", async () => {
 });
 
 test("shows the empty state when there are no upcoming events", async () => {
-  const view = renderCalendar(
-    stubApi({ agenda: () => Promise.resolve(emptyAgenda) }),
-  );
+  const view = renderCalendar({ agenda: () => Promise.resolve(emptyAgenda) });
 
   expect(await view.findByText(/No events in the next 7 days/)).toBeTruthy();
 });
 
 test("shows a readable error when the agenda cannot load", async () => {
-  const view = renderCalendar(
-    stubApi({
-      agenda: () =>
-        Promise.reject(new Error("You need to sign in before doing that.")),
-    }),
-  );
+  const view = renderCalendar({
+    agenda: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  });
 
   expect(
     await view.findByText("You need to sign in before doing that."),
