@@ -129,7 +129,19 @@ const handleCallback = async (
   if (!consumeOauthState(db, now(), state)) {
     return errorRedirect(c, "state_invalid");
   }
-  const client = readGoogleClient(db, key);
+  // An undecryptable stored client secret (the encryption key changed
+  // mid-flow) lands on the settings page as a readable banner asking
+  // for the client details again, never as a generic 500.
+  const client = ((): GoogleClient | null | "unreadable" => {
+    try {
+      return readGoogleClient(db, key);
+    } catch {
+      return "unreadable";
+    }
+  })();
+  if (client === "unreadable") {
+    return errorRedirect(c, "client_unreadable");
+  }
   if (client === null) {
     return errorRedirect(c, "client_not_configured");
   }

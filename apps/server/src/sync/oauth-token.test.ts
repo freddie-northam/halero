@@ -192,6 +192,33 @@ describe("getOauthAccessToken", () => {
     expect(reloadConnection(testApp).status).toBe("reauth_required");
   });
 
+  test("an undecryptable credentials blob asks for a reconnect instead of a raw crypto error", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, {
+      refreshToken: "1//refresh-a",
+      accessToken: "ya29.cached",
+      accessTokenExpiresAt: testApp.clock.value + 10 * 60 * 1000,
+    });
+    // Simulate an encryption key change: the stored blob no longer
+    // decrypts with the current key.
+    testApp.database.db
+      .update(connections)
+      .set({ credentialsEnc: Buffer.alloc(64, 7) })
+      .where(eq(connections.id, "conn-1"))
+      .run();
+    const corrupted = reloadConnection(testApp);
+
+    const error = await rejectionOf(
+      getOauthAccessToken(makeContext(testApp, failingFetch), corrupted),
+    );
+
+    expect(error.message).toContain("Reconnect Google Calendar");
+    expect(error.cause).toBeInstanceOf(Error);
+    // The connection flips to reauth_required so the settings card shows
+    // the reconnect prompt instead of a generic failure.
+    expect(reloadConnection(testApp).status).toBe("reauth_required");
+  });
+
   test("leaves status untouched when Google fails transiently", async () => {
     const testApp = makeTestApp();
     const row = seedConnection(testApp, {

@@ -27,9 +27,36 @@ const TRANSIENT_MESSAGE =
 const MISSING_CREDENTIALS_MESSAGE =
   "This connection has no saved Google credentials. Reconnect Google " +
   "Calendar from Settings.";
+const UNREADABLE_CREDENTIALS_MESSAGE =
+  "The saved Google sign-in for this connection could not be read, " +
+  "usually because the encryption key changed. Reconnect Google " +
+  "Calendar from Settings.";
 const CLIENT_MISSING_MESSAGE =
   "The Google OAuth client is not configured. Add the client ID and " +
   "secret in Settings.";
+
+/**
+ * An undecryptable blob can only be fixed by a fresh sign-in, exactly
+ * like a revoked refresh token, so it flips the connection to
+ * reauth_required: the settings card shows the reconnect prompt instead
+ * of a generic failure.
+ */
+const decryptStoredCredentials = (
+  ctx: OauthTokenContext,
+  connection: ConnectionRow,
+  blob: Uint8Array,
+): string => {
+  try {
+    return decryptCredentials(ctx.key, blob);
+  } catch (error) {
+    ctx.db
+      .update(connections)
+      .set({ status: "reauth_required" })
+      .where(eq(connections.id, connection.id))
+      .run();
+    throw new Error(UNREADABLE_CREDENTIALS_MESSAGE, { cause: error });
+  }
+};
 
 const parseStoredTokens = (raw: string): StoredOauthTokens | null => {
   try {
@@ -152,7 +179,7 @@ export const getOauthAccessToken = async (
     throw new Error(MISSING_CREDENTIALS_MESSAGE);
   }
   const stored = parseStoredTokens(
-    decryptCredentials(ctx.key, connection.credentialsEnc),
+    decryptStoredCredentials(ctx, connection, connection.credentialsEnc),
   );
   if (stored === null) {
     throw new Error(MISSING_CREDENTIALS_MESSAGE);

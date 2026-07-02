@@ -351,6 +351,35 @@ describe("GET /api/oauth/google/callback", () => {
     expect(readConnections(database).length).toBe(0);
   });
 
+  test("redirects with a readable code when the stored client secret cannot be decrypted", async () => {
+    const google = okTokenFetch();
+    const { app, database, cookie } = await readyApp({
+      outboundFetch: google.fetchImpl,
+    });
+    const start = await requestStart(app, cookie);
+    const state = stateFromLocation(start);
+    // Simulate an encryption key change between /start and the callback:
+    // the stored client secret blob no longer decrypts.
+    database.sqlite.run(
+      "UPDATE settings SET value = ? WHERE key = 'google_oauth_client_secret_enc'",
+      [Buffer.alloc(64, 7).toString("base64")],
+    );
+
+    const res = await requestCallback(
+      app,
+      `code=auth-code-1&state=${state}`,
+      cookie,
+    );
+
+    // A readable settings banner, never a generic 500.
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(
+      "/settings?error=client_unreadable",
+    );
+    expect(readConnections(database).length).toBe(0);
+    expect(google.calls.length).toBe(0);
+  });
+
   test("handles a token response without a refresh token", async () => {
     const google = okTokenFetch({ refresh_token: undefined });
     const { app, database, cookie } = await readyApp({
