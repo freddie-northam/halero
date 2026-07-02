@@ -29,6 +29,7 @@ export interface MakeTestAppOptions {
     input: string | URL,
     init?: RequestInit,
   ) => Promise<Response>;
+  readonly exportSnapshotDir?: string;
 }
 
 export const TEST_KEY: Uint8Array = Uint8Array.from(
@@ -55,6 +56,7 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
     webDistDir: options.webDistDir ?? join(dir, "missing-dist"),
     now: () => clock.value,
     outboundFetch: options.outboundFetch,
+    exportSnapshotDir: options.exportSnapshotDir,
   });
   return { app, database, dir, clock, key: TEST_KEY };
 };

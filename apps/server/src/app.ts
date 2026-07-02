@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { createLoginRateLimiter } from "./auth";
 import { resolveBaseUrl } from "./base-url";
 import type { HaleroConfig } from "./config";
+import { createExportRoutes } from "./export-routes";
 import { csrfOriginCheck } from "./middleware/csrf";
 import { securityHeaders } from "./middleware/security-headers";
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
@@ -27,6 +28,8 @@ export interface CreateAppOptions {
    * drives so manual and scheduled syncs share one in-flight guard.
    */
   readonly syncRunner?: SyncRunner;
+  /** Parent directory for export snapshots; tests inject to observe. */
+  readonly exportSnapshotDir?: string;
 }
 
 export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
@@ -63,6 +66,14 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
       loginRateLimiter,
       outboundFetch,
       syncRunner,
+    }),
+  );
+  app.route(
+    "/api/export",
+    createExportRoutes({
+      database,
+      now,
+      snapshotDir: options.exportSnapshotDir,
     }),
   );
   app.route(
