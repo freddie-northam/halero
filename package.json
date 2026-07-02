@@ -10,6 +10,7 @@
   "scripts": {
     "test": "bun test",
     "build": "bun run --filter '@halero/web' build",
+    "start": "bun run apps/server/src/main.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "bun run --filter '*' typecheck"
