@@ -22,7 +22,12 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
-import type { KindRegistry } from "@halero/module-sdk/server";
+import {
+  applyUpcasts,
+  assertProducedKindSupported,
+  type KindRegistry,
+  type RegisteredEntityKind,
+} from "@halero/module-sdk/server";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { kindRegistry } from "../registry";
 import { getSetting } from "../settings";
@@ -189,6 +194,38 @@ const createAuthorizedFetch = (
   };
 };
 
+/**
+ * Brings an upsert op to its kind's registered schema version. A
+ * connector built against an older version keeps working: the owning
+ * module's upcast chain upgrades the satellite payload step by step and
+ * the row lands at the REGISTERED version. Boot validation already
+ * vetted honest manifests; re-asserting per op guards against connectors
+ * whose output does not match what they declared, with the same readable
+ * errors.
+ */
+const upcastToRegistered = (
+  deps: StreamDeps,
+  registered: RegisteredEntityKind,
+  op: UpsertSyncOp,
+): UpsertSyncOp => {
+  const produced = op.spine.schemaVersion;
+  if (produced === registered.schemaVersion) {
+    return op;
+  }
+  assertProducedKindSupported(deps.kinds, deps.connectorId, {
+    kind: op.spine.kind,
+    schemaVersion: produced,
+  });
+  const satellite = applyUpcasts(registered, produced, {
+    ...(op.satellite ?? {}),
+  });
+  return {
+    ...op,
+    spine: { ...op.spine, schemaVersion: registered.schemaVersion },
+    satellite,
+  };
+};
+
 const applyUpsert = (
   deps: StreamDeps,
   streamId: string,
@@ -198,13 +235,14 @@ const applyUpsert = (
   if (registered === undefined) {
     throw new Error(unknownKindMessage(op.spine.kind));
   }
+  const current = upcastToRegistered(deps, registered, op);
   const result = deps.store.upsertExternal({
     connectorId: deps.connectorId,
     accountKey: deps.accountKey,
-    externalId: op.externalId,
-    version: op.version ?? null,
+    externalId: current.externalId,
+    version: current.version ?? null,
     stream: streamId,
-    spine: { ...op.spine, source: "connector" },
+    spine: { ...current.spine, source: "connector" },
   });
   // Version-equal upserts short-circuit (and still bump last_seen_at and
   // the ref's stream, which the sweep and the moved-item guard depend
@@ -213,7 +251,7 @@ const applyUpsert = (
     return NO_COUNTS;
   }
   // Spine-only kinds register no writer; their upsert is already stored.
-  registered.satelliteWriter?.(deps.db, result.entityId, op);
+  registered.satelliteWriter?.(deps.db, result.entityId, current);
   return { upserts: 1, deletes: 0 };
 };
 
