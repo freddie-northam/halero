@@ -15,3 +15,24 @@ export const calendarEventSchema = z.object({
 });
 
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
+
+/**
+ * The calendar.event satellite payload at schema version 1: the shape a
+ * connector's upsert op must carry and the calendar module's satellite
+ * writer stores. Lives with the kind contract because connectors
+ * (producing) and the module (storing) must agree on it.
+ */
+export const calendarEventSatelliteSchema = z.object({
+  calendarId: z.string().min(1),
+  allDay: z.union([z.literal(0), z.literal(1)]),
+  startDate: z.string().nullable(),
+  endDate: z.string().nullable(),
+  location: z.string().nullable(),
+  status: z.string().nullable(),
+  recurringEventId: z.string().nullable(),
+  originalStartTime: z.string().nullable(),
+});
+
+export type CalendarEventSatellite = z.infer<
+  typeof calendarEventSatelliteSchema
+>;

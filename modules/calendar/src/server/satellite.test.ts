@@ -1,21 +1,35 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { UpsertSyncOp } from "@halero/connector-sdk";
-import { calendarEvents } from "@halero/db";
+import {
+  calendarEvents,
+  coreMigrations,
+  type HaleroDatabase,
+  openDatabase,
+  runMigrations,
+} from "@halero/db";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
 import { eq } from "drizzle-orm";
-import { makeTestApp, type TestApp } from "../test-utils";
-import { type SatelliteWriter, satelliteWriterFor } from "./satellites";
+import { calendarServerModule } from "./index";
+import { writeCalendarEventSatellite } from "./satellite";
 
 const ENTITY_ID = "ent-1";
 
-const withEntity = (): TestApp => {
-  const testApp = makeTestApp();
-  testApp.database.sqlite.run(
+const withEntity = (): HaleroDatabase => {
+  const dir = mkdtempSync(join(tmpdir(), "halero-module-calendar-"));
+  const database = openDatabase(join(dir, "halero.db"));
+  runMigrations(database.sqlite, {
+    migrations: coreMigrations,
+    backupsDir: join(dir, "backups"),
+  });
+  database.sqlite.run(
     `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
      VALUES (?, 'calendar.event', 1, 'connector', 1, 1)`,
     [ENTITY_ID],
   );
-  return testApp;
+  return database;
 };
 
 const sourceEvent = {
@@ -47,16 +61,8 @@ const upsertOp = (overrides: Partial<UpsertSyncOp> = {}): UpsertSyncOp => ({
   ...overrides,
 });
 
-const calendarWriter = (): SatelliteWriter => {
-  const writer = satelliteWriterFor(CALENDAR_EVENT_KIND);
-  if (writer === undefined) {
-    throw new Error("expected a calendar.event satellite writer");
-  }
-  return writer;
-};
-
-const readSatellite = (testApp: TestApp) =>
-  testApp.database.db
+const readSatellite = (database: HaleroDatabase) =>
+  database.db
     .select()
     .from(calendarEvents)
     .where(eq(calendarEvents.entityId, ENTITY_ID))
@@ -64,33 +70,32 @@ const readSatellite = (testApp: TestApp) =>
 
 describe("calendar.event satellite writer", () => {
   test("stores the raw source event so it parses back verbatim", () => {
-    const testApp = withEntity();
+    const database = withEntity();
 
-    calendarWriter()(testApp.database.db, ENTITY_ID, upsertOp());
+    writeCalendarEventSatellite(database.db, ENTITY_ID, upsertOp());
 
-    const row = readSatellite(testApp);
+    const row = readSatellite(database);
     expect(row?.calendarId).toBe("primary");
     expect(row?.status).toBe("confirmed");
     expect(JSON.parse(row?.raw ?? "null")).toEqual(sourceEvent);
   });
 
   test("stores a null raw column when the op carries no raw payload", () => {
-    const testApp = withEntity();
+    const database = withEntity();
     const { raw: _omitted, ...withoutRaw } = upsertOp();
 
-    calendarWriter()(testApp.database.db, ENTITY_ID, withoutRaw);
+    writeCalendarEventSatellite(database.db, ENTITY_ID, withoutRaw);
 
-    expect(readSatellite(testApp)?.raw).toBeNull();
+    expect(readSatellite(database)?.raw).toBeNull();
   });
 
   test("replaces the whole row on a second write for the same entity", () => {
-    const testApp = withEntity();
-    const writer = calendarWriter();
-    writer(testApp.database.db, ENTITY_ID, upsertOp());
+    const database = withEntity();
+    writeCalendarEventSatellite(database.db, ENTITY_ID, upsertOp());
 
     const moved = { ...sourceEvent, etag: '"e1-v2"' };
-    writer(
-      testApp.database.db,
+    writeCalendarEventSatellite(
+      database.db,
       ENTITY_ID,
       upsertOp({
         satellite: {
@@ -107,7 +112,7 @@ describe("calendar.event satellite writer", () => {
       }),
     );
 
-    const row = readSatellite(testApp);
+    const row = readSatellite(database);
     expect(row?.calendarId).toBe("work");
     expect(row?.allDay).toBe(1);
     expect(row?.location).toBe("HQ");
@@ -115,25 +120,31 @@ describe("calendar.event satellite writer", () => {
   });
 
   test("rejects a satellite in an unrecognized shape with a readable error", () => {
-    const testApp = withEntity();
-    const writer = calendarWriter();
+    const database = withEntity();
 
     const wrongTypes = upsertOp({ satellite: { calendarId: 7, allDay: 0 } });
     const missing = upsertOp({ satellite: undefined });
 
-    expect(() => writer(testApp.database.db, ENTITY_ID, wrongTypes)).toThrow(
-      /shape Halero does not recognize/,
-    );
-    expect(() => writer(testApp.database.db, ENTITY_ID, missing)).toThrow(
-      /connector bug/,
-    );
-    expect(readSatellite(testApp)).toBeUndefined();
+    expect(() =>
+      writeCalendarEventSatellite(database.db, ENTITY_ID, wrongTypes),
+    ).toThrow(/shape Halero does not recognize/);
+    expect(() =>
+      writeCalendarEventSatellite(database.db, ENTITY_ID, missing),
+    ).toThrow(/connector bug/);
+    expect(readSatellite(database)).toBeUndefined();
   });
 });
 
-describe("satelliteWriterFor", () => {
-  test("knows calendar.event and nothing else yet", () => {
-    expect(satelliteWriterFor(CALENDAR_EVENT_KIND)).toBeDefined();
-    expect(satelliteWriterFor("widget.gadget")).toBeUndefined();
+describe("calendarServerModule", () => {
+  test("contributes calendar.event at version 1 with the satellite writer", () => {
+    const contribution = calendarServerModule.entityKinds[0];
+    if (contribution === undefined) {
+      throw new Error("expected the calendar module to contribute a kind");
+    }
+
+    expect(calendarServerModule.id).toBe("calendar");
+    expect(contribution.kind).toBe(CALENDAR_EVENT_KIND);
+    expect(contribution.schemaVersion).toBe(1);
+    expect(contribution.satelliteWriter).toBe(writeCalendarEventSatellite);
   });
 });

@@ -3,12 +3,13 @@ import {
   dateStringInZone,
   startOfDayInZone,
 } from "@halero/connector-sdk";
-import { calendarEvents, entities } from "@halero/db";
+import { calendarEvents, entities, settings } from "@halero/db";
+import type { ModuleDb } from "@halero/module-sdk/server";
 import { CALENDAR_EVENT_KIND, UNTITLED_EVENT_TITLE } from "@halero/schemas";
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
-import { getSetting } from "../settings";
-import { protectedProcedure, router } from "./init";
+import type { Agenda, AgendaDay, AgendaEvent } from "../contract";
+import { moduleRouter, protectedProcedure } from "./trpc";
 
 const DEFAULT_AGENDA_DAYS = 7;
 
@@ -16,20 +17,9 @@ const agendaInput = z
   .object({ days: z.number().int().min(1).max(31).optional() })
   .optional();
 
-interface AgendaEvent {
-  readonly entityId: string;
-  readonly title: string;
-  readonly allDay: boolean;
-  readonly start: number;
-  readonly end: number;
-  readonly location: string | null;
-  readonly calendarId: string;
-}
-
-interface AgendaDay {
-  readonly date: string;
-  readonly events: readonly AgendaEvent[];
-}
+const homeTimezoneOf = (db: ModuleDb): string =>
+  db.select().from(settings).where(eq(settings.key, "home_timezone")).get()
+    ?.value ?? "UTC";
 
 const compareEvents = (a: AgendaEvent, b: AgendaEvent): number => {
   if (a.allDay !== b.allDay) {
@@ -61,10 +51,10 @@ const groupByDay = (
     }));
 };
 
-export const calendarRouter = router({
+export const calendarRouter = moduleRouter({
   agenda: protectedProcedure.input(agendaInput).query(({ ctx, input }) => {
     const days = input?.days ?? DEFAULT_AGENDA_DAYS;
-    const homeTimezone = getSetting(ctx.db, "home_timezone") ?? "UTC";
+    const homeTimezone = homeTimezoneOf(ctx.db);
     const today = dateStringInZone(ctx.now(), homeTimezone);
     const windowStart = startOfDayInZone(today, homeTimezone);
     const windowEnd = startOfDayInZone(
@@ -105,6 +95,10 @@ export const calendarRouter = router({
           calendarId: row.calendarId,
         }),
       );
-    return { homeTimezone, days: groupByDay(events, homeTimezone) };
+    const agenda: Agenda = {
+      homeTimezone,
+      days: groupByDay(events, homeTimezone),
+    };
+    return agenda;
   }),
 });

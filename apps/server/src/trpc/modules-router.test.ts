@@ -81,20 +81,23 @@ const readAgenda = async (
 ): Promise<AgendaData> => {
   const procedure =
     days === undefined
-      ? "calendar.agenda"
-      : `calendar.agenda?input=${encodeURIComponent(JSON.stringify({ days }))}`;
+      ? "modules.calendar.agenda"
+      : `modules.calendar.agenda?input=${encodeURIComponent(JSON.stringify({ days }))}`;
   const res = await trpcQuery(app, procedure, { cookie });
   expect(res.status).toBe(200);
   const json = (await res.json()) as TrpcSuccess<AgendaData>;
   return json.result.data;
 };
 
-describe("calendar.agenda", () => {
+// The agenda moved into the calendar module; this suite pins the host
+// mount contract: the module's router serves at modules.calendar.* with
+// the host's auth and settings in effect.
+describe("modules.calendar.agenda", () => {
   test("rejects without a session", async () => {
     const { app } = makeTestApp();
     await completeSetup(app);
 
-    const res = await trpcQuery(app, "calendar.agenda");
+    const res = await trpcQuery(app, "modules.calendar.agenda");
 
     expect(res.status).toBe(401);
   });

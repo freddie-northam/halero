@@ -22,7 +22,9 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
+import type { KindRegistry } from "@halero/module-sdk/server";
 import { and, eq, isNull, lt } from "drizzle-orm";
+import { kindRegistry } from "../registry";
 import { getSetting } from "../settings";
 import {
   type ConnectionIdentity,
@@ -30,8 +32,11 @@ import {
   parseConnectionConfig,
 } from "./connection";
 import { getOauthAccessToken } from "./oauth-token";
-import { type AnyConnector, connectorRegistry } from "./registry";
-import { satelliteWriterFor } from "./satellites";
+import {
+  type AnyConnector,
+  type ConnectorRegistry,
+  connectorRegistry,
+} from "./registry";
 
 const NO_CONNECTION_MESSAGE =
   "There is no Google Calendar connection to sync. Connect one from Settings.";
@@ -63,8 +68,14 @@ export interface SyncEngineContext {
   readonly now: () => number;
   /** Outbound HTTP to providers; tests inject a fake. */
   readonly outboundFetch: FetchLike;
-  /** Connector registry override; tests inject misbehaving fakes. */
-  readonly registry?: ReadonlyMap<string, AnyConnector>;
+  /**
+   * Connector registry override; tests inject misbehaving fakes. The
+   * type is nominal, so even injected registries have passed
+   * registerConnectors validation.
+   */
+  readonly registry?: ConnectorRegistry;
+  /** Entity kind registry override; tests inject fixture modules. */
+  readonly kinds?: KindRegistry;
   /** Sink for engine and connector diagnostics; defaults to console.log. */
   readonly log?: (message: string) => void;
 }
@@ -93,6 +104,7 @@ interface RunCounts {
 interface StreamDeps {
   readonly db: Db;
   readonly store: EntityStore;
+  readonly kinds: KindRegistry;
   readonly connectorId: string;
   readonly connectionId: string;
   readonly accountKey: string;
@@ -182,8 +194,8 @@ const applyUpsert = (
   streamId: string,
   op: UpsertSyncOp,
 ): SyncCounts => {
-  const writer = satelliteWriterFor(op.spine.kind);
-  if (writer === undefined) {
+  const registered = deps.kinds.get(op.spine.kind);
+  if (registered === undefined) {
     throw new Error(unknownKindMessage(op.spine.kind));
   }
   const result = deps.store.upsertExternal({
@@ -200,7 +212,8 @@ const applyUpsert = (
   if (result.action === "unchanged") {
     return NO_COUNTS;
   }
-  writer(deps.db, result.entityId, op);
+  // Spine-only kinds register no writer; their upsert is already stored.
+  registered.satelliteWriter?.(deps.db, result.entityId, op);
   return { upserts: 1, deletes: 0 };
 };
 
@@ -458,7 +471,7 @@ interface SyncableConnection {
 
 const loadSyncableConnection = (
   db: Db,
-  registry: ReadonlyMap<string, AnyConnector>,
+  registry: ConnectorRegistry,
   connectionId: string,
 ): SyncableConnection => {
   const row = db
@@ -590,6 +603,7 @@ export const syncConnection = async (
   const deps: StreamDeps = {
     db,
     store: createEntityStore(ctx.database),
+    kinds: ctx.kinds ?? kindRegistry,
     connectorId: connection.connectorId,
     connectionId,
     accountKey: identity.accountKey,

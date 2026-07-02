@@ -11,11 +11,12 @@ import {
 } from "@halero/db";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { kindRegistry } from "../registry";
 import { makeTestApp, type TestApp } from "../test-utils";
 import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { type SyncEngineContext, syncConnection } from "./engine";
-import type { AnyConnector } from "./registry";
+import { type AnyConnector, registerConnectors } from "./registry";
 
 const CONNECTION_ID = "conn-1";
 const ACCOUNT_KEY = "google-sub-1";
@@ -596,7 +597,9 @@ describe("syncConnection connector misbehavior", () => {
     key: testApp.key,
     now: () => testApp.clock.value,
     outboundFetch: () => Promise.reject(new Error("no network expected")),
-    registry: new Map([[GOOGLE_CONNECTOR_ID, rogueConnector(pages)]]),
+    // Even injected registries pass registration validation; the rogue
+    // connector's manifest is honest, only its runtime output misbehaves.
+    registry: registerConnectors([rogueConnector(pages)], kindRegistry),
     log: (message) => logs.push(message),
   });
 

@@ -15,6 +15,8 @@
     "@halero/connector-sdk": "workspace:*",
     "@halero/core": "workspace:*",
     "@halero/db": "workspace:*",
+    "@halero/module-calendar": "workspace:*",
+    "@halero/module-sdk": "workspace:*",
     "@halero/schemas": "workspace:*",
     "@trpc/server": "^11.10.0",
     "croner": "^10.0.1",
