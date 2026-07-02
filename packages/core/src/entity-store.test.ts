@@ -201,6 +201,22 @@ describe("upsertExternal stream provenance", () => {
     expect(refRow(handle, entityId)?.stream).toBe("personal");
   });
 
+  test("omitting the stream preserves the ref's existing one", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.upsertExternal(eventInput({ stream: "work" }));
+
+    // A caller that does not know about streams must not be able to
+    // strip provenance: only an explicit stream (including null) wins.
+    store.upsertExternal(eventInput({ version: "v2" }));
+    expect(refRow(handle, entityId)?.stream).toBe("work");
+
+    store.upsertExternal(eventInput({ version: "v2" }));
+    expect(refRow(handle, entityId)?.stream).toBe("work");
+
+    store.upsertExternal(eventInput({ version: "v3", stream: null }));
+    expect(refRow(handle, entityId)?.stream).toBeNull();
+  });
+
   test("a version-equal upsert still moves the ref to the new stream", () => {
     const { handle, store } = makeStore();
     const { entityId } = store.upsertExternal(eventInput({ stream: "work" }));

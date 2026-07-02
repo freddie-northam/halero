@@ -32,7 +32,10 @@ export interface UpsertExternalInput extends ExternalRefKey {
   /**
    * The connection stream that observed this item (e.g. a calendar id).
    * Recorded on every upsert, including version-equal ones, so a moved
-   * item's ref always names the stream that saw it last.
+   * item's ref always names the stream that saw it last. An explicit
+   * value (including null) always wins; OMITTING the field preserves
+   * the ref's existing stream, so a stream-unaware caller can never
+   * strip provenance and make the ref tombstonable from any stream.
    */
   readonly stream?: string | null;
   readonly spine: SpineInput;
@@ -63,6 +66,10 @@ export interface EntityStore {
   deleteLink(id: string): void;
   getLinksFor(entityId: string): LinkRow[];
 }
+
+/** Empty when the caller omitted the stream: omission preserves. */
+const streamPatch = (input: UpsertExternalInput): { stream?: string | null } =>
+  input.stream === undefined ? {} : { stream: input.stream };
 
 const spineValues = (spine: SpineInput) => ({
   kind: spine.kind,
@@ -130,7 +137,7 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
       .set({
         version: input.version ?? null,
         lastSeenAt: now,
-        stream: input.stream ?? null,
+        ...streamPatch(input),
       })
       .where(refWhere(input))
       .run();
@@ -152,7 +159,7 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
         // new stream must move the ref there so stale deletes from the
         // old stream cannot win.
         db.update(externalRefs)
-          .set({ lastSeenAt: Date.now(), stream: input.stream ?? null })
+          .set({ lastSeenAt: Date.now(), ...streamPatch(input) })
           .where(refWhere(input))
           .run();
         return { entityId: existing.entityId, action: "unchanged" };
