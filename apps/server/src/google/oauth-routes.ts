@@ -1,5 +1,6 @@
 import type { HaleroDatabase } from "@halero/db";
 import { type Context, Hono } from "hono";
+import { resolveBaseUrl } from "../base-url";
 import type { HaleroConfig } from "../config";
 import type { AppEnv } from "../middleware/session";
 import {
@@ -7,7 +8,6 @@ import {
   googleRedirectUri,
   isHttpsOk,
   readGoogleClient,
-  resolveBaseUrl,
 } from "./client-config";
 import {
   asRecord,

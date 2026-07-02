@@ -1,9 +1,9 @@
 import { z } from "zod";
+import { resolveBaseUrl } from "../base-url";
 import {
   googleRedirectUri,
   isGoogleClientConfigured,
   isHttpsOk,
-  resolveBaseUrl,
   saveGoogleClient,
 } from "../google/client-config";
 import {

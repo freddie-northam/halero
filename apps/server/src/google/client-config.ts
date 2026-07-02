@@ -1,6 +1,5 @@
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
-import { type HaleroConfig, isParseableUrl } from "../config";
 import { getSetting, setSetting } from "../settings";
 
 type Db = HaleroDatabase["db"];
@@ -45,18 +44,6 @@ export const readGoogleClient = (
 export const isGoogleClientConfigured = (db: Db): boolean =>
   getSetting(db, CLIENT_ID_KEY) !== null &&
   getSetting(db, CLIENT_SECRET_KEY) !== null;
-
-/**
- * The base URL people actually reach this instance at: the value stored
- * during setup wins over the environment-derived config default.
- */
-export const resolveBaseUrl = (db: Db, config: HaleroConfig): URL => {
-  const stored = getSetting(db, "base_url");
-  if (stored !== null && isParseableUrl(stored)) {
-    return new URL(stored);
-  }
-  return config.baseUrl;
-};
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1"]);
 

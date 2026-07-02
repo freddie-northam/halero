@@ -6,6 +6,7 @@ import {
   buildSessionCookie,
   type LoginRateLimiter,
 } from "../auth";
+import { resolveBaseUrl } from "../base-url";
 import type { HaleroConfig } from "../config";
 import type { AppEnv } from "../middleware/session";
 import type { TrpcContext } from "./context";
@@ -37,7 +38,11 @@ export const createTrpcHandler = (
   options: TrpcHandlerOptions,
 ): Handler<AppEnv> => {
   const { config, database, key, now, loginRateLimiter } = options;
-  const secure = config.baseUrl.protocol === "https:";
+  // Evaluated when a cookie is built, not when the handler is created, so
+  // the Secure flag follows the same base-URL authority as everything else
+  // (even for the setup request that stores base_url itself).
+  const secure = (): boolean =>
+    resolveBaseUrl(database.db, config).protocol === "https:";
   return async (c) => {
     const cookies: string[] = [];
     const context: TrpcContext = {
@@ -50,8 +55,8 @@ export const createTrpcHandler = (
       now,
       loginRateLimiter,
       setSessionCookie: (token) =>
-        cookies.push(buildSessionCookie(token, secure)),
-      clearSessionCookie: () => cookies.push(buildClearSessionCookie(secure)),
+        cookies.push(buildSessionCookie(token, secure())),
+      clearSessionCookie: () => cookies.push(buildClearSessionCookie(secure())),
     };
     const response = await fetchRequestHandler({
       endpoint: "/api/trpc",

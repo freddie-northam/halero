@@ -1,6 +1,7 @@
 import type { HaleroDatabase } from "@halero/db";
 import { Hono } from "hono";
 import { createLoginRateLimiter } from "./auth";
+import { resolveBaseUrl } from "./base-url";
 import type { HaleroConfig } from "./config";
 import type { FetchLike } from "./google/common";
 import { createGoogleOauthRoutes } from "./google/oauth-routes";
@@ -28,7 +29,10 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   const app = new Hono<AppEnv>();
 
   app.use("*", securityHeaders);
-  app.use("/api/*", csrfOriginCheck(config.baseUrl.origin));
+  app.use(
+    "/api/*",
+    csrfOriginCheck(() => resolveBaseUrl(database.db, config).origin),
+  );
   app.use("/api/*", sessionMiddleware(database.db, now));
 
   app.get("/healthz", (c) => c.json({ status: "ok" }));
