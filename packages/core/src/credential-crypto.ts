@@ -46,7 +46,9 @@ export const decryptCredentials = (
       decipher.update(ciphertext),
       decipher.final(),
     ]).toString("utf8");
-  } catch {
-    throw new Error(DECRYPT_ERROR);
+  } catch (error) {
+    // The readable message is for people; the cause keeps the original
+    // crypto error for logs and debugging.
+    throw new Error(DECRYPT_ERROR, { cause: error });
   }
 };

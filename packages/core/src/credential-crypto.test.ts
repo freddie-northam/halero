@@ -52,6 +52,24 @@ describe("credential crypto", () => {
     );
   });
 
+  test("a decrypt failure keeps the underlying cause", () => {
+    const blob = encryptCredentials(makeKey(), "secret");
+
+    const thrown = ((): unknown => {
+      try {
+        decryptCredentials(makeKey(), blob);
+        return null;
+      } catch (error) {
+        return error;
+      }
+    })();
+
+    expect(thrown).toBeInstanceOf(Error);
+    // The readable message is for people; the cause keeps the original
+    // OpenSSL error for logs and debugging.
+    expect((thrown as Error).cause).toBeInstanceOf(Error);
+  });
+
   test("rejects keys that are not 32 bytes", () => {
     expect(() => encryptCredentials(new Uint8Array(16), "secret")).toThrow(
       /32 bytes/,

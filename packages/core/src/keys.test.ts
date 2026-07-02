@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadOrCreateKey } from "./keys";
@@ -67,5 +73,31 @@ describe("loadOrCreateKey", () => {
 
     expect(() => loadOrCreateKey(dataDir)).toThrow(/not a valid/);
     expect(readFileSync(keyPath, "utf8")).toBe("deadbeef");
+  });
+
+  test("an unreadable key file throws a readable error, not a raw EACCES", () => {
+    if (process.getuid?.() === 0) {
+      // Root ignores file modes, so the permission guard cannot trip.
+      return;
+    }
+    const dataDir = makeDataDir();
+    const key = loadOrCreateKey(dataDir);
+    expect(key).toHaveLength(32);
+    const keyPath = join(dataDir, "key");
+    chmodSync(keyPath, 0o000);
+
+    try {
+      expect(() => loadOrCreateKey(dataDir)).toThrow(/could not be read/);
+    } finally {
+      chmodSync(keyPath, 0o600);
+    }
+  });
+
+  test("a data dir path that is a file throws a readable error", () => {
+    const parent = makeDataDir();
+    const dataDir = join(parent, "data");
+    writeFileSync(dataDir, "this is a file, not a directory");
+
+    expect(() => loadOrCreateKey(dataDir)).toThrow(/data directory/);
   });
 });
