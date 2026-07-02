@@ -9,13 +9,6 @@ export const CALENDAR_EVENT_KIND = "calendar.event";
  */
 export const UNTITLED_EVENT_TITLE = "(untitled event)";
 
-// TODO: flesh out fields (time range, attendees, source) in a later task.
-export const calendarEventSchema = z.object({
-  title: z.string(),
-});
-
-export type CalendarEvent = z.infer<typeof calendarEventSchema>;
-
 /**
  * The calendar.event satellite payload at schema version 1: the shape a
  * connector's upsert op must carry and the calendar module's satellite
