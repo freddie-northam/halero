@@ -14,6 +14,7 @@ export {
   isJsonValue,
   syncOpSchema,
   syncOpsPageSchema,
+  syncStreamResultSchema,
 } from "./schemas";
 export {
   addDaysToDateString,

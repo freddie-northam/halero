@@ -10,6 +10,7 @@ import {
   type StreamDef,
   type SyncContext,
   type SyncOp,
+  type SyncStreamResult,
   syncOpsPageSchema,
   type UpsertSyncOp,
 } from "@halero/connector-sdk";
@@ -28,7 +29,7 @@ import {
   type KindRegistry,
   type RegisteredEntityKind,
 } from "@halero/module-sdk/server";
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { kindRegistry } from "../registry";
 import { getSetting } from "../settings";
 import {
@@ -411,16 +412,26 @@ const clearCursor = (deps: StreamDeps, stream: string): void => {
 };
 
 /**
- * After a resync: tombstone every live entity on this stream whose
- * external ref was not seen since the resync started. Live but
+ * After a full replay: tombstone every live entity on this stream whose
+ * external ref was not seen since the replay started. Live but
  * unchanged items survive because even version-equal upserts bump
  * last_seen_at (the entity store's contract). Scoped purely by the
  * ref's stream column; no satellite peeking.
+ *
+ * A WINDOWED replay (the connector declared replayWindowStart) only
+ * proved anything about events inside its window: an unseen ref whose
+ * entity occurred before the window may simply predate the lookback, so
+ * only refs with occurred_start >= replayWindowStart are swept. Rows
+ * with a NULL occurred_start cannot be placed inside the window either,
+ * so a windowed sweep must not touch them; SQL's three-valued NULL
+ * comparison already excludes them from gte, which is relied on here on
+ * purpose, not by accident.
  */
 const sweepStream = (
   deps: StreamDeps,
   streamId: string,
   resyncStartedAt: number,
+  replayWindowStart?: number,
 ): void => {
   const swept = deps.store.withTransaction(() => {
     const stale = deps.db
@@ -434,6 +445,9 @@ const sweepStream = (
           eq(externalRefs.stream, streamId),
           isNull(entities.deletedAt),
           lt(externalRefs.lastSeenAt, resyncStartedAt),
+          replayWindowStart === undefined
+            ? undefined
+            : gte(entities.occurredStart, replayWindowStart),
         ),
       )
       .all();
@@ -455,8 +469,8 @@ const sweepStream = (
 
 /**
  * Drains one connector sync generator, committing each yielded page as
- * its own transaction, and returns the cursor the connector reported
- * once every page landed.
+ * its own transaction, and returns the connector's stream result
+ * (cursor and declared replay window) once every page landed.
  */
 const consumeStream = async (
   deps: StreamDeps,
@@ -464,17 +478,51 @@ const consumeStream = async (
   syncCtx: SyncContext<unknown>,
   stream: StreamDef,
   cursor: string | undefined,
-): Promise<string | undefined> => {
+): Promise<SyncStreamResult> => {
   const generator = connector.sync(syncCtx, stream, cursor);
   for (;;) {
     const step = await generator.next();
     if (step.done) {
-      return step.value.nextCursor;
+      return step.value;
     }
     applyPage(deps, stream.id, validatePage(step.value, syncCtx.log));
     // Each page commits synchronously; yield to the event loop between
     // page transactions so a large resync cannot starve HTTP handling.
     await Bun.sleep(0);
+  }
+};
+
+/**
+ * A cursorless run is always a FULL replay: the true first sync, a
+ * retry after an interrupted initial sync, a run that found the cursor
+ * already cleared (crash between clearCursor and the resync), or the
+ * recovery from a dead cursor. Every one of them sweeps afterwards,
+ * scoped to the window the connector declared it replayed, so items
+ * that vanished upstream while no cursor covered them get tombstoned.
+ * On a true first sync the sweep is a natural no-op: no ref predates
+ * the replay.
+ */
+const replayStream = async (
+  deps: StreamDeps,
+  connector: AnyConnector,
+  syncCtx: SyncContext<unknown>,
+  stream: StreamDef,
+): Promise<void> => {
+  // The sweep boundary is captured BEFORE the replay begins and must
+  // come from Date.now(): the entity store stamps last_seen_at with
+  // Date.now(), and mixing clocks would break the sweep.
+  const resyncStartedAt = Date.now();
+  const result = await consumeStream(
+    deps,
+    connector,
+    syncCtx,
+    stream,
+    undefined,
+  );
+  sweepStream(deps, stream.id, resyncStartedAt, result.replayWindowStart);
+  if (result.nextCursor !== undefined) {
+    // The cursor lands only after every page of the stream committed.
+    saveCursor(deps, stream.id, result.nextCursor);
   }
 };
 
@@ -486,29 +534,19 @@ const syncStream = async (
 ): Promise<void> => {
   const cursor = readCursor(deps, stream.id) ?? undefined;
   if (cursor === undefined) {
-    const nextCursor = await consumeStream(
-      deps,
-      connector,
-      syncCtx,
-      stream,
-      undefined,
-    );
-    if (nextCursor !== undefined) {
-      // The cursor lands only after every page of the stream committed.
-      saveCursor(deps, stream.id, nextCursor);
-    }
+    await replayStream(deps, connector, syncCtx, stream);
     return;
   }
   try {
-    const nextCursor = await consumeStream(
+    const result = await consumeStream(
       deps,
       connector,
       syncCtx,
       stream,
       cursor,
     );
-    if (nextCursor !== undefined) {
-      saveCursor(deps, stream.id, nextCursor);
+    if (result.nextCursor !== undefined) {
+      saveCursor(deps, stream.id, result.nextCursor);
     }
     return;
   } catch (error) {
@@ -519,20 +557,7 @@ const syncStream = async (
   // The connector declared the cursor dead (e.g. Google's HTTP 410).
   // Full resync, then sweep what vanished while the cursor was blind.
   clearCursor(deps, stream.id);
-  // The boundary must come from Date.now(): the entity store stamps
-  // last_seen_at with Date.now(), and mixing clocks would break the sweep.
-  const resyncStartedAt = Date.now();
-  const nextCursor = await consumeStream(
-    deps,
-    connector,
-    syncCtx,
-    stream,
-    undefined,
-  );
-  sweepStream(deps, stream.id, resyncStartedAt);
-  if (nextCursor !== undefined) {
-    saveCursor(deps, stream.id, nextCursor);
-  }
+  await replayStream(deps, connector, syncCtx, stream);
 };
 
 interface SyncableConnection {

@@ -132,6 +132,10 @@ describe("googleCalendarConnector full sync", () => {
     expect(primary?.pages.map((page) => page.length)).toEqual([2, 1]);
     expect(primary?.nextCursor).toBe("sync-token-1");
     expect(run.streams[1]?.nextCursor).toBe("work-sync-1");
+    // A full replay declares the window it covered so the host scopes
+    // its sweep to it; events older than timeMin were never re-yielded.
+    expect(primary?.replayWindowStart).toBe(NOW - 365 * 86_400_000);
+    expect(run.streams[1]?.replayWindowStart).toBe(NOW - 365 * 86_400_000);
 
     // The full sync request: one-year lookback, expanded recurrences,
     // capped page size, and no syncToken.
@@ -260,6 +264,8 @@ describe("googleCalendarConnector incremental sync", () => {
 
     expect(run.streams[0]?.pages).toHaveLength(1);
     expect(run.streams[0]?.nextCursor).toBe("sync-token-2");
+    // Incremental syncs cover everything since the cursor, not a window.
+    expect(run.streams[0]?.replayWindowStart).toBeUndefined();
   });
 
   test("throws ResyncRequired when Google expires the sync token", async () => {

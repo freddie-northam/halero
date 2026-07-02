@@ -6,6 +6,7 @@ import {
   type SyncOp,
   syncOpSchema,
   syncOpsPageSchema,
+  syncStreamResultSchema,
 } from "./index";
 
 const fullUpsert = {
@@ -97,6 +98,46 @@ describe("syncOpsPageSchema", () => {
 
   test("rejects a bare op that is not wrapped in a page array", () => {
     expect(syncOpsPageSchema.safeParse(fullUpsert).success).toBe(false);
+  });
+});
+
+describe("syncStreamResultSchema", () => {
+  test("accepts an empty result", () => {
+    expect(syncStreamResultSchema.parse({})).toEqual({});
+  });
+
+  test("accepts a cursor together with a replay window start", () => {
+    const result = {
+      nextCursor: "sync-token-2",
+      replayWindowStart: 1_668_464_000_000,
+    };
+
+    expect(syncStreamResultSchema.parse(result)).toEqual(result);
+  });
+
+  test("rejects a non-numeric replayWindowStart", () => {
+    const parsed = syncStreamResultSchema.safeParse({
+      replayWindowStart: "one year ago",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects a fractional replayWindowStart", () => {
+    const parsed = syncStreamResultSchema.safeParse({
+      replayWindowStart: 1_668_464_000_000.5,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects fields the protocol does not define", () => {
+    const parsed = syncStreamResultSchema.safeParse({
+      nextCursor: "cur",
+      sweepEverything: true,
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });
 

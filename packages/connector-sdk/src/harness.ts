@@ -3,7 +3,7 @@
 // page against the protocol schema. Extracted from the shapes the
 // original in-server Google Calendar tests used.
 
-import { syncOpsPageSchema } from "./schemas";
+import { syncOpsPageSchema, syncStreamResultSchema } from "./schemas";
 import type {
   Connector,
   FetchLike,
@@ -68,6 +68,8 @@ export interface FixtureStreamRun {
   readonly stream: StreamDef;
   readonly pages: readonly (readonly SyncOp[])[];
   readonly nextCursor: string | undefined;
+  /** The window a full replay declared it covered; see SyncStreamResult. */
+  readonly replayWindowStart: number | undefined;
 }
 
 export interface FixtureRunResult {
@@ -86,7 +88,13 @@ const runStream = async <TConfig>(
   for (;;) {
     const step = await generator.next();
     if (step.done) {
-      return { stream, pages, nextCursor: step.value.nextCursor };
+      const result = syncStreamResultSchema.parse(step.value);
+      return {
+        stream,
+        pages,
+        nextCursor: result.nextCursor,
+        replayWindowStart: result.replayWindowStart,
+      };
     }
     pages.push(syncOpsPageSchema.parse(step.value));
   }

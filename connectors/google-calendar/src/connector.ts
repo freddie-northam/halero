@@ -108,10 +108,14 @@ async function* syncCalendar(
     });
     return { nextCursor };
   }
-  const timeMin = new Date(ctx.now() - FULL_SYNC_LOOKBACK_MS).toISOString();
+  // A full replay only covers events from timeMin onwards; declaring
+  // that window lets the host scope its post-replay sweep to it instead
+  // of tombstoning history the replay never re-yielded.
+  const replayWindowStart = ctx.now() - FULL_SYNC_LOOKBACK_MS;
+  const timeMin = new Date(replayWindowStart).toISOString();
   try {
     const nextCursor = yield* paginateEvents(ctx, stream.id, { timeMin });
-    return { nextCursor };
+    return { nextCursor, replayWindowStart };
   } catch (error) {
     // A 410 during a full replay cannot be fixed by yet another replay;
     // report it as a plain failure instead of requesting a resync.

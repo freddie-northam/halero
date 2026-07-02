@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { defineConnector, type SyncOp } from "@halero/connector-sdk";
+import {
+  defineConnector,
+  type SyncOp,
+  type SyncStreamResult,
+} from "@halero/connector-sdk";
 import { encryptCredentials } from "@halero/core";
 import {
   calendarEvents,
@@ -137,6 +141,90 @@ const allDayEvent = (
   summary,
   start: { date: "2025-07-01" },
   end: { date: "2025-07-02" },
+});
+
+/** Starts long before the one-year replay window (test clock is Nov 2023). */
+const ancientEvent = (
+  id: string,
+  etag: string,
+  summary: string,
+): Record<string, unknown> => ({
+  id,
+  etag,
+  status: "confirmed",
+  summary,
+  start: { dateTime: "2020-01-01T09:30:00Z" },
+  end: { dateTime: "2020-01-01T10:00:00Z" },
+});
+
+/** A protocol-valid calendar.event upsert; occurredStart is optional. */
+const calendarOp = (externalId: string, occurredStart?: number): SyncOp => ({
+  op: "upsert",
+  externalId,
+  version: `"${externalId}-v1"`,
+  spine: {
+    kind: "calendar.event",
+    schemaVersion: 1,
+    title: externalId,
+    ...(occurredStart === undefined ? {} : { occurredStart }),
+  },
+  satellite: {
+    calendarId: "primary",
+    allDay: 0,
+    startDate: null,
+    endDate: null,
+    location: null,
+    status: "confirmed",
+    recurringEventId: null,
+    originalStartTime: null,
+  },
+  raw: { id: externalId },
+});
+
+/**
+ * Registered under the Google id so the seeded connection resolves it;
+ * yields the given pages and returns exactly the given stream result,
+ * so tests control the cursor and the declared replay window.
+ */
+const replayConnector = (
+  pages: SyncOp[][],
+  result: SyncStreamResult,
+): AnyConnector =>
+  defineConnector({
+    manifest: {
+      id: GOOGLE_CONNECTOR_ID,
+      version: "0.0.1",
+      protocolVersion: 1,
+      capabilities: ["poll"],
+      produces: [{ kind: "calendar.event", schemaVersion: 1 }],
+    },
+    auth: {
+      authorizationEndpoint: "https://example.com/auth",
+      tokenEndpoint: "https://example.com/token",
+      scopes: ["readonly"],
+    },
+    configSchema: z.object({}),
+    identify: () => null,
+    discoverStreams: () => Promise.resolve([{ id: "primary" }]),
+    sync: async function* () {
+      for (const page of pages) {
+        yield page;
+      }
+      return result;
+    },
+  });
+
+const replayContext = (
+  testApp: TestApp,
+  pages: SyncOp[][],
+  result: SyncStreamResult,
+): SyncEngineContext => ({
+  database: testApp.database,
+  key: testApp.key,
+  now: () => testApp.clock.value,
+  outboundFetch: () => Promise.reject(new Error("no network expected")),
+  registry: registerConnectors([replayConnector(pages, result)], kindRegistry),
+  log: () => undefined,
 });
 
 const isCalendarList = (url: URL): boolean =>
@@ -808,6 +896,224 @@ describe("syncConnection 410 full resync", () => {
     expect(getEntityFor(testApp, "evt-1").deletedAt).toBeNull();
     expect(getEntityFor(testApp, "evt-2").deletedAt).not.toBeNull();
     expect(getCursor(testApp, "primary")?.cursor).toBe("sync-token-3");
+  });
+});
+
+describe("syncConnection windowed replay sweep", () => {
+  test("a 410 resync spares unchanged events older than the replay window", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // evt-old predates the one-year lookback; evt-1 and evt-2 are inside.
+    await runInitialSync(testApp, {
+      items: [
+        ancientEvent("evt-old", '"old-v1"', "History"),
+        timedEvent("evt-1", '"e1-v1"', "Standup"),
+        timedEvent("evt-2", '"e2-v1"', "Conference"),
+      ],
+    });
+    // The sweep compares external_refs.last_seen_at (entity-store clock,
+    // Date.now) with the replay start; give them room to differ.
+    await Bun.sleep(5);
+
+    const fake = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["primary"]));
+      }
+      if (!isEvents(url, "primary")) {
+        return null;
+      }
+      if (url.searchParams.get("syncToken") === "sync-token-1") {
+        return new Response("Gone", { status: 410 });
+      }
+      // Windowed full replay: evt-1 is unchanged inside the window,
+      // evt-2 vanished inside the window, and evt-old sits beyond the
+      // one-year lookback so Google never re-yields it.
+      expect(url.searchParams.get("timeMin")).not.toBeNull();
+      return json({
+        items: [timedEvent("evt-1", '"e1-v1"', "Standup")],
+        nextSyncToken: "sync-token-3",
+      });
+    });
+
+    const summary = await syncConnection(
+      engineContext(testApp, fake.fetchLike),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("success");
+    expect(summary.deletes).toBe(1);
+    // The event OLDER than the window must survive: the replay never
+    // covered it, so its absence from the replay proves nothing.
+    expect(getEntityFor(testApp, "evt-old").deletedAt).toBeNull();
+    expect(getEntityFor(testApp, "evt-1").deletedAt).toBeNull();
+    expect(getEntityFor(testApp, "evt-2").deletedAt).not.toBeNull();
+    expect(getCursor(testApp, "primary")?.cursor).toBe("sync-token-3");
+  });
+
+  test("a cursorless retry after an interrupted initial sync sweeps deletions", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // First attempt: page one (evt-1, evt-2) commits, page two fails, so
+    // no cursor is stored and the next run replays from scratch.
+    const first = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["primary"]));
+      }
+      if (!isEvents(url, "primary")) {
+        return null;
+      }
+      if (url.searchParams.get("pageToken") === null) {
+        return json({
+          items: [
+            timedEvent("evt-1", '"e1-v1"', "Standup"),
+            timedEvent("evt-2", '"e2-v1"', "Conference"),
+          ],
+          nextPageToken: "page-2",
+        });
+      }
+      return new Response("boom", { status: 500 });
+    });
+    const interrupted = await syncConnection(
+      engineContext(testApp, first.fetchLike),
+      CONNECTION_ID,
+    );
+    expect(interrupted.status).toBe("failed");
+    expect(getCursor(testApp, "primary")).toBeUndefined();
+    await Bun.sleep(5);
+
+    // The retry is still cursorless; evt-2 was deleted upstream meanwhile
+    // and lies inside the replay window, so the sweep must catch it.
+    const retry = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["primary"]));
+      }
+      if (!isEvents(url, "primary")) {
+        return null;
+      }
+      return json({
+        items: [timedEvent("evt-1", '"e1-v1"', "Standup")],
+        nextSyncToken: "sync-token-1",
+      });
+    });
+
+    const summary = await syncConnection(
+      engineContext(testApp, retry.fetchLike),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("success");
+    expect(summary.deletes).toBe(1);
+    expect(getEntityFor(testApp, "evt-1").deletedAt).toBeNull();
+    expect(getEntityFor(testApp, "evt-2").deletedAt).not.toBeNull();
+    expect(getCursor(testApp, "primary")?.cursor).toBe("sync-token-1");
+  });
+
+  test("a cursorless run after a crash-after-clearCursor sweeps", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    await runInitialSync(testApp);
+    // Simulate the crash window: a 410 handler cleared the cursor and
+    // the process died before the replay could run.
+    testApp.database.db
+      .delete(syncCursors)
+      .where(eq(syncCursors.connectionId, CONNECTION_ID))
+      .run();
+    await Bun.sleep(5);
+
+    const fake = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["primary"]));
+      }
+      if (!isEvents(url, "primary")) {
+        return null;
+      }
+      return json({
+        items: [timedEvent("evt-1", '"e1-v1"', "Standup")],
+        nextSyncToken: "sync-token-9",
+      });
+    });
+
+    const summary = await syncConnection(
+      engineContext(testApp, fake.fetchLike),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("success");
+    expect(summary.deletes).toBe(1);
+    expect(getEntityFor(testApp, "evt-2").deletedAt).not.toBeNull();
+    expect(getCursor(testApp, "primary")?.cursor).toBe("sync-token-9");
+  });
+
+  test("an unwindowed replay sweeps every stale ref, dated or not", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // First cursorless run creates the refs; its own sweep is a natural
+    // no-op because every ref was just seen.
+    const first = await syncConnection(
+      replayContext(
+        testApp,
+        [
+          [
+            calendarOp("evt-dated", 1_600_000_000_000),
+            calendarOp("evt-undated"),
+          ],
+        ],
+        {},
+      ),
+      CONNECTION_ID,
+    );
+    expect(first).toEqual({
+      status: "success",
+      upserts: 2,
+      deletes: 0,
+      error: null,
+    });
+    await Bun.sleep(5);
+
+    // The next replay yields nothing and declares NO window: it claims
+    // to have covered everything, so both stale refs are swept.
+    const summary = await syncConnection(
+      replayContext(testApp, [[]], {}),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("success");
+    expect(summary.deletes).toBe(2);
+    expect(getEntityFor(testApp, "evt-dated").deletedAt).not.toBeNull();
+    expect(getEntityFor(testApp, "evt-undated").deletedAt).not.toBeNull();
+  });
+
+  test("a windowed replay never sweeps refs with a NULL occurred_start", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const windowStart = 1_690_000_000_000;
+    const first = await syncConnection(
+      replayContext(
+        testApp,
+        [
+          [
+            calendarOp("evt-inside", windowStart + 1_000),
+            calendarOp("evt-undated"),
+          ],
+        ],
+        {},
+      ),
+      CONNECTION_ID,
+    );
+    expect(first.upserts).toBe(2);
+    await Bun.sleep(5);
+
+    const summary = await syncConnection(
+      replayContext(testApp, [[]], { replayWindowStart: windowStart }),
+      CONNECTION_ID,
+    );
+
+    // evt-inside vanished inside the declared window: swept. The undated
+    // ref cannot be placed inside the window, so it must survive.
+    expect(summary.status).toBe("success");
+    expect(summary.deletes).toBe(1);
+    expect(getEntityFor(testApp, "evt-inside").deletedAt).not.toBeNull();
+    expect(getEntityFor(testApp, "evt-undated").deletedAt).toBeNull();
   });
 });
 

@@ -3,7 +3,7 @@
 // boundary can later become a process boundary.
 
 import { z } from "zod";
-import type { ConnectorManifest, SyncOp } from "./types";
+import type { ConnectorManifest, SyncOp, SyncStreamResult } from "./types";
 
 const JSON_ONLY_MESSAGE =
   "Sync operations must be plain JSON data: objects, arrays, strings, " +
@@ -74,6 +74,16 @@ export const syncOpSchema: z.ZodType<SyncOp> = z.discriminatedUnion("op", [
 
 /** Connectors yield pages as ARRAYS so hosts can commit page-per-transaction. */
 export const syncOpsPageSchema: z.ZodType<SyncOp[]> = z.array(syncOpSchema);
+
+/**
+ * The sync generator's return value. replayWindowStart is additive and
+ * optional, so protocol version 1 connectors stay valid unchanged.
+ */
+export const syncStreamResultSchema: z.ZodType<SyncStreamResult> =
+  z.strictObject({
+    nextCursor: z.string().optional(),
+    replayWindowStart: z.number().int().optional(),
+  });
 
 export const connectorManifestSchema: z.ZodType<ConnectorManifest> =
   z.strictObject({

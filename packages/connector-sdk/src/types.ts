@@ -83,6 +83,14 @@ export type SyncOp = UpsertSyncOp | DeleteSyncOp;
 /** What a completed stream sync reports back to the host. */
 export interface SyncStreamResult {
   readonly nextCursor?: string;
+  /**
+   * Present when this run was a WINDOWED full replay: the replay covered
+   * events with occurredStart >= this instant (epoch ms). The host must
+   * scope any post-replay sweep to that window, because items older than
+   * it were never re-yielded and their absence proves nothing. Omitted
+   * when the replay covered everything, and on incremental syncs.
+   */
+  readonly replayWindowStart?: number;
 }
 
 /**

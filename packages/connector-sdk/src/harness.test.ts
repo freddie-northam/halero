@@ -173,6 +173,59 @@ describe("runConnectorFixture", () => {
     expect(outcome).toBeInstanceOf(Error);
   });
 
+  test("passes replayWindowStart through from the stream result", async () => {
+    const windowed: Connector<EchoConfig> = {
+      ...makeEchoConnector(),
+      sync: async function* () {
+        yield [];
+        return { nextCursor: "cur-9", replayWindowStart: 1_650_000_000_000 };
+      },
+    };
+
+    const run = await runConnectorFixture({
+      connector: windowed,
+      config: { label: "Echo" },
+      fetch: echoFixtureFetch().fetch,
+      streams: [{ id: "alpha" }],
+    });
+
+    expect(run.streams[0]?.nextCursor).toBe("cur-9");
+    expect(run.streams[0]?.replayWindowStart).toBe(1_650_000_000_000);
+  });
+
+  test("leaves replayWindowStart undefined when the connector omits it", async () => {
+    const run = await runConnectorFixture({
+      connector: makeEchoConnector(),
+      config: { label: "Echo" },
+      fetch: echoFixtureFetch().fetch,
+    });
+
+    expect(run.streams[0]?.replayWindowStart).toBeUndefined();
+  });
+
+  test("rejects a stream result that breaks the protocol schema", async () => {
+    const broken: Connector<EchoConfig> = {
+      ...makeEchoConnector(),
+      sync: async function* () {
+        yield [];
+        // NaN is a number to TypeScript but not to the protocol schema.
+        return { replayWindowStart: Number.NaN };
+      },
+    };
+
+    const outcome = await runConnectorFixture({
+      connector: broken,
+      config: { label: "Echo" },
+      fetch: echoFixtureFetch().fetch,
+      streams: [{ id: "alpha" }],
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(outcome).toBeInstanceOf(Error);
+  });
+
   test("records every request made through the fixture fetch", async () => {
     const fixture = echoFixtureFetch();
 
