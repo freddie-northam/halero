@@ -164,6 +164,8 @@ const createModulePageRoute = (page: PageContribution) =>
   createRoute({
     getParentRoute: () => rootRoute,
     path: page.path,
+    // Module-owned search-param normalization (e.g. calendar view/date).
+    validateSearch: page.validateSearch,
     beforeLoad: ({ context }) => guardAuthenticated(context.api),
     component: createModulePageComponent(page),
   });

@@ -13,6 +13,15 @@ export interface NavContribution {
 }
 
 /**
+ * Normalizes a page's URL search params into renderable state. Plain
+ * function type on purpose: it is structurally compatible with TanStack
+ * Router's validateSearch without the SDK depending on the router.
+ */
+export type SearchValidator = (
+  search: Record<string, unknown>,
+) => Record<string, unknown>;
+
+/**
  * A routed page. Divergence from the original contract sketch: the
  * component is a plain React component rather than a TanStack
  * LazyRouteComponent, because the app's routes are code-based and eager
@@ -21,6 +30,8 @@ export interface NavContribution {
 export interface PageContribution {
   readonly path: string;
   readonly component: ComponentType;
+  /** Wired into the host route so bad URLs normalize instead of erroring. */
+  readonly validateSearch?: SearchValidator;
 }
 
 export interface WebModule {
