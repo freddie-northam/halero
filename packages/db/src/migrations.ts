@@ -1,3 +1,6 @@
+// The reference keeps the *.sql module declaration in the program of
+// every package that typechecks against @halero/db sources.
+/// <reference path="./sql.d.ts" />
 import migration0001Core from "../migrations/0001_core.sql" with {
   type: "text",
 };
