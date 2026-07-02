@@ -32,10 +32,16 @@ const EXPORTED_TABLES = [
   "schema_migrations",
 ] as const;
 
-/** Settings rows whose values carry secret material stay out entirely. */
-const EXCLUDED_SETTING_KEYS: ReadonlySet<string> = new Set([
-  "google_oauth_client_secret_enc",
-  "oauth_state",
+/**
+ * Settings export through an ALLOWLIST, never a denylist: a denylist
+ * fails open, silently leaking every future key (the password hash and
+ * notify_url already slipped through it). Any key not named here stays
+ * private until it is deliberately added.
+ */
+const EXPORTED_SETTING_KEYS: ReadonlySet<string> = new Set([
+  "setup_complete",
+  "home_timezone",
+  "base_url",
 ]);
 
 type ExportRow = Record<string, unknown>;
@@ -47,7 +53,7 @@ const redactRow = (table: string, row: ExportRow): ExportRow | null => {
     // and not worth carrying around in a portable file.
     return { ...row, credentials_enc: null };
   }
-  if (table === "settings" && EXCLUDED_SETTING_KEYS.has(String(row.key))) {
+  if (table === "settings" && !EXPORTED_SETTING_KEYS.has(String(row.key))) {
     return null;
   }
   return row;
@@ -67,16 +73,33 @@ function* exportLines(snapshot: Database): Generator<string> {
 }
 
 /**
+ * Snapshots the live database into snapshotDir and opens the copy.
+ * Any failure (including the open) removes the temp directory before
+ * rethrowing, so a failed export never leaks files.
+ */
+const openExportSnapshot = (
+  live: HaleroDatabase,
+  snapshotDir: string,
+): Database => {
+  try {
+    const path = join(snapshotDir, "snapshot.db");
+    createSnapshot(live.sqlite, path);
+    return new Database(path, { readonly: true });
+  } catch (error) {
+    rmSync(snapshotDir, { recursive: true, force: true });
+    throw error;
+  }
+};
+
+/**
  * Streams the snapshot's rows line by line. The snapshot directory is
  * removed exactly once, whichever way the stream ends: fully drained,
  * cancelled mid-download, or errored.
  */
 const createExportStream = (
+  snapshot: Database,
   snapshotDir: string,
 ): ReadableStream<Uint8Array> => {
-  const snapshot = new Database(join(snapshotDir, "snapshot.db"), {
-    readonly: true,
-  });
   const lines = exportLines(snapshot);
   const encoder = new TextEncoder();
   let finished = false;
@@ -128,13 +151,8 @@ export const createExportRoutes = (
     const snapshotDir = mkdtempSync(
       join(options.snapshotDir ?? tmpdir(), "halero-export-"),
     );
-    try {
-      createSnapshot(options.database.sqlite, join(snapshotDir, "snapshot.db"));
-    } catch (error) {
-      rmSync(snapshotDir, { recursive: true, force: true });
-      throw error;
-    }
-    return c.body(createExportStream(snapshotDir), 200, {
+    const snapshot = openExportSnapshot(options.database, snapshotDir);
+    return c.body(createExportStream(snapshot, snapshotDir), 200, {
       "content-type": "application/jsonl; charset=utf-8",
       "content-disposition": `attachment; filename=${exportFileName(options.now())}`,
     });

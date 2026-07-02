@@ -13,12 +13,14 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
+import { setSetting } from "./settings";
 import { saveGoogleClient } from "./sync/client-config";
 import { createOauthState } from "./sync/oauth-state";
 import { completeSetup, makeTestApp, type TestApp } from "./test-utils";
 
 const CLIENT_SECRET = "GOCSPX-super-secret-value";
 const REFRESH_TOKEN = "1//refresh-token-secret";
+const NOTIFY_URL = "https://ntfy.sh/very-secret-topic";
 
 interface ExportLine {
   readonly table: string;
@@ -34,6 +36,8 @@ const seedFullDatabase = (testApp: TestApp): void => {
     clientSecret: CLIENT_SECRET,
   });
   createOauthState(db, clock.value);
+  setSetting(db, "base_url", "https://halero.example.com");
+  setSetting(db, "notify_url", NOTIFY_URL);
   db.insert(entities)
     .values({
       id: "ent-1",
@@ -159,21 +163,28 @@ describe("GET /api/export redaction", () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     seedFullDatabase(testApp);
-    const storedSecretEnc = testApp.database.sqlite
-      .query<{ value: string }, [string]>(
-        "SELECT value FROM settings WHERE key = ?",
-      )
-      .get("google_oauth_client_secret_enc");
+    const readSetting = (settingKey: string): string =>
+      testApp.database.sqlite
+        .query<{ value: string }, [string]>(
+          "SELECT value FROM settings WHERE key = ?",
+        )
+        .get(settingKey)?.value ?? "IMPOSSIBLE";
+    const storedSecretEnc = readSetting("google_oauth_client_secret_enc");
+    const passwordHash = readSetting("password_hash");
+    expect(passwordHash).toStartWith("$argon2id$");
 
     const res = await fetchExport(testApp.app, cookie);
     const body = await res.text();
 
     expect(res.status).toBe(200);
     // Raw-bytes assertions: not the plaintext secrets, not the encrypted
-    // blobs, not the session token, nowhere in the whole file.
+    // blobs, not the password hash, not the notification target, not the
+    // session token, nowhere in the whole file.
     expect(body).not.toContain(CLIENT_SECRET);
     expect(body).not.toContain(REFRESH_TOKEN);
-    expect(body).not.toContain(storedSecretEnc?.value ?? "IMPOSSIBLE");
+    expect(body).not.toContain(storedSecretEnc);
+    expect(body).not.toContain(passwordHash);
+    expect(body).not.toContain(NOTIFY_URL);
     const sessionToken = cookie.replace("halero_session=", "");
     expect(sessionToken.length).toBeGreaterThan(10);
     expect(body).not.toContain(sessionToken);
@@ -186,14 +197,15 @@ describe("GET /api/export redaction", () => {
     expect(connectionRows).toHaveLength(1);
     expect(connectionRows[0]?.row.credentials_enc).toBeNull();
     expect(connectionRows[0]?.row.id).toBe("conn-1");
-    // Secret-bearing settings keys are filtered; ordinary keys stay.
+    // Settings export through an ALLOWLIST: exactly these keys and
+    // nothing else, so any future key stays private until it is
+    // deliberately added.
     const settingKeys = lines
       .filter((line) => line.table === "settings")
       .map((line) => String(line.row.key));
-    expect(settingKeys).not.toContain("google_oauth_client_secret_enc");
-    expect(settingKeys).not.toContain("oauth_state");
-    expect(settingKeys).toContain("home_timezone");
-    expect(settingKeys).toContain("google_oauth_client_id");
+    expect(new Set(settingKeys)).toEqual(
+      new Set(["setup_complete", "home_timezone", "base_url"]),
+    );
   });
 
   test("exports every portable table as valid JSONL with stable IDs", async () => {
