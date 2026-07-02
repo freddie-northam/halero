@@ -1,6 +1,6 @@
 import { syncRuns } from "@halero/db";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveBaseUrl } from "../base-url";
 import {
@@ -10,6 +10,7 @@ import {
   saveGoogleClient,
 } from "../sync/client-config";
 import { getGoogleConnection, parseConnectionConfig } from "../sync/connection";
+import { readLastSuccessAt } from "../sync/run-queries";
 import type { TrpcContext } from "./context";
 import { protectedProcedure, router } from "./init";
 
@@ -44,20 +45,6 @@ const readLastRun = (db: Db, connectionId: string): LastRunHealth | null => {
     error: run.error,
   };
 };
-
-const readLastSuccessAt = (db: Db, connectionId: string): number | null =>
-  db
-    .select({ finishedAt: syncRuns.finishedAt })
-    .from(syncRuns)
-    .where(
-      and(
-        eq(syncRuns.connectionId, connectionId),
-        eq(syncRuns.status, "success"),
-      ),
-    )
-    .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
-    .limit(1)
-    .get()?.finishedAt ?? null;
 
 const saveClientInput = z.object({
   clientId: z

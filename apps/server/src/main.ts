@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { createApp } from "./app";
 import { boot } from "./boot";
 import { loadConfig } from "./config";
+import { createSchedulerHealth } from "./healthz";
 import { createMaintenanceJob } from "./sync/maintenance";
 import { createSyncRunner } from "./sync/runner";
 import { createScheduler } from "./sync/scheduler";
@@ -21,7 +22,9 @@ const syncRunner = createSyncRunner({
   outboundFetch: fetch,
   random: Math.random,
 });
-const app = createApp({ config, database, key, syncRunner });
+// One shared liveness state: the scheduler writes it, /healthz reads it.
+const schedulerHealth = createSchedulerHealth();
+const app = createApp({ config, database, key, syncRunner, schedulerHealth });
 // Daily backups ride the scheduler's start/stop switch: same backups
 // directory as the migration runner's pre-* snapshots, which rotation
 // never touches.
@@ -31,7 +34,7 @@ const maintenance = createMaintenanceJob({
   now,
 });
 const scheduler = createScheduler(
-  { db: database.db, now, runner: syncRunner },
+  { db: database.db, now, runner: syncRunner, health: schedulerHealth },
   { maintenance },
 );
 

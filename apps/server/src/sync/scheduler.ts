@@ -1,6 +1,7 @@
 import { connections, type HaleroDatabase } from "@halero/db";
 import { Cron } from "croner";
 import { and, asc, eq, lte } from "drizzle-orm";
+import type { SchedulerHealth } from "../healthz";
 import type { MaintenanceJob } from "./maintenance";
 import type { SyncRunner } from "./runner";
 
@@ -12,6 +13,8 @@ export interface SchedulerContext {
   readonly db: Db;
   readonly now: () => number;
   readonly runner: SyncRunner;
+  /** Liveness state read by /healthz; optional so tests can omit it. */
+  readonly health?: SchedulerHealth;
 }
 
 export interface SchedulerOptions {
@@ -64,6 +67,7 @@ const readableTickError = (error: unknown): string =>
 export const runSchedulerTick = async (
   ctx: SchedulerContext,
 ): Promise<void> => {
+  ctx.health?.recordTick(ctx.now());
   for (const connectionId of findDueConnectionIds(ctx.db, ctx.now())) {
     if (ctx.runner.isRunning(connectionId)) {
       // Already syncing (a manual run or a long previous tick): skip
@@ -102,6 +106,7 @@ export const createScheduler = (
         return;
       }
       options.maintenance?.start();
+      ctx.health?.markStarted(ctx.now());
       // The every-second pattern gated by `interval` yields one tick per
       // intervalSeconds; `protect` skips a tick while the previous one
       // is still running instead of overlapping it.
@@ -119,6 +124,7 @@ export const createScheduler = (
     },
     stop: () => {
       options.maintenance?.stop();
+      ctx.health?.markStopped();
       job?.stop();
       job = null;
     },

@@ -5,6 +5,11 @@ import { createLoginRateLimiter } from "./auth";
 import { resolveBaseUrl } from "./base-url";
 import type { HaleroConfig } from "./config";
 import { createExportRoutes } from "./export-routes";
+import {
+  buildHealthReport,
+  createSchedulerHealth,
+  type SchedulerHealth,
+} from "./healthz";
 import { csrfOriginCheck } from "./middleware/csrf";
 import { securityHeaders } from "./middleware/security-headers";
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
@@ -30,6 +35,12 @@ export interface CreateAppOptions {
   readonly syncRunner?: SyncRunner;
   /** Parent directory for export snapshots; tests inject to observe. */
   readonly exportSnapshotDir?: string;
+  /**
+   * Scheduler liveness shared with the scheduler in main.ts. Defaults
+   * to a fresh (never-started) state, so an app without a scheduler
+   * reports lastTickAt: null and is never tick-stale.
+   */
+  readonly schedulerHealth?: SchedulerHealth;
 }
 
 export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
@@ -55,7 +66,12 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   );
   app.use("/api/*", sessionMiddleware(database.db, now));
 
-  app.get("/healthz", (c) => c.json({ status: "ok" }));
+  const schedulerHealth = options.schedulerHealth ?? createSchedulerHealth();
+  // Unauthenticated on purpose, so keep it minimal: statuses and
+  // timestamps only, never emails, URLs, ids, or error text.
+  app.get("/healthz", (c) =>
+    c.json(buildHealthReport(database.db, schedulerHealth.read(), now())),
+  );
   app.all(
     "/api/trpc/*",
     createTrpcHandler({

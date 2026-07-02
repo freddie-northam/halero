@@ -9,6 +9,7 @@ import {
 } from "@halero/db";
 import { createApp } from "./app";
 import { loadConfig } from "./config";
+import type { SchedulerHealth } from "./healthz";
 
 export interface TestClock {
   value: number;
@@ -30,6 +31,7 @@ export interface MakeTestAppOptions {
     init?: RequestInit,
   ) => Promise<Response>;
   readonly exportSnapshotDir?: string;
+  readonly schedulerHealth?: SchedulerHealth;
 }
 
 export const TEST_KEY: Uint8Array = Uint8Array.from(
@@ -57,6 +59,7 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
     now: () => clock.value,
     outboundFetch: options.outboundFetch,
     exportSnapshotDir: options.exportSnapshotDir,
+    schedulerHealth: options.schedulerHealth,
   });
   return { app, database, dir, clock, key: TEST_KEY };
 };

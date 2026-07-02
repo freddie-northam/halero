@@ -17,7 +17,13 @@ describe("healthz", () => {
     const res = await app.fetch(new Request("http://localhost/healthz"));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
+    // The full report shape (degraded causes, tick staleness) is
+    // covered in healthz.test.ts.
+    expect(await res.json()).toEqual({
+      status: "ok",
+      lastTickAt: null,
+      connections: [],
+    });
   });
 });
 
