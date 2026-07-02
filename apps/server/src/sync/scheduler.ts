@@ -1,6 +1,7 @@
 import { connections, type HaleroDatabase } from "@halero/db";
 import { Cron } from "croner";
 import { and, asc, eq, lte } from "drizzle-orm";
+import type { MaintenanceJob } from "./maintenance";
 import type { SyncRunner } from "./runner";
 
 type Db = HaleroDatabase["db"];
@@ -15,6 +16,11 @@ export interface SchedulerContext {
 
 export interface SchedulerOptions {
   readonly intervalSeconds?: number;
+  /**
+   * Daily maintenance (backups) sharing the scheduler's lifecycle: one
+   * switch starts and stops all background work.
+   */
+  readonly maintenance?: MaintenanceJob;
 }
 
 export interface SyncScheduler {
@@ -95,6 +101,7 @@ export const createScheduler = (
       if (job !== null && !job.isStopped()) {
         return;
       }
+      options.maintenance?.start();
       // The every-second pattern gated by `interval` yields one tick per
       // intervalSeconds; `protect` skips a tick while the previous one
       // is still running instead of overlapping it.
@@ -111,6 +118,7 @@ export const createScheduler = (
       );
     },
     stop: () => {
+      options.maintenance?.stop();
       job?.stop();
       job = null;
     },
