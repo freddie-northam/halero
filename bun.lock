@@ -16,6 +16,7 @@
       "dependencies": {
         "@halero/core": "workspace:*",
         "@halero/db": "workspace:*",
+        "@halero/schemas": "workspace:*",
         "@trpc/server": "^11.10.0",
         "drizzle-orm": "^0.44.7",
         "hono": "^4.11.9",
