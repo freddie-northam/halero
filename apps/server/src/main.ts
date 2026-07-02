@@ -3,6 +3,7 @@ import { createApp } from "./app";
 import { boot } from "./boot";
 import { loadConfig } from "./config";
 import { createSchedulerHealth } from "./healthz";
+import { createNotifier } from "./notifier";
 import { createMaintenanceJob } from "./sync/maintenance";
 import { createSyncRunner } from "./sync/runner";
 import { createScheduler } from "./sync/scheduler";
@@ -15,16 +16,27 @@ const now = (): number => Date.now();
 // the same run path, so they share the in-flight guard and reschedule
 // logic. The scheduler lives here, not in createApp, so tests never
 // start timers by building an app.
+// One notifier for scheduled runs, manual runs, and the test-send
+// mutation; it reads notify_url per send, so it carries no state.
+const notifier = createNotifier({ db: database.db, notifyFetch: fetch });
 const syncRunner = createSyncRunner({
   database,
   key,
   now,
   outboundFetch: fetch,
   random: Math.random,
+  notifier,
 });
 // One shared liveness state: the scheduler writes it, /healthz reads it.
 const schedulerHealth = createSchedulerHealth();
-const app = createApp({ config, database, key, syncRunner, schedulerHealth });
+const app = createApp({
+  config,
+  database,
+  key,
+  syncRunner,
+  schedulerHealth,
+  notifier,
+});
 // Daily backups ride the scheduler's start/stop switch: same backups
 // directory as the migration runner's pre-* snapshots, which rotation
 // never touches.

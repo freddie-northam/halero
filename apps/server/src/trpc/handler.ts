@@ -10,6 +10,7 @@ import {
 import { resolveBaseUrl } from "../base-url";
 import type { HaleroConfig } from "../config";
 import type { AppEnv } from "../middleware/session";
+import type { Notifier } from "../notifier";
 import type { SyncRunner } from "../sync/runner";
 import type { TrpcContext } from "./context";
 import { appRouter } from "./router";
@@ -22,6 +23,7 @@ export interface TrpcHandlerOptions {
   readonly loginRateLimiter: LoginRateLimiter;
   readonly outboundFetch: FetchLike;
   readonly syncRunner: SyncRunner;
+  readonly notifier: Notifier;
 }
 
 const withCookies = (
@@ -43,7 +45,7 @@ export const createTrpcHandler = (
 ): Handler<AppEnv> => {
   const { config, database, key, now, loginRateLimiter, outboundFetch } =
     options;
-  const { syncRunner } = options;
+  const { syncRunner, notifier } = options;
   // Evaluated when a cookie is built, not when the handler is created, so
   // the Secure flag follows the same base-URL authority as everything else
   // (even for the setup request that stores base_url itself).
@@ -62,6 +64,7 @@ export const createTrpcHandler = (
       loginRateLimiter,
       outboundFetch,
       syncRunner,
+      notifier,
       setSessionCookie: (token) =>
         cookies.push(buildSessionCookie(token, secure())),
       clearSessionCookie: () => cookies.push(buildClearSessionCookie(secure())),

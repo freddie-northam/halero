@@ -10,6 +10,7 @@ import {
 import { createApp } from "./app";
 import { loadConfig } from "./config";
 import type { SchedulerHealth } from "./healthz";
+import { createNotifier } from "./notifier";
 
 export interface TestClock {
   value: number;
@@ -32,6 +33,10 @@ export interface MakeTestAppOptions {
   ) => Promise<Response>;
   readonly exportSnapshotDir?: string;
   readonly schedulerHealth?: SchedulerHealth;
+  readonly notifyFetch?: (
+    input: string | URL,
+    init?: RequestInit,
+  ) => Promise<Response>;
 }
 
 export const TEST_KEY: Uint8Array = Uint8Array.from(
@@ -60,6 +65,14 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
     outboundFetch: options.outboundFetch,
     exportSnapshotDir: options.exportSnapshotDir,
     schedulerHealth: options.schedulerHealth,
+    notifier:
+      options.notifyFetch === undefined
+        ? undefined
+        : createNotifier({
+            db: database.db,
+            notifyFetch: options.notifyFetch,
+            log: () => {},
+          }),
   });
   return { app, database, dir, clock, key: TEST_KEY };
 };

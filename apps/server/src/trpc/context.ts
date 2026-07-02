@@ -2,6 +2,7 @@ import type { FetchLike } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
 import type { LoginRateLimiter, SessionRecord } from "../auth";
 import type { HaleroConfig } from "../config";
+import type { Notifier } from "../notifier";
 import type { SyncRunner } from "../sync/runner";
 
 export interface TrpcContext {
@@ -16,6 +17,8 @@ export interface TrpcContext {
   readonly outboundFetch: FetchLike;
   /** Shared with the scheduler: one run path, one in-flight guard. */
   readonly syncRunner: SyncRunner;
+  /** Sends failure/test notifications to the configured notify_url. */
+  readonly notifier: Notifier;
   readonly setSessionCookie: (token: string) => void;
   readonly clearSessionCookie: () => void;
 }

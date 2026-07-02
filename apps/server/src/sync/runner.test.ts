@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { createNotifier, type NotificationPayload } from "../notifier";
+import { setSetting } from "../settings";
 import { makeTestApp, type TestApp } from "../test-utils";
 import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
@@ -259,6 +261,157 @@ describe("createSyncRunner in-flight guard", () => {
 
     expect(outcome).toBeInstanceOf(Error);
     expect(runner.isRunning(CONNECTION_ID)).toBe(false);
+  });
+});
+
+interface NotifierHarness {
+  readonly sent: NotificationPayload[];
+  readonly notifier: ReturnType<typeof createNotifier>;
+}
+
+const makeNotifierHarness = (
+  testApp: TestApp,
+  options: { readonly url?: string | null; readonly failing?: boolean } = {},
+): NotifierHarness => {
+  if (options.url !== null) {
+    setSetting(
+      testApp.database.db,
+      "notify_url",
+      options.url ?? "https://ntfy.sh/halero",
+    );
+  }
+  const sent: NotificationPayload[] = [];
+  const notifier = createNotifier({
+    db: testApp.database.db,
+    notifyFetch: (_input, init) => {
+      sent.push(JSON.parse(String(init?.body)) as NotificationPayload);
+      return options.failing === true
+        ? Promise.reject(new Error("connect ECONNREFUSED"))
+        : Promise.resolve(new Response("ok", { status: 200 }));
+    },
+    log: () => {},
+  });
+  return { sent, notifier };
+};
+
+describe("createSyncRunner failure notifications", () => {
+  test("fires exactly when the streak reaches 3 and not on the 4th", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, { consecutiveFailures: 1 });
+    const harness = makeNotifierHarness(testApp);
+    const runner = createSyncRunner({
+      ...runnerContext(testApp, failingFetch),
+      notifier: harness.notifier,
+    });
+
+    await runner.runNow(CONNECTION_ID); // failures: 2
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(0);
+
+    await runner.runNow(CONNECTION_ID); // failures: 3 -> notify
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]?.connectorId).toBe(GOOGLE_CONNECTOR_ID);
+    expect(harness.sent[0]?.status).toBe("failing");
+    expect(harness.sent[0]?.message).toContain("3 times in a row");
+
+    await runner.runNow(CONNECTION_ID); // failures: 4 -> silent
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+  });
+
+  test("a success resets the streak, so the next 3rd failure refires", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, { consecutiveFailures: 2 });
+    const harness = makeNotifierHarness(testApp);
+    let healthy = false;
+    const switchableFetch: FetchLike = (input, init) =>
+      healthy ? happyFetch(input, init) : failingFetch(input, init);
+    const runner = createSyncRunner({
+      ...runnerContext(testApp, switchableFetch),
+      notifier: harness.notifier,
+    });
+
+    await runner.runNow(CONNECTION_ID); // failures: 3 -> notify
+    healthy = true;
+    await runner.runNow(CONNECTION_ID); // success -> reset to 0
+    healthy = false;
+    await runner.runNow(CONNECTION_ID); // 1
+    await runner.runNow(CONNECTION_ID); // 2
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+    await runner.runNow(CONNECTION_ID); // 3 -> notify again
+    await Bun.sleep(0);
+
+    expect(harness.sent).toHaveLength(2);
+  });
+
+  test("fires once when a run flips the connection to reauth_required", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, {
+      accessTokenExpiresAt: testApp.clock.value - 1,
+    });
+    const harness = makeNotifierHarness(testApp);
+    const deadRefreshFetch: FetchLike = (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/token") {
+        return Promise.resolve(json({ error: "invalid_grant" }, 400));
+      }
+      throw new Error(`unexpected Google call: ${url.toString()}`);
+    };
+    const runner = createSyncRunner({
+      ...runnerContext(testApp, deadRefreshFetch),
+      notifier: harness.notifier,
+    });
+
+    const summary = await runner.runNow(CONNECTION_ID);
+    await Bun.sleep(0);
+
+    expect(summary.status).toBe("failed");
+    expect(harness.sent).toHaveLength(1);
+    expect(harness.sent[0]?.status).toBe("reauth_required");
+    // A reauth_required connection cannot start another run, so the
+    // transition can only ever notify once.
+    const blocked = await runner.runNow(CONNECTION_ID).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(blocked).toBeInstanceOf(Error);
+    await Bun.sleep(0);
+    expect(harness.sent).toHaveLength(1);
+  });
+
+  test("stays silent when no notify_url is configured", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, { consecutiveFailures: 2 });
+    const harness = makeNotifierHarness(testApp, { url: null });
+    const runner = createSyncRunner({
+      ...runnerContext(testApp, failingFetch),
+      notifier: harness.notifier,
+    });
+
+    await runner.runNow(CONNECTION_ID); // failures: 3, but nowhere to send
+    await Bun.sleep(0);
+
+    expect(harness.sent).toHaveLength(0);
+  });
+
+  test("a broken notification target never affects the run", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp, { consecutiveFailures: 2 });
+    const harness = makeNotifierHarness(testApp, { failing: true });
+    const runner = createSyncRunner({
+      ...runnerContext(testApp, failingFetch),
+      notifier: harness.notifier,
+    });
+
+    const summary = await runner.runNow(CONNECTION_ID);
+    await Bun.sleep(0);
+
+    // The run finished and rescheduled normally despite the dead target.
+    expect(summary.status).toBe("failed");
+    expect(getConnection(testApp).consecutiveFailures).toBe(3);
+    expect(harness.sent).toHaveLength(1);
   });
 });
 

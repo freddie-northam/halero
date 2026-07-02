@@ -1,5 +1,6 @@
 import { connections } from "@halero/db";
 import { eq } from "drizzle-orm";
+import type { Notifier } from "../notifier";
 import { scheduleAfterRun } from "./backoff";
 import {
   type SyncEngineContext,
@@ -12,9 +13,14 @@ const ALREADY_RUNNING_MESSAGE =
   "A sync is already running for this connection. Wait for it to finish, " +
   "then try again.";
 
+/** The streak length that triggers a "sync keeps failing" notification. */
+const FAILURE_STREAK_THRESHOLD = 3;
+
 export interface SyncRunnerContext extends SyncEngineContext {
   /** Random source in [0, 1) for reschedule jitter; tests pin it. */
   readonly random: () => number;
+  /** Optional failure notifications; absent in most tests. */
+  readonly notifier?: Notifier;
 }
 
 /**
@@ -67,6 +73,62 @@ const rescheduleAfterRun = (
     .run();
 };
 
+/**
+ * Fires the operability notifications after a failed run. Exactly two
+ * triggers, both once per episode:
+ *
+ * - the failure streak REACHING the threshold (not every run past it;
+ *   a success resets the count, so the next streak notifies again),
+ * - the run flipping the connection to reauth_required. Runs only start
+ *   on active connections, so reaching that state here means THIS run
+ *   caused the transition: structurally once.
+ *
+ * Fire and forget: send() never rejects, and a dead notification target
+ * must never affect the sync path.
+ */
+const notifyAfterFailedRun = (
+  ctx: SyncRunnerContext,
+  connectionId: string,
+  summary: SyncRunSummary,
+): void => {
+  if (ctx.notifier === undefined || summary.status !== "failed") {
+    return;
+  }
+  const row = ctx.database.db
+    .select()
+    .from(connections)
+    .where(eq(connections.id, connectionId))
+    .get();
+  if (row === undefined) {
+    return;
+  }
+  const name = row.displayName ?? row.connectorId;
+  if (row.status === "reauth_required") {
+    void ctx.notifier.send({
+      title: "Halero needs a reconnect",
+      message:
+        `${name} needs a fresh sign-in before syncing can continue. ` +
+        "Open Settings and reconnect it.",
+      connectorId: row.connectorId,
+      status: "reauth_required",
+    });
+    return;
+  }
+  if (
+    row.status === "active" &&
+    row.consecutiveFailures === FAILURE_STREAK_THRESHOLD
+  ) {
+    void ctx.notifier.send({
+      title: "Halero sync keeps failing",
+      message:
+        `${name} has failed ${FAILURE_STREAK_THRESHOLD} times in a row. ` +
+        `Last error: ${summary.error ?? "unknown"}`,
+      connectorId: row.connectorId,
+      status: "failing",
+    });
+  }
+};
+
 export const createSyncRunner = (ctx: SyncRunnerContext): SyncRunner => {
   // One run per connection at a time, enforced in-process. Halero is a
   // single-process server, so a Set is the whole locking story; the DB
@@ -84,6 +146,7 @@ export const createSyncRunner = (ctx: SyncRunnerContext): SyncRunner => {
       const summary = await syncConnection(ctx, connectionId);
       rescheduleAfterRun(ctx, connectionId, summary.status);
       pruneSyncRuns(ctx.database.db, connectionId);
+      notifyAfterFailedRun(ctx, connectionId, summary);
       return summary;
     } finally {
       inFlight.delete(connectionId);

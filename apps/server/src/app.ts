@@ -13,6 +13,7 @@ import {
 import { csrfOriginCheck } from "./middleware/csrf";
 import { securityHeaders } from "./middleware/security-headers";
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
+import { createNotifier, type Notifier } from "./notifier";
 import { createSpaHandler, defaultWebDistDir } from "./spa";
 import { GOOGLE_CONNECTOR_ID } from "./sync/connection";
 import { createGoogleOauthRoutes } from "./sync/oauth-routes";
@@ -33,6 +34,11 @@ export interface CreateAppOptions {
    * drives so manual and scheduled syncs share one in-flight guard.
    */
   readonly syncRunner?: SyncRunner;
+  /**
+   * Notifier shared with the runner main.ts builds. Tests build one
+   * from a fake fetch via makeTestApp's notifyFetch option.
+   */
+  readonly notifier?: Notifier;
   /** Parent directory for export snapshots; tests inject to observe. */
   readonly exportSnapshotDir?: string;
   /**
@@ -47,6 +53,8 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   const { config, database, key } = options;
   const now = options.now ?? (() => Date.now());
   const outboundFetch = options.outboundFetch ?? fetch;
+  const notifier =
+    options.notifier ?? createNotifier({ db: database.db, notifyFetch: fetch });
   const syncRunner =
     options.syncRunner ??
     createSyncRunner({
@@ -55,6 +63,7 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
       now,
       outboundFetch,
       random: Math.random,
+      notifier,
     });
   const loginRateLimiter = createLoginRateLimiter();
   const app = new Hono<AppEnv>();
@@ -82,6 +91,7 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
       loginRateLimiter,
       outboundFetch,
       syncRunner,
+      notifier,
     }),
   );
   app.route(
