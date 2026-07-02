@@ -82,7 +82,25 @@ export interface RegisteredEntityKind extends EntityKindContribution {
   readonly moduleId: string;
 }
 
-export type KindRegistry = ReadonlyMap<string, RegisteredEntityKind>;
+/**
+ * Validated kind lookup. The private field makes the type nominal: a
+ * hand-built map can never pass as one, so every kind registry a host
+ * (or a test) hands the sync engine went through buildKindRegistry's
+ * boot validation.
+ */
+class ValidatedKindRegistry {
+  readonly #byKind: ReadonlyMap<string, RegisteredEntityKind>;
+
+  constructor(byKind: ReadonlyMap<string, RegisteredEntityKind>) {
+    this.#byKind = byKind;
+  }
+
+  get(kind: string): RegisteredEntityKind | undefined {
+    return this.#byKind.get(kind);
+  }
+}
+
+export type KindRegistry = ValidatedKindRegistry;
 
 /** The structural half of a module manifest that zod can check. */
 export const serverModuleManifestSchema = z.object({
@@ -170,7 +188,7 @@ export const buildKindRegistry = (
       });
     }
   }
-  return registry;
+  return new ValidatedKindRegistry(registry);
 };
 
 export interface ProducedKindRef {
