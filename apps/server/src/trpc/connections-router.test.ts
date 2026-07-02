@@ -342,4 +342,50 @@ describe("connections.google.syncNow", () => {
       error: null,
     });
   });
+
+  test("rejects readably while a sync is already running", async () => {
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    const gatedFetch: NonNullable<MakeTestAppOptions["googleFetch"]> = async (
+      input,
+      init,
+    ) => {
+      signalStarted();
+      await gate;
+      return happyGoogleFetch(input, init);
+    };
+    const testApp = makeTestApp({ googleFetch: gatedFetch });
+    const cookie = await completeSetup(testApp.app);
+    seedSyncableConnection(testApp);
+
+    const first = trpcMutation(
+      testApp.app,
+      "connections.google.syncNow",
+      {},
+      { cookie },
+    );
+    // Only proceed once the first run is provably in flight.
+    await started;
+    const second = await trpcMutation(
+      testApp.app,
+      "connections.google.syncNow",
+      {},
+      { cookie },
+    );
+
+    expect(second.status).toBe(412);
+    expect(await second.text()).toContain("already running");
+
+    releaseGate();
+    const firstRes = await first;
+    expect(firstRes.status).toBe(200);
+    const firstJson = (await firstRes.json()) as TrpcSuccess<SyncNowData>;
+    expect(firstJson.result.data.status).toBe("success");
+  });
 });

@@ -11,7 +11,6 @@ import {
   getGoogleConnection,
   parseConnectionConfig,
 } from "../google/connection";
-import { syncConnection } from "../google/sync";
 import { protectedProcedure, router } from "./init";
 
 const saveClientInput = z.object({
@@ -55,16 +54,10 @@ const googleRouter = router({
     }
     try {
       // Mid-run failures come back as a failed summary, never a throw;
-      // anything thrown here is a guard with a readable message.
-      return await syncConnection(
-        {
-          database: { db: ctx.db, sqlite: ctx.sqlite },
-          key: ctx.key,
-          now: ctx.now,
-          googleFetch: ctx.googleFetch,
-        },
-        connection.id,
-      );
+      // anything thrown here is a guard (including "already running")
+      // with a readable message. The shared runner keeps manual syncs
+      // on the exact same path as scheduled ones.
+      return await ctx.syncRunner.runNow(connection.id);
     } catch (error) {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
