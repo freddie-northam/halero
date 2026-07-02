@@ -1,0 +1,26 @@
+{
+  "name": "halero",
+  "private": true,
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "modules/*",
+    "connectors/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "build": "bun run --filter '@halero/web' build",
+    "start": "bun run apps/server/src/main.ts",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "bun run --filter '*' typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.2",
+    "@types/bun": "^1.3.14",
+    "typescript": "^6.0.3"
+  }
+}

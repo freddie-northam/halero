@@ -1,0 +1,27 @@
+{
+  "name": "@halero/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./trpc": "./src/trpc/router.ts"
+  },
+  "scripts": {
+    "dev": "bun run --hot src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@halero/connector-google-calendar": "workspace:*",
+    "@halero/connector-sdk": "workspace:*",
+    "@halero/core": "workspace:*",
+    "@halero/db": "workspace:*",
+    "@halero/module-calendar": "workspace:*",
+    "@halero/module-sdk": "workspace:*",
+    "@halero/schemas": "workspace:*",
+    "@trpc/server": "^11.10.0",
+    "croner": "^10.0.1",
+    "drizzle-orm": "^0.44.7",
+    "hono": "^4.11.9",
+    "zod": "^4.4.3"
+  }
+}

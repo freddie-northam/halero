@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build outputs
+dist/
+build/
+
+# environment
+.env
+.env.*
+!.env.example
+
+# runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# scratch
+.superpowers/
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp

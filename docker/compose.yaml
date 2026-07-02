@@ -1,0 +1,25 @@
+# Run from the repository root:
+#   docker compose -f docker/compose.yaml up -d --build
+name: halero
+
+services:
+  halero:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: halero
+    restart: unless-stopped
+    ports:
+      - "4253:4253"
+    volumes:
+      - halero-data:/data
+    # Set HALERO_BASE_URL when Halero is reached through a reverse proxy
+    # or Tailscale Serve; it must match the address in the browser.
+    # environment:
+    #   HALERO_BASE_URL: https://halero.example.com
+
+volumes:
+  halero-data:
+    # Pinned so the volume is literally "halero-data" (no project prefix),
+    # matching the backup and restore docs.
+    name: halero-data
