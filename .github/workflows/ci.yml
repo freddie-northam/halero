@@ -35,10 +35,12 @@ jobs:
         run: docker build -f docker/Dockerfile -t halero:ci .
 
       # Zero native npm modules is a product invariant: the runtime
-      # image must contain no compiled .node artifacts.
+      # image must contain no compiled .node artifacts. Scan the whole
+      # app tree, not just the root node_modules: Bun nests per-package
+      # node_modules trees when workspace dependency versions conflict.
       - name: Assert no native modules in the image
         run: |
-          count=$(docker run --rm --entrypoint /bin/sh halero:ci -c 'find /app/node_modules -name "*.node" | tee /dev/stderr | wc -l')
+          count=$(docker run --rm --entrypoint /bin/sh halero:ci -c 'find /app -name "*.node" | tee /dev/stderr | wc -l')
           test "$count" -eq 0
 
       - name: Run the image and probe /healthz

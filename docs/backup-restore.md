@@ -106,6 +106,12 @@ that migration.
 
 ## Rollback
 
+If the service restarts over and over after an upgrade, read the log for a
+migration error before anything else: both launchd's `KeepAlive` and
+compose's `restart: unless-stopped` relaunch a server that exits with a
+failed migration or a newer-schema refusal, so what should be one clean
+error can look like flapping.
+
 Going back to an older version needs two things, because an older server
 refuses to open a newer schema (it exits with an error naming the unknown
 migrations and the most recent snapshot):
