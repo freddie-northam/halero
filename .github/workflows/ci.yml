@@ -25,3 +25,32 @@ jobs:
 
       - name: Test
         run: bun test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t halero:ci .
+
+      # Zero native npm modules is a product invariant: the runtime
+      # image must contain no compiled .node artifacts.
+      - name: Assert no native modules in the image
+        run: |
+          count=$(docker run --rm --entrypoint /bin/sh halero:ci -c 'find /app/node_modules -name "*.node" | tee /dev/stderr | wc -l')
+          test "$count" -eq 0
+
+      - name: Run the image and probe /healthz
+        run: |
+          docker run -d --name halero -p 4253:4253 halero:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4253/healthz; then
+              echo
+              docker rm -f halero
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs halero
+          exit 1
