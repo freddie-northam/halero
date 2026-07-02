@@ -2,9 +2,9 @@
 // spine + calendar_events satellite shape. No DB, no fetch: unit-testable
 // on plain objects.
 
+import { startOfDayInZone } from "@halero/connector-sdk";
 import type { SpineInput } from "@halero/core";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
-import { startOfDayInZone } from "../time/zone";
 import { asRecord, stringOrNull } from "./common";
 
 export const UNTITLED_EVENT_TITLE = "(untitled event)";

@@ -4,7 +4,7 @@ import {
   dateStringInZone,
   dayBoundsInZone,
   startOfDayInZone,
-} from "./zone";
+} from "./time";
 
 const HOUR = 3_600_000;
 

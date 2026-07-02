@@ -1,6 +1,7 @@
 // Timezone arithmetic built on Intl only (no timezone dependencies).
-// Used for all-day event bounds and agenda day grouping, always in the
-// instance's home timezone.
+// Lives in the SDK because connectors need it to map all-day items to
+// home-timezone spine bounds, and hosts need the same math for day
+// grouping; keeping one copy keeps the two in agreement.
 
 const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

@@ -14,6 +14,7 @@
       "name": "@halero/server",
       "version": "0.1.0",
       "dependencies": {
+        "@halero/connector-sdk": "workspace:*",
         "@halero/core": "workspace:*",
         "@halero/db": "workspace:*",
         "@halero/schemas": "workspace:*",
@@ -47,6 +48,13 @@
         "happy-dom": "^20.10.6",
         "tailwindcss": "^4.3.2",
         "vite": "^8.1.2",
+      },
+    },
+    "packages/connector-sdk": {
+      "name": "@halero/connector-sdk",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.4.3",
       },
     },
     "packages/core": {
@@ -135,6 +143,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.11", "", {}, "sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg=="],
 
     "@fontsource-variable/inter": ["@fontsource-variable/inter@5.2.8", "", {}, "sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ=="],
+
+    "@halero/connector-sdk": ["@halero/connector-sdk@workspace:packages/connector-sdk"],
 
     "@halero/core": ["@halero/core@workspace:packages/core"],
 

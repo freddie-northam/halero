@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { startOfDayInZone } from "@halero/connector-sdk";
 import { calendarEvents, entities } from "@halero/db";
 import {
   completeSetup,
@@ -9,7 +10,6 @@ import {
   trpcMutation,
   trpcQuery,
 } from "../test-utils";
-import { startOfDayInZone } from "../time/zone";
 
 // The test clock (1_700_000_000_000) is 2023-11-14T22:13:20Z; London is on
 // GMT in November, so "today" there is 2023-11-14.

@@ -1,14 +1,14 @@
+import {
+  addDaysToDateString,
+  dateStringInZone,
+  startOfDayInZone,
+} from "@halero/connector-sdk";
 import { calendarEvents, entities } from "@halero/db";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
 import { UNTITLED_EVENT_TITLE } from "../google/map-event";
 import { getSetting } from "../settings";
-import {
-  addDaysToDateString,
-  dateStringInZone,
-  startOfDayInZone,
-} from "../time/zone";
 import { protectedProcedure, router } from "./init";
 
 const DEFAULT_AGENDA_DAYS = 7;
