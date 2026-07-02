@@ -1,11 +1,11 @@
 import { connections } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { scheduleAfterRun } from "./backoff";
 import {
   type SyncEngineContext,
   type SyncRunSummary,
   syncConnection,
-} from "../google/sync";
-import { scheduleAfterRun } from "./backoff";
+} from "./engine";
 import { pruneSyncRuns } from "./retention";
 
 const ALREADY_RUNNING_MESSAGE =

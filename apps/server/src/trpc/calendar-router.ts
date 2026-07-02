@@ -4,10 +4,9 @@ import {
   startOfDayInZone,
 } from "@halero/connector-sdk";
 import { calendarEvents, entities } from "@halero/db";
-import { CALENDAR_EVENT_KIND } from "@halero/schemas";
+import { CALENDAR_EVENT_KIND, UNTITLED_EVENT_TITLE } from "@halero/schemas";
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { z } from "zod";
-import { UNTITLED_EVENT_TITLE } from "../google/map-event";
 import { getSetting } from "../settings";
 import { protectedProcedure, router } from "./init";
 

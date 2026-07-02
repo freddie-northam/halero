@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
-import { saveGoogleClient } from "../google/client-config";
-import { GOOGLE_CONNECTOR_ID } from "../google/common";
 import { makeTestApp, type TestApp } from "../test-utils";
+import { saveGoogleClient } from "./client-config";
+import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { createSyncRunner, type SyncRunnerContext } from "./runner";
 
 const CONNECTION_ID = "conn-1";
@@ -108,13 +108,13 @@ const failingFetch: FetchLike = () =>
 
 const runnerContext = (
   testApp: TestApp,
-  googleFetch: FetchLike,
+  outboundFetch: FetchLike,
   random: () => number = () => 0.5,
 ): SyncRunnerContext => ({
   database: testApp.database,
   key: testApp.key,
   now: () => testApp.clock.value,
-  googleFetch,
+  outboundFetch,
   random,
 });
 

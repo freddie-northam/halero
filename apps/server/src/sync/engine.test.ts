@@ -11,8 +11,8 @@ import {
 import { and, eq } from "drizzle-orm";
 import { makeTestApp, type TestApp } from "../test-utils";
 import { saveGoogleClient } from "./client-config";
-import { GOOGLE_CONNECTOR_ID } from "./common";
-import { type SyncEngineContext, syncConnection } from "./sync";
+import { GOOGLE_CONNECTOR_ID } from "./connection";
+import { type SyncEngineContext, syncConnection } from "./engine";
 
 const CONNECTION_ID = "conn-1";
 const ACCOUNT_KEY = "google-sub-1";
@@ -60,12 +60,12 @@ const seedConnection = (testApp: TestApp, options: SeedOptions = {}): void => {
 
 const engineContext = (
   testApp: TestApp,
-  googleFetch: (input: string | URL, init?: RequestInit) => Promise<Response>,
+  outboundFetch: (input: string | URL, init?: RequestInit) => Promise<Response>,
 ): SyncEngineContext => ({
   database: testApp.database,
   key: testApp.key,
   now: () => testApp.clock.value,
-  googleFetch,
+  outboundFetch,
 });
 
 interface GoogleCall {
@@ -523,6 +523,80 @@ describe("syncConnection incremental sync", () => {
     expect(summary.deletes).toBe(0);
     expect(getEntityFor(testApp, "evt-9").deletedAt).toBeNull();
     expect(getSatelliteFor(testApp, "evt-9")?.calendarId).toBe("work");
+  });
+});
+
+describe("syncConnection stream provenance", () => {
+  test("records the stream that saw each ref", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+
+    await runInitialSync(testApp);
+
+    expect(getRef(testApp, "evt-1")?.stream).toBe("primary");
+    expect(getRef(testApp, "evt-2")?.stream).toBe("primary");
+  });
+
+  test("the delete guard follows the ref's stream, not the satellite", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const initial = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["work", "primary"]));
+      }
+      if (isEvents(url, "work")) {
+        return json({
+          items: [timedEvent("evt-9", '"e9-v1"', "Planning")],
+          nextSyncToken: "work-sync-1",
+        });
+      }
+      if (isEvents(url, "primary")) {
+        return json({ items: [], nextSyncToken: "primary-sync-1" });
+      }
+      return null;
+    });
+    await syncConnection(
+      engineContext(testApp, initial.fetchLike),
+      CONNECTION_ID,
+    );
+    expect(getRef(testApp, "evt-9")?.stream).toBe("work");
+    // Corrupt the satellite so it CLAIMS the event lives on "primary".
+    // The guard must ignore it: provenance lives on the ref now.
+    const ref = getRef(testApp, "evt-9");
+    if (ref === undefined) {
+      throw new Error("expected a ref for evt-9");
+    }
+    testApp.database.db
+      .update(calendarEvents)
+      .set({ calendarId: "primary" })
+      .where(eq(calendarEvents.entityId, ref.entityId))
+      .run();
+
+    const second = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["work", "primary"]));
+      }
+      if (isEvents(url, "work")) {
+        return json({
+          items: [timedEvent("evt-9", '"e9-v1"', "Planning")],
+          nextSyncToken: "work-sync-2",
+        });
+      }
+      if (isEvents(url, "primary")) {
+        return json({
+          items: [{ id: "evt-9", etag: '"e9-v2"', status: "cancelled" }],
+          nextSyncToken: "primary-sync-2",
+        });
+      }
+      return null;
+    });
+    const summary = await syncConnection(
+      engineContext(testApp, second.fetchLike),
+      CONNECTION_ID,
+    );
+
+    expect(summary.deletes).toBe(0);
+    expect(getEntityFor(testApp, "evt-9").deletedAt).toBeNull();
   });
 });
 

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { asRecord } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
 import { deleteSetting, getSetting, setSetting } from "../settings";
-import { asRecord } from "./common";
 
 type Db = HaleroDatabase["db"];
 

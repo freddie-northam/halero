@@ -16,7 +16,7 @@ const syncRunner = createSyncRunner({
   database,
   key,
   now,
-  googleFetch: fetch,
+  outboundFetch: fetch,
   random: Math.random,
 });
 const app = createApp({ config, database, key, syncRunner });

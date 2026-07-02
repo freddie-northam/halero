@@ -1,20 +1,24 @@
+import { googleCalendarConnector } from "@halero/connector-google-calendar";
+import { asRecord, stringOrNull } from "@halero/connector-sdk";
 import { encryptCredentials, ulid } from "@halero/core";
 import { connections, type HaleroDatabase } from "@halero/db";
 import { eq } from "drizzle-orm";
-import { asRecord, GOOGLE_CONNECTOR_ID, stringOrNull } from "./common";
 
 type Db = HaleroDatabase["db"];
 
 export type ConnectionRow = typeof connections.$inferSelect;
 
+/** The single Google Calendar connector id, from its manifest. */
+export const GOOGLE_CONNECTOR_ID = googleCalendarConnector.manifest.id;
+
 /** Stored in the connection's config column, for display and account keying. */
-export interface GoogleConnectionConfig {
+export interface ConnectionIdentity {
   readonly email: string | null;
   readonly accountKey: string;
 }
 
 /** Stored AES-GCM encrypted in the connection's credentials_enc column. */
-export interface GoogleTokens {
+export interface StoredOauthTokens {
   readonly refreshToken: string;
   readonly accessToken: string;
   readonly accessTokenExpiresAt: number;
@@ -29,7 +33,7 @@ export const getGoogleConnection = (db: Db): ConnectionRow | null =>
 
 export const parseConnectionConfig = (
   row: ConnectionRow,
-): GoogleConnectionConfig | null => {
+): ConnectionIdentity | null => {
   if (row.config === null) {
     return null;
   }
@@ -45,24 +49,35 @@ export const parseConnectionConfig = (
   }
 };
 
+export interface UpsertConnectionTarget {
+  readonly connectorId: string;
+  readonly displayName: string;
+}
+
 /**
- * There is a single Google Calendar connection per instance. Reconnecting
- * updates that row in place; identity stays keyed to the Google account
- * (`accountKey` = the id_token `sub`), so existing external refs survive.
+ * There is a single connection per connector in v0.1. Reconnecting
+ * updates that row in place; identity stays keyed to the provider
+ * account (`accountKey`, e.g. the id_token `sub`), so existing external
+ * refs survive.
  */
-export const upsertGoogleConnection = (
+export const upsertConnection = (
   db: Db,
   key: Uint8Array,
   now: number,
-  identity: GoogleConnectionConfig,
-  tokens: GoogleTokens,
+  target: UpsertConnectionTarget,
+  identity: ConnectionIdentity,
+  tokens: StoredOauthTokens,
 ): void => {
   const config = JSON.stringify(identity);
   const credentialsEnc = Buffer.from(
     encryptCredentials(key, JSON.stringify(tokens)),
   );
-  const existing = getGoogleConnection(db);
-  if (existing !== null) {
+  const existing = db
+    .select()
+    .from(connections)
+    .where(eq(connections.connectorId, target.connectorId))
+    .get();
+  if (existing !== undefined) {
     // A fresh sign-in wipes the failure history: the scheduler's status
     // filter never reschedules reauth_required rows, so this reset (with
     // next_sync_at = now) is what makes the connection due again.
@@ -82,8 +97,8 @@ export const upsertGoogleConnection = (
   db.insert(connections)
     .values({
       id: ulid(now),
-      connectorId: GOOGLE_CONNECTOR_ID,
-      displayName: "Google Calendar",
+      connectorId: target.connectorId,
+      displayName: target.displayName,
       config,
       credentialsEnc,
       status: "active",

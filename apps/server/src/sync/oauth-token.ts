@@ -1,24 +1,19 @@
+import { asRecord, type FetchLike, stringOrNull } from "@halero/connector-sdk";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections, type HaleroDatabase } from "@halero/db";
 import { eq } from "drizzle-orm";
 import { readGoogleClient } from "./client-config";
-import {
-  asRecord,
-  type FetchLike,
-  GOOGLE_TOKEN_URL,
-  stringOrNull,
-} from "./common";
-import type { ConnectionRow, GoogleTokens } from "./connection";
-
-export type { ConnectionRow } from "./connection";
+import type { ConnectionRow, StoredOauthTokens } from "./connection";
 
 type Db = HaleroDatabase["db"];
 
-export interface GoogleTokenContext {
+export interface OauthTokenContext {
   readonly db: Db;
   readonly key: Uint8Array;
   readonly now: () => number;
-  readonly googleFetch: FetchLike;
+  readonly outboundFetch: FetchLike;
+  /** From the connector's declarative OAuth2Spec. */
+  readonly tokenEndpoint: string;
 }
 
 const EXPIRY_MARGIN_MS = 60_000;
@@ -36,7 +31,7 @@ const CLIENT_MISSING_MESSAGE =
   "The Google OAuth client is not configured. Add the client ID and " +
   "secret in Settings.";
 
-const parseStoredTokens = (raw: string): GoogleTokens | null => {
+const parseStoredTokens = (raw: string): StoredOauthTokens | null => {
   try {
     const record = asRecord(JSON.parse(raw));
     if (record === null) {
@@ -59,7 +54,7 @@ const parseStoredTokens = (raw: string): GoogleTokens | null => {
 };
 
 const requestRefresh = async (
-  ctx: GoogleTokenContext,
+  ctx: OauthTokenContext,
   refreshToken: string,
 ): Promise<Response | null> => {
   const client = readGoogleClient(ctx.db, ctx.key);
@@ -73,7 +68,7 @@ const requestRefresh = async (
     grant_type: "refresh_token",
   });
   return ctx
-    .googleFetch(GOOGLE_TOKEN_URL, {
+    .outboundFetch(ctx.tokenEndpoint, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -82,9 +77,9 @@ const requestRefresh = async (
 };
 
 const refreshAccessToken = async (
-  ctx: GoogleTokenContext,
+  ctx: OauthTokenContext,
   connection: ConnectionRow,
-  stored: GoogleTokens,
+  stored: StoredOauthTokens,
 ): Promise<string> => {
   const res = await requestRefresh(ctx, stored.refreshToken);
   if (res === null) {
@@ -92,8 +87,9 @@ const refreshAccessToken = async (
   }
   const record = asRecord(await res.json().catch(() => null));
   if (!res.ok) {
-    // Google reports a revoked or expired refresh token as invalid_grant.
-    // Only a fresh consent flow can fix that, so surface it as a state.
+    // The provider reports a revoked or expired refresh token as
+    // invalid_grant. Only a fresh consent flow can fix that, so surface
+    // it as a state.
     if (record !== null && stringOrNull(record.error) === "invalid_grant") {
       ctx.db
         .update(connections)
@@ -113,8 +109,8 @@ const refreshAccessToken = async (
   if (accessToken === null || expiresInSec === null) {
     throw new Error(TRANSIENT_MESSAGE);
   }
-  const updated: GoogleTokens = {
-    // Google may rotate the refresh token; keep the old one otherwise.
+  const updated: StoredOauthTokens = {
+    // The provider may rotate the refresh token; keep the old one otherwise.
     refreshToken:
       (record === null ? null : stringOrNull(record.refresh_token)) ??
       stored.refreshToken,
@@ -133,10 +129,11 @@ const refreshAccessToken = async (
   return accessToken;
 };
 
-export interface GetGoogleAccessTokenOptions {
+export interface GetOauthAccessTokenOptions {
   /**
-   * Skip the cached token and refresh immediately. Used after Google
-   * answers a request with 401 even though the token looked fresh.
+   * Skip the cached token and refresh immediately. Used after the
+   * provider answers a request with 401 even though the token looked
+   * fresh.
    */
   readonly forceRefresh?: boolean;
 }
@@ -146,10 +143,10 @@ export interface GetGoogleAccessTokenOptions {
  * re-encrypting the stored credentials) when the cached one is within
  * 60 seconds of expiry.
  */
-export const getGoogleAccessToken = async (
-  ctx: GoogleTokenContext,
+export const getOauthAccessToken = async (
+  ctx: OauthTokenContext,
   connection: ConnectionRow,
-  options: GetGoogleAccessTokenOptions = {},
+  options: GetOauthAccessTokenOptions = {},
 ): Promise<string> => {
   if (connection.credentialsEnc === null) {
     throw new Error(MISSING_CREDENTIALS_MESSAGE);

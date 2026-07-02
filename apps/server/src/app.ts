@@ -1,14 +1,16 @@
+import type { FetchLike } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
 import { Hono } from "hono";
 import { createLoginRateLimiter } from "./auth";
 import { resolveBaseUrl } from "./base-url";
 import type { HaleroConfig } from "./config";
-import type { FetchLike } from "./google/common";
-import { createGoogleOauthRoutes } from "./google/oauth-routes";
 import { csrfOriginCheck } from "./middleware/csrf";
 import { securityHeaders } from "./middleware/security-headers";
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
 import { createSpaHandler, defaultWebDistDir } from "./spa";
+import { GOOGLE_CONNECTOR_ID } from "./sync/connection";
+import { createGoogleOauthRoutes } from "./sync/oauth-routes";
+import { requireConnector } from "./sync/registry";
 import { createSyncRunner, type SyncRunner } from "./sync/runner";
 import { createTrpcHandler } from "./trpc/handler";
 
@@ -18,8 +20,8 @@ export interface CreateAppOptions {
   readonly key: Uint8Array;
   readonly webDistDir?: string;
   readonly now?: () => number;
-  /** Fetch used for calls to Google; tests inject a fake. */
-  readonly googleFetch?: FetchLike;
+  /** Fetch used for outbound provider calls; tests inject a fake. */
+  readonly outboundFetch?: FetchLike;
   /**
    * Shared sync run path. main.ts passes the instance its scheduler
    * drives so manual and scheduled syncs share one in-flight guard.
@@ -30,10 +32,16 @@ export interface CreateAppOptions {
 export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   const { config, database, key } = options;
   const now = options.now ?? (() => Date.now());
-  const googleFetch = options.googleFetch ?? fetch;
+  const outboundFetch = options.outboundFetch ?? fetch;
   const syncRunner =
     options.syncRunner ??
-    createSyncRunner({ database, key, now, googleFetch, random: Math.random });
+    createSyncRunner({
+      database,
+      key,
+      now,
+      outboundFetch,
+      random: Math.random,
+    });
   const loginRateLimiter = createLoginRateLimiter();
   const app = new Hono<AppEnv>();
 
@@ -53,13 +61,20 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
       key,
       now,
       loginRateLimiter,
-      googleFetch,
+      outboundFetch,
       syncRunner,
     }),
   );
   app.route(
     "/api/oauth/google",
-    createGoogleOauthRoutes({ config, database, key, now, googleFetch }),
+    createGoogleOauthRoutes({
+      config,
+      database,
+      key,
+      now,
+      outboundFetch,
+      connector: requireConnector(GOOGLE_CONNECTOR_ID),
+    }),
   );
   app.get("*", createSpaHandler(options.webDistDir ?? defaultWebDistDir()));
 

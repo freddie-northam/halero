@@ -25,7 +25,7 @@ export interface TestApp {
 export interface MakeTestAppOptions {
   readonly baseUrl?: string;
   readonly webDistDir?: string;
-  readonly googleFetch?: (
+  readonly outboundFetch?: (
     input: string | URL,
     init?: RequestInit,
   ) => Promise<Response>;
@@ -54,7 +54,7 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
     key: TEST_KEY,
     webDistDir: options.webDistDir ?? join(dir, "missing-dist"),
     now: () => clock.value,
-    googleFetch: options.googleFetch,
+    outboundFetch: options.outboundFetch,
   });
   return { app, database, dir, clock, key: TEST_KEY };
 };

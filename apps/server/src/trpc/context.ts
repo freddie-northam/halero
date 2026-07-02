@@ -1,7 +1,7 @@
+import type { FetchLike } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
 import type { LoginRateLimiter, SessionRecord } from "../auth";
 import type { HaleroConfig } from "../config";
-import type { FetchLike } from "../google/common";
 import type { SyncRunner } from "../sync/runner";
 
 export interface TrpcContext {
@@ -13,7 +13,7 @@ export interface TrpcContext {
   readonly sessionToken: string | null;
   readonly now: () => number;
   readonly loginRateLimiter: LoginRateLimiter;
-  readonly googleFetch: FetchLike;
+  readonly outboundFetch: FetchLike;
   /** Shared with the scheduler: one run path, one in-flight guard. */
   readonly syncRunner: SyncRunner;
   readonly setSessionCookie: (token: string) => void;

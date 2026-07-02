@@ -4,7 +4,8 @@ import { connections } from "@halero/db";
 import { eq } from "drizzle-orm";
 import { makeTestApp, type TestApp } from "../test-utils";
 import { saveGoogleClient } from "./client-config";
-import { type ConnectionRow, getGoogleAccessToken } from "./token";
+import type { ConnectionRow } from "./connection";
+import { getOauthAccessToken } from "./oauth-token";
 
 interface StoredCredentials {
   readonly refreshToken: string;
@@ -55,17 +56,18 @@ const reloadConnection = (testApp: TestApp): ConnectionRow => {
 };
 
 const failingFetch = (): Promise<Response> => {
-  throw new Error("googleFetch must not be called for a fresh token");
+  throw new Error("outboundFetch must not be called for a fresh token");
 };
 
 const makeContext = (
   testApp: TestApp,
-  googleFetch: (input: string | URL, init?: RequestInit) => Promise<Response>,
+  outboundFetch: (input: string | URL, init?: RequestInit) => Promise<Response>,
 ) => ({
   db: testApp.database.db,
   key: testApp.key,
   now: () => testApp.clock.value,
-  googleFetch,
+  outboundFetch,
+  tokenEndpoint: "https://oauth2.googleapis.com/token",
 });
 
 const rejectionOf = async (promise: Promise<unknown>): Promise<Error> => {
@@ -79,7 +81,7 @@ const rejectionOf = async (promise: Promise<unknown>): Promise<Error> => {
   return outcome;
 };
 
-describe("getGoogleAccessToken", () => {
+describe("getOauthAccessToken", () => {
   test("returns the cached token while it is more than 60s from expiry", async () => {
     const testApp = makeTestApp();
     const row = seedConnection(testApp, {
@@ -88,7 +90,7 @@ describe("getGoogleAccessToken", () => {
       accessTokenExpiresAt: testApp.clock.value + 10 * 60 * 1000,
     });
 
-    const token = await getGoogleAccessToken(
+    const token = await getOauthAccessToken(
       makeContext(testApp, failingFetch),
       row,
     );
@@ -104,7 +106,7 @@ describe("getGoogleAccessToken", () => {
       accessTokenExpiresAt: testApp.clock.value + 30 * 1000,
     });
     const bodies: string[] = [];
-    const googleFetch = (
+    const outboundFetch = (
       _input: string | URL,
       init?: RequestInit,
     ): Promise<Response> => {
@@ -118,8 +120,8 @@ describe("getGoogleAccessToken", () => {
       );
     };
 
-    const token = await getGoogleAccessToken(
-      makeContext(testApp, googleFetch),
+    const token = await getOauthAccessToken(
+      makeContext(testApp, outboundFetch),
       row,
     );
 
@@ -149,7 +151,7 @@ describe("getGoogleAccessToken", () => {
       accessToken: "ya29.cached",
       accessTokenExpiresAt: testApp.clock.value + 10 * 60 * 1000,
     });
-    const googleFetch = (): Promise<Response> =>
+    const outboundFetch = (): Promise<Response> =>
       Promise.resolve(
         Response.json({
           access_token: "ya29.forced",
@@ -158,8 +160,8 @@ describe("getGoogleAccessToken", () => {
         }),
       );
 
-    const token = await getGoogleAccessToken(
-      makeContext(testApp, googleFetch),
+    const token = await getOauthAccessToken(
+      makeContext(testApp, outboundFetch),
       row,
       { forceRefresh: true },
     );
@@ -174,7 +176,7 @@ describe("getGoogleAccessToken", () => {
       accessToken: "ya29.stale",
       accessTokenExpiresAt: testApp.clock.value - 1,
     });
-    const googleFetch = (): Promise<Response> =>
+    const outboundFetch = (): Promise<Response> =>
       Promise.resolve(
         new Response(JSON.stringify({ error: "invalid_grant" }), {
           status: 400,
@@ -182,7 +184,7 @@ describe("getGoogleAccessToken", () => {
       );
 
     const error = await rejectionOf(
-      getGoogleAccessToken(makeContext(testApp, googleFetch), row),
+      getOauthAccessToken(makeContext(testApp, outboundFetch), row),
     );
 
     expect(error.message).toContain("econnect");
@@ -197,11 +199,11 @@ describe("getGoogleAccessToken", () => {
       accessToken: "ya29.stale",
       accessTokenExpiresAt: testApp.clock.value - 1,
     });
-    const googleFetch = (): Promise<Response> =>
+    const outboundFetch = (): Promise<Response> =>
       Promise.resolve(new Response("upstream exploded", { status: 500 }));
 
     const error = await rejectionOf(
-      getGoogleAccessToken(makeContext(testApp, googleFetch), row),
+      getOauthAccessToken(makeContext(testApp, outboundFetch), row),
     );
 
     expect(error.message).not.toContain("1//refresh-a");

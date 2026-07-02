@@ -38,7 +38,7 @@ interface RecordedCall {
 }
 
 interface GoogleFetchStub {
-  readonly fetchImpl: NonNullable<MakeTestAppOptions["googleFetch"]>;
+  readonly fetchImpl: NonNullable<MakeTestAppOptions["outboundFetch"]>;
   readonly calls: RecordedCall[];
 }
 
@@ -225,7 +225,7 @@ describe("GET /api/oauth/google/callback", () => {
     const google = okTokenFetch();
     const { app, database, clock, key, cookie } = await readyApp({
       baseUrl: "https://halero.example.com",
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     const start = await requestStart(app, cookie);
     const state = stateFromLocation(start);
@@ -270,7 +270,7 @@ describe("GET /api/oauth/google/callback", () => {
   test("rejects a state that does not match", async () => {
     const google = okTokenFetch();
     const { app, database, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     await requestStart(app, cookie);
 
@@ -289,7 +289,7 @@ describe("GET /api/oauth/google/callback", () => {
   test("rejects an expired state", async () => {
     const google = okTokenFetch();
     const { app, database, clock, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     const start = await requestStart(app, cookie);
     const state = stateFromLocation(start);
@@ -308,7 +308,7 @@ describe("GET /api/oauth/google/callback", () => {
   test("rejects a reused state", async () => {
     const google = okTokenFetch();
     const { app, database, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     const start = await requestStart(app, cookie);
     const state = stateFromLocation(start);
@@ -333,7 +333,7 @@ describe("GET /api/oauth/google/callback", () => {
         }),
     );
     const { app, database, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     const start = await requestStart(app, cookie);
     const state = stateFromLocation(start);
@@ -354,7 +354,7 @@ describe("GET /api/oauth/google/callback", () => {
   test("handles a token response without a refresh token", async () => {
     const google = okTokenFetch({ refresh_token: undefined });
     const { app, database, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
     const start = await requestStart(app, cookie);
     const state = stateFromLocation(start);
@@ -390,7 +390,7 @@ describe("GET /api/oauth/google/callback", () => {
       ),
     );
     const { app, database, clock, key, cookie } = await readyApp({
-      googleFetch: google.fetchImpl,
+      outboundFetch: google.fetchImpl,
     });
 
     const firstStart = await requestStart(app, cookie);

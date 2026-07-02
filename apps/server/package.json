@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@halero/connector-google-calendar": "workspace:*",
     "@halero/connector-sdk": "workspace:*",
     "@halero/core": "workspace:*",
     "@halero/db": "workspace:*",

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
-import { saveGoogleClient } from "../google/client-config";
+import { saveGoogleClient } from "../sync/client-config";
 import {
   completeSetup,
   type MakeTestAppOptions,
@@ -314,7 +314,7 @@ const seedSyncableConnection = (testApp: TestApp, status = "active"): void => {
     .run();
 };
 
-const happyGoogleFetch: NonNullable<MakeTestAppOptions["googleFetch"]> = (
+const happyGoogleFetch: NonNullable<MakeTestAppOptions["outboundFetch"]> = (
   input,
 ) => {
   const url = new URL(String(input));
@@ -390,7 +390,7 @@ describe("connections.google.syncNow", () => {
   });
 
   test("runs a sync and returns the run's counts", async () => {
-    const testApp = makeTestApp({ googleFetch: happyGoogleFetch });
+    const testApp = makeTestApp({ outboundFetch: happyGoogleFetch });
     const cookie = await completeSetup(testApp.app);
     seedSyncableConnection(testApp);
 
@@ -420,7 +420,7 @@ describe("connections.google.syncNow", () => {
     const started = new Promise<void>((resolve) => {
       signalStarted = resolve;
     });
-    const gatedFetch: NonNullable<MakeTestAppOptions["googleFetch"]> = async (
+    const gatedFetch: NonNullable<MakeTestAppOptions["outboundFetch"]> = async (
       input,
       init,
     ) => {
@@ -428,7 +428,7 @@ describe("connections.google.syncNow", () => {
       await gate;
       return happyGoogleFetch(input, init);
     };
-    const testApp = makeTestApp({ googleFetch: gatedFetch });
+    const testApp = makeTestApp({ outboundFetch: gatedFetch });
     const cookie = await completeSetup(testApp.app);
     seedSyncableConnection(testApp);
 

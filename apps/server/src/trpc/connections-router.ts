@@ -8,11 +8,8 @@ import {
   isGoogleClientConfigured,
   isHttpsOk,
   saveGoogleClient,
-} from "../google/client-config";
-import {
-  getGoogleConnection,
-  parseConnectionConfig,
-} from "../google/connection";
+} from "../sync/client-config";
+import { getGoogleConnection, parseConnectionConfig } from "../sync/connection";
 import type { TrpcContext } from "./context";
 import { protectedProcedure, router } from "./init";
 
