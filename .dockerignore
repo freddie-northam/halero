@@ -1,0 +1,25 @@
+# Keep the build context small and deterministic: dependencies and
+# build outputs are produced inside the image, never copied in.
+.git
+.github
+.superpowers
+.vscode
+.idea
+node_modules
+**/node_modules
+**/dist
+**/build
+
+# Runtime data must never end up in an image.
+data
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+
+docker
+docs
+README.md
+*.log
+.DS_Store
