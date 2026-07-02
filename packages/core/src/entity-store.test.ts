@@ -65,17 +65,28 @@ describe("upsertExternal", () => {
     expect(entity?.deletedAt).toBeNull();
   });
 
-  test("equal non-null version is a no-op that leaves updated_at untouched", () => {
+  test("equal non-null version leaves updated_at untouched but bumps last_seen_at", () => {
     const { handle, store } = makeStore();
     const { entityId } = store.upsertExternal(eventInput());
     handle.sqlite.run("UPDATE entities SET updated_at = 111 WHERE id = ?", [
       entityId,
     ]);
+    handle.sqlite.run(
+      "UPDATE external_refs SET last_seen_at = 222 WHERE entity_id = ?",
+      [entityId],
+    );
 
     const result = store.upsertExternal(eventInput());
 
     expect(result).toEqual({ entityId, action: "unchanged" });
     expect(store.getEntity(entityId)?.updatedAt).toBe(111);
+    const ref = handle.db
+      .select()
+      .from(externalRefs)
+      .where(eq(externalRefs.entityId, entityId))
+      .get();
+    expect(ref?.lastSeenAt).toBeGreaterThan(222);
+    expect(ref?.version).toBe("v1");
   });
 
   test("a new version updates spine fields, updated_at, and the ref", () => {

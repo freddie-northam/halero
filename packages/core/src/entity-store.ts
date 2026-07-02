@@ -134,6 +134,13 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
       }
       const version = input.version ?? null;
       if (version !== null && existing.version === version) {
+        // last_seen_at records observation, not mutation: a full resync
+        // sweeps refs not seen since it started, so live-but-unchanged
+        // items must still refresh it to survive the sweep.
+        db.update(externalRefs)
+          .set({ lastSeenAt: Date.now() })
+          .where(refWhere(input))
+          .run();
         return { entityId: existing.entityId, action: "unchanged" };
       }
       return updateFromExternal(input, existing.entityId);
