@@ -689,9 +689,7 @@ describe("syncConnection connector misbehavior", () => {
     // The page transaction rolled back: no ref, no satellite row, no counts.
     expect(summary.upserts).toBe(0);
     expect(getRef(testApp, "evt-garbage")).toBeUndefined();
-    expect(testApp.database.db.select().from(calendarEvents).all()).toEqual(
-      [],
-    );
+    expect(testApp.database.db.select().from(calendarEvents).all()).toEqual([]);
     // The zod detail reaches the log so connector authors can diagnose.
     expect(logs.join("\n")).toContain("satellite payload");
   });
