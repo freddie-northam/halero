@@ -7,11 +7,26 @@ export interface SetupInput {
   readonly baseUrl?: string;
 }
 
+export interface GoogleSyncRun {
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
 export interface GoogleConnection {
   readonly id: string;
   readonly status: string;
   readonly email: string | null;
   readonly lastError: string | null;
+  /** Epoch ms of the next scheduled sync; null when unscheduled. */
+  readonly nextSyncAt: number | null;
+  readonly consecutiveFailures: number;
+  readonly lastRun: GoogleSyncRun | null;
+  /** Epoch ms when the most recent successful run finished. */
+  readonly lastSuccessAt: number | null;
 }
 
 export interface GoogleStatus {

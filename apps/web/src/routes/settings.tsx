@@ -352,6 +352,52 @@ const SyncOutcome = ({
   );
 };
 
+const minutesBetween = (from: number, to: number): number =>
+  Math.max(0, Math.round((to - from) / 60_000));
+
+const lastSyncedText = (lastSuccessAt: number | null, now: number): string => {
+  if (lastSuccessAt === null) {
+    return "Not synced yet";
+  }
+  const minutes = minutesBetween(lastSuccessAt, now);
+  return minutes === 0
+    ? "Last synced just now"
+    : `Last synced ${minutes} min ago`;
+};
+
+const nextSyncText = (nextSyncAt: number, now: number): string => {
+  const minutes = minutesBetween(now, nextSyncAt);
+  return minutes === 0
+    ? "Next sync in under a minute"
+    : `Next sync in ~${minutes} min`;
+};
+
+// The light health touch for the settings card; the full health view
+// (run history, failure streaks) is a later task.
+const SyncHealth = ({
+  connection,
+}: {
+  readonly connection: GoogleConnection;
+}): ReactElement => {
+  const now = Date.now();
+  return (
+    <div className="flex flex-col gap-1">
+      {connection.lastError === null ? (
+        <p className="text-sm text-muted-foreground">
+          {lastSyncedText(connection.lastSuccessAt, now)}
+        </p>
+      ) : (
+        <p className="text-sm text-destructive">{connection.lastError}</p>
+      )}
+      {connection.nextSyncAt === null ? null : (
+        <p className="text-sm text-muted-foreground">
+          {nextSyncText(connection.nextSyncAt, now)}
+        </p>
+      )}
+    </div>
+  );
+};
+
 const SyncControls = ({
   onSynced,
 }: {
@@ -427,7 +473,8 @@ const ConnectionCard = ({
         </CardContent>
       ) : null}
       {connection.status === "active" ? (
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
+          <SyncHealth connection={connection} />
           <SyncControls onSynced={onChanged} />
         </CardContent>
       ) : null}

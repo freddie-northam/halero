@@ -1,4 +1,6 @@
+import { syncRuns } from "@halero/db";
 import { TRPCError } from "@trpc/server";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveBaseUrl } from "../base-url";
 import {
@@ -11,7 +13,54 @@ import {
   getGoogleConnection,
   parseConnectionConfig,
 } from "../google/connection";
+import type { TrpcContext } from "./context";
 import { protectedProcedure, router } from "./init";
+
+type Db = TrpcContext["db"];
+
+interface LastRunHealth {
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
+const readLastRun = (db: Db, connectionId: string): LastRunHealth | null => {
+  const run = db
+    .select()
+    .from(syncRuns)
+    .where(eq(syncRuns.connectionId, connectionId))
+    .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+    .limit(1)
+    .get();
+  if (run === undefined) {
+    return null;
+  }
+  return {
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    status: run.status,
+    upserts: run.upserts,
+    deletes: run.deletes,
+    error: run.error,
+  };
+};
+
+const readLastSuccessAt = (db: Db, connectionId: string): number | null =>
+  db
+    .select({ finishedAt: syncRuns.finishedAt })
+    .from(syncRuns)
+    .where(
+      and(
+        eq(syncRuns.connectionId, connectionId),
+        eq(syncRuns.status, "success"),
+      ),
+    )
+    .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+    .limit(1)
+    .get()?.finishedAt ?? null;
 
 const saveClientInput = z.object({
   clientId: z
@@ -85,6 +134,10 @@ const googleRouter = router({
               status: connection.status,
               email: parseConnectionConfig(connection)?.email ?? null,
               lastError: connection.lastError,
+              nextSyncAt: connection.nextSyncAt,
+              consecutiveFailures: connection.consecutiveFailures,
+              lastRun: readLastRun(ctx.db, connection.id),
+              lastSuccessAt: readLastSuccessAt(ctx.db, connection.id),
             },
     };
   }),

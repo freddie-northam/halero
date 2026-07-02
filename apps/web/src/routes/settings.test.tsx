@@ -49,6 +49,10 @@ const activeConnection: GoogleConnection = {
   status: "active",
   email: "person@example.com",
   lastError: null,
+  nextSyncAt: null,
+  consecutiveFailures: 0,
+  lastRun: null,
+  lastSuccessAt: null,
 };
 
 const connectedApi = (overrides: Partial<HaleroApi> = {}): HaleroApi =>
@@ -213,10 +217,8 @@ test("offers a reconnect link when Google requires a new sign-in", async () => {
           googleStatus({
             clientConfigured: true,
             connection: {
-              id: "conn-1",
+              ...activeConnection,
               status: "reauth_required",
-              email: "person@example.com",
-              lastError: null,
             },
           }),
         ),
@@ -226,6 +228,60 @@ test("offers a reconnect link when Google requires a new sign-in", async () => {
   expect(await view.findByText("Needs reconnect")).toBeTruthy();
   const reconnect = view.getByRole("link", { name: "Reconnect" });
   expect(reconnect.getAttribute("href")).toBe("/api/oauth/google/start");
+});
+
+test("shows last synced and next sync timing on the active card", async () => {
+  const view = renderSettings(
+    connectedApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              ...activeConnection,
+              lastSuccessAt: Date.now() - 5 * 60_000,
+              nextSyncAt: Date.now() + 4 * 60_000,
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(await view.findByText("Last synced 5 min ago")).toBeTruthy();
+  expect(view.getByText("Next sync in ~4 min")).toBeTruthy();
+});
+
+test("shows the last error on the active card instead of the synced time", async () => {
+  const view = renderSettings(
+    connectedApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              ...activeConnection,
+              lastError: "Halero could not reach Google Calendar.",
+              lastSuccessAt: Date.now() - 5 * 60_000,
+              nextSyncAt: Date.now() + 4 * 60_000,
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(
+    await view.findByText("Halero could not reach Google Calendar."),
+  ).toBeTruthy();
+  expect(view.queryByText(/Last synced/)).toBeNull();
+  expect(view.getByText("Next sync in ~4 min")).toBeTruthy();
+});
+
+test("shows a not-synced-yet note before the first successful run", async () => {
+  const view = renderSettings(connectedApi());
+
+  expect(await view.findByText("Not synced yet")).toBeTruthy();
+  // No schedule is known, so no next-sync estimate is shown.
+  expect(view.queryByText(/Next sync/)).toBeNull();
 });
 
 test("turns the connected query param into a success banner", async () => {

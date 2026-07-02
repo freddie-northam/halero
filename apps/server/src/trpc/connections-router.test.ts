@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
-import { connections } from "@halero/db";
+import { connections, syncRuns } from "@halero/db";
+import { eq } from "drizzle-orm";
 import { saveGoogleClient } from "../google/client-config";
 import {
   completeSetup,
@@ -17,6 +18,15 @@ const clientInput = {
   clientSecret: "GOCSPX-super-secret-value",
 };
 
+interface LastRunData {
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
 interface GoogleStatusData {
   readonly clientConfigured: boolean;
   readonly httpsOk: boolean;
@@ -26,6 +36,10 @@ interface GoogleStatusData {
     readonly status: string;
     readonly email: string | null;
     readonly lastError: string | null;
+    readonly nextSyncAt: number | null;
+    readonly consecutiveFailures: number;
+    readonly lastRun: LastRunData | null;
+    readonly lastSuccessAt: number | null;
   } | null;
 }
 
@@ -205,7 +219,61 @@ describe("connections.google.status", () => {
       status: "active",
       email: "person@example.com",
       lastError: null,
+      nextSyncAt: clock.value,
+      consecutiveFailures: 0,
+      lastRun: null,
+      lastSuccessAt: null,
     });
+  });
+
+  test("reports scheduling health and the latest run once runs exist", async () => {
+    const testApp = makeTestApp();
+    const { app, database, clock } = testApp;
+    const cookie = await completeSetup(app);
+    seedSyncableConnection(testApp);
+    database.db
+      .update(connections)
+      .set({ consecutiveFailures: 2, nextSyncAt: clock.value + 120_000 })
+      .where(eq(connections.id, "conn-sync-1"))
+      .run();
+    database.db
+      .insert(syncRuns)
+      .values({
+        id: "run-1",
+        connectionId: "conn-sync-1",
+        startedAt: clock.value - 600_000,
+        finishedAt: clock.value - 590_000,
+        status: "success",
+        upserts: 3,
+        deletes: 1,
+      })
+      .run();
+    database.db
+      .insert(syncRuns)
+      .values({
+        id: "run-2",
+        connectionId: "conn-sync-1",
+        startedAt: clock.value - 300_000,
+        finishedAt: clock.value - 299_000,
+        status: "failed",
+        error: "Halero could not reach Google Calendar.",
+      })
+      .run();
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status.connection?.nextSyncAt).toBe(clock.value + 120_000);
+    expect(status.connection?.consecutiveFailures).toBe(2);
+    expect(status.connection?.lastRun).toEqual({
+      startedAt: clock.value - 300_000,
+      finishedAt: clock.value - 299_000,
+      status: "failed",
+      upserts: 0,
+      deletes: 0,
+      error: "Halero could not reach Google Calendar.",
+    });
+    // The most recent successful run, not the most recent run.
+    expect(status.connection?.lastSuccessAt).toBe(clock.value - 590_000);
   });
 });
 
