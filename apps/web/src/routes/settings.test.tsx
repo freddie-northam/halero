@@ -40,6 +40,9 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   saveGoogleClient: () => Promise.resolve(),
   syncGoogleNow: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
+  notificationSettings: () => Promise.resolve({ url: null }),
+  saveNotifyUrl: () => Promise.resolve(),
+  sendTestNotification: () => Promise.resolve({ delivered: true }),
   ...overrides,
 });
 
@@ -52,6 +55,7 @@ const activeConnection: GoogleConnection = {
   consecutiveFailures: 0,
   lastRun: null,
   lastSuccessAt: null,
+  recentRuns: [],
 };
 
 const connectedApi = (overrides: Partial<HaleroApi> = {}): HaleroApi =>
@@ -281,6 +285,134 @@ test("shows a not-synced-yet note before the first successful run", async () => 
   expect(await view.findByText("Not synced yet")).toBeTruthy();
   // No schedule is known, so no next-sync estimate is shown.
   expect(view.queryByText(/Next sync/)).toBeNull();
+});
+
+test("shows the recent activity list with counts, errors, and times", async () => {
+  const now = Date.now();
+  const view = renderSettings(
+    connectedApi({
+      googleStatus: () =>
+        Promise.resolve(
+          googleStatus({
+            clientConfigured: true,
+            connection: {
+              ...activeConnection,
+              recentRuns: [
+                {
+                  startedAt: now - 5 * 60_000,
+                  finishedAt: now - 5 * 60_000 + 900,
+                  status: "success",
+                  upserts: 3,
+                  deletes: 1,
+                  error: null,
+                },
+                {
+                  startedAt: now - 3 * 60 * 60_000,
+                  finishedAt: now - 3 * 60 * 60_000 + 900,
+                  status: "failed",
+                  upserts: 0,
+                  deletes: 0,
+                  error: "Halero could not reach Google Calendar.",
+                },
+              ],
+            },
+          }),
+        ),
+    }),
+  );
+
+  expect(await view.findByText("Recent activity")).toBeTruthy();
+  expect(view.getByText("5 min ago")).toBeTruthy();
+  expect(view.getByText("3 updated, 1 removed")).toBeTruthy();
+  expect(view.getByText("3 hr ago")).toBeTruthy();
+  expect(view.getByText("Failed")).toBeTruthy();
+  expect(
+    view.getByText("Halero could not reach Google Calendar."),
+  ).toBeTruthy();
+});
+
+test("hides the recent activity list before any runs exist", async () => {
+  const view = renderSettings(connectedApi());
+
+  await view.findByText("person@example.com");
+  expect(view.queryByText("Recent activity")).toBeNull();
+});
+
+test("loads the saved notification URL and mentions ntfy", async () => {
+  const view = renderSettings(
+    stubApi({
+      notificationSettings: () =>
+        Promise.resolve({ url: "https://ntfy.sh/halero" }),
+    }),
+  );
+
+  const input = await view.findByLabelText("Notification URL");
+  expect(input.getAttribute("value")).toBe("https://ntfy.sh/halero");
+  expect(view.getByText(/ntfy/)).toBeTruthy();
+});
+
+test("saves the notification URL trimmed and confirms", async () => {
+  const saved: string[] = [];
+  const view = renderSettings(
+    stubApi({
+      saveNotifyUrl: (url) => {
+        saved.push(url);
+        return Promise.resolve();
+      },
+    }),
+  );
+
+  const input = await view.findByLabelText("Notification URL");
+  fireEvent.change(input, {
+    target: { value: "  https://ntfy.sh/halero  " },
+  });
+  fireEvent.click(view.getByRole("button", { name: "Save URL" }));
+
+  expect(await view.findByText("Notification settings saved.")).toBeTruthy();
+  expect(saved).toEqual(["https://ntfy.sh/halero"]);
+});
+
+test("disables the test button until a URL is saved", async () => {
+  const view = renderSettings(stubApi());
+
+  const button = await view.findByRole("button", {
+    name: "Send test notification",
+  });
+  expect(button.hasAttribute("disabled")).toBe(true);
+});
+
+test("sends a test notification and reports delivery", async () => {
+  const view = renderSettings(
+    stubApi({
+      notificationSettings: () =>
+        Promise.resolve({ url: "https://ntfy.sh/halero" }),
+      sendTestNotification: () => Promise.resolve({ delivered: true }),
+    }),
+  );
+
+  const button = await view.findByRole("button", {
+    name: "Send test notification",
+  });
+  expect(button.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(button);
+
+  expect(await view.findByText("Test notification sent.")).toBeTruthy();
+});
+
+test("reports a test notification that could not be delivered", async () => {
+  const view = renderSettings(
+    stubApi({
+      notificationSettings: () =>
+        Promise.resolve({ url: "https://ntfy.sh/halero" }),
+      sendTestNotification: () => Promise.resolve({ delivered: false }),
+    }),
+  );
+
+  fireEvent.click(
+    await view.findByRole("button", { name: "Send test notification" }),
+  );
+
+  expect(await view.findByText(/could not be delivered/)).toBeTruthy();
 });
 
 test("turns the connected query param into a success banner", async () => {

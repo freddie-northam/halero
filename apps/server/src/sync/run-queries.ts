@@ -6,6 +6,38 @@ import { and, desc, eq } from "drizzle-orm";
 
 type Db = HaleroDatabase["db"];
 
+/** One sync run as surfaced to the UI. */
+export interface SyncRunView {
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
+/** The connection's newest runs, newest first. */
+export const readRecentRuns = (
+  db: Db,
+  connectionId: string,
+  limit: number,
+): SyncRunView[] =>
+  db
+    .select()
+    .from(syncRuns)
+    .where(eq(syncRuns.connectionId, connectionId))
+    .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
+    .limit(limit)
+    .all()
+    .map((run) => ({
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      status: run.status,
+      upserts: run.upserts,
+      deletes: run.deletes,
+      error: run.error,
+    }));
+
 /** When the most recent successful run finished, or null before one. */
 export const readLastSuccessAt = (
   db: Db,

@@ -27,6 +27,8 @@ export interface GoogleConnection {
   readonly lastRun: GoogleSyncRun | null;
   /** Epoch ms when the most recent successful run finished. */
   readonly lastSuccessAt: number | null;
+  /** The newest runs, newest first, for the Recent activity list. */
+  readonly recentRuns: readonly GoogleSyncRun[];
 }
 
 export interface GoogleStatus {
@@ -48,6 +50,15 @@ export interface SyncNowResult {
   readonly error: string | null;
 }
 
+export interface NotificationSettings {
+  /** The saved notify URL, or null while notifications are off. */
+  readonly url: string | null;
+}
+
+export interface TestNotificationResult {
+  readonly delivered: boolean;
+}
+
 /**
  * The narrow surface of the CORE server API that the UI consumes.
  * Components depend on this interface instead of the raw tRPC client so
@@ -64,6 +75,10 @@ export interface HaleroApi {
   readonly googleStatus: () => Promise<GoogleStatus>;
   readonly saveGoogleClient: (input: SaveGoogleClientInput) => Promise<void>;
   readonly syncGoogleNow: () => Promise<SyncNowResult>;
+  readonly notificationSettings: () => Promise<NotificationSettings>;
+  /** An empty string turns notifications off. */
+  readonly saveNotifyUrl: (url: string) => Promise<void>;
+  readonly sendTestNotification: () => Promise<TestNotificationResult>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -82,4 +97,9 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
     await client.connections.google.saveClient.mutate(input);
   },
   syncGoogleNow: () => client.connections.google.syncNow.mutate(),
+  notificationSettings: () => client.notifications.settings.query(),
+  saveNotifyUrl: async (url) => {
+    await client.notifications.save.mutate({ url });
+  },
+  sendTestNotification: () => client.notifications.sendTest.mutate(),
 });

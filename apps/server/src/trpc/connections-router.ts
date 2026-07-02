@@ -1,6 +1,4 @@
-import { syncRuns } from "@halero/db";
 import { TRPCError } from "@trpc/server";
-import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resolveBaseUrl } from "../base-url";
 import {
@@ -10,41 +8,11 @@ import {
   saveGoogleClient,
 } from "../sync/client-config";
 import { getGoogleConnection, parseConnectionConfig } from "../sync/connection";
-import { readLastSuccessAt } from "../sync/run-queries";
-import type { TrpcContext } from "./context";
+import { readLastSuccessAt, readRecentRuns } from "../sync/run-queries";
 import { protectedProcedure, router } from "./init";
 
-type Db = TrpcContext["db"];
-
-interface LastRunHealth {
-  readonly startedAt: number;
-  readonly finishedAt: number | null;
-  readonly status: string;
-  readonly upserts: number;
-  readonly deletes: number;
-  readonly error: string | null;
-}
-
-const readLastRun = (db: Db, connectionId: string): LastRunHealth | null => {
-  const run = db
-    .select()
-    .from(syncRuns)
-    .where(eq(syncRuns.connectionId, connectionId))
-    .orderBy(desc(syncRuns.startedAt), desc(syncRuns.id))
-    .limit(1)
-    .get();
-  if (run === undefined) {
-    return null;
-  }
-  return {
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt,
-    status: run.status,
-    upserts: run.upserts,
-    deletes: run.deletes,
-    error: run.error,
-  };
-};
+/** How many runs the settings card's Recent activity list shows. */
+const RECENT_RUNS_SHOWN = 5;
 
 const saveClientInput = z.object({
   clientId: z
@@ -120,8 +88,13 @@ const googleRouter = router({
               lastError: connection.lastError,
               nextSyncAt: connection.nextSyncAt,
               consecutiveFailures: connection.consecutiveFailures,
-              lastRun: readLastRun(ctx.db, connection.id),
+              lastRun: readRecentRuns(ctx.db, connection.id, 1)[0] ?? null,
               lastSuccessAt: readLastSuccessAt(ctx.db, connection.id),
+              recentRuns: readRecentRuns(
+                ctx.db,
+                connection.id,
+                RECENT_RUNS_SHOWN,
+              ),
             },
     };
   }),

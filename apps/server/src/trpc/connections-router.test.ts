@@ -40,6 +40,7 @@ interface GoogleStatusData {
     readonly consecutiveFailures: number;
     readonly lastRun: LastRunData | null;
     readonly lastSuccessAt: number | null;
+    readonly recentRuns: readonly LastRunData[];
   } | null;
 }
 
@@ -223,7 +224,40 @@ describe("connections.google.status", () => {
       consecutiveFailures: 0,
       lastRun: null,
       lastSuccessAt: null,
+      recentRuns: [],
     });
+  });
+
+  test("lists the 5 most recent runs, newest first", async () => {
+    const testApp = makeTestApp();
+    const { app, database, clock } = testApp;
+    const cookie = await completeSetup(app);
+    seedSyncableConnection(testApp);
+    for (let i = 1; i <= 7; i += 1) {
+      database.db
+        .insert(syncRuns)
+        .values({
+          id: `run-${i}`,
+          connectionId: "conn-sync-1",
+          startedAt: clock.value - (8 - i) * 60_000,
+          finishedAt: clock.value - (8 - i) * 60_000 + 1_000,
+          status: i === 6 ? "failed" : "success",
+          upserts: i,
+          deletes: 0,
+          error: i === 6 ? "Halero could not reach Google Calendar." : null,
+        })
+        .run();
+    }
+
+    const status = await readGoogleStatus(app, cookie);
+
+    const recent = status.connection?.recentRuns ?? [];
+    expect(recent).toHaveLength(5);
+    // Newest first: runs 7, 6, 5, 4, 3.
+    expect(recent.map((run) => run.upserts)).toEqual([7, 6, 5, 4, 3]);
+    expect(recent[1]?.status).toBe("failed");
+    expect(recent[1]?.error).toBe("Halero could not reach Google Calendar.");
+    expect(recent[0]?.startedAt).toBe(clock.value - 60_000);
   });
 
   test("reports scheduling health and the latest run once runs exist", async () => {

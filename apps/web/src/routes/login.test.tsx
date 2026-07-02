@@ -35,6 +35,9 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   saveGoogleClient: () => Promise.resolve(),
   syncGoogleNow: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
+  notificationSettings: () => Promise.resolve({ url: null }),
+  saveNotifyUrl: () => Promise.resolve(),
+  sendTestNotification: () => Promise.resolve({ delivered: true }),
   ...overrides,
 });
 

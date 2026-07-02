@@ -24,6 +24,7 @@ import {
 import type {
   GoogleConnection,
   GoogleStatus,
+  GoogleSyncRun,
   SaveGoogleClientInput,
   SyncNowResult,
 } from "../lib/api";
@@ -355,6 +356,22 @@ const SyncOutcome = ({
 const minutesBetween = (from: number, to: number): number =>
   Math.max(0, Math.round((to - from) / 60_000));
 
+const relativeTimeText = (from: number, now: number): string => {
+  const minutes = minutesBetween(from, now);
+  if (minutes === 0) {
+    return "just now";
+  }
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hr ago`;
+  }
+  const days = Math.round(hours / 24);
+  return days === 1 ? "1 day ago" : `${days} days ago`;
+};
+
 const lastSyncedText = (lastSuccessAt: number | null, now: number): string => {
   if (lastSuccessAt === null) {
     return "Not synced yet";
@@ -394,6 +411,67 @@ const SyncHealth = ({
           {nextSyncText(connection.nextSyncAt, now)}
         </p>
       )}
+    </div>
+  );
+};
+
+const RUN_STATUS_LABELS: Record<string, string> = {
+  success: "Synced",
+  failed: "Failed",
+  running: "Running",
+};
+
+const runOutcomeText = (run: GoogleSyncRun): string => {
+  if (run.status === "failed" && run.error !== null) {
+    return run.error;
+  }
+  return `${run.upserts} updated, ${run.deletes} removed`;
+};
+
+/** Dense rows: relative time, outcome, counts or the readable error. */
+const RecentActivity = ({
+  runs,
+}: {
+  readonly runs: readonly GoogleSyncRun[];
+}): ReactElement | null => {
+  if (runs.length === 0) {
+    return null;
+  }
+  const now = Date.now();
+  return (
+    <div className="flex flex-col gap-2">
+      <Separator />
+      <h3 className="text-xs font-medium text-muted-foreground">
+        Recent activity
+      </h3>
+      <ul className="flex flex-col gap-1">
+        {runs.map((run) => (
+          <li key={run.startedAt} className="flex items-baseline gap-2 text-xs">
+            <span className="w-20 shrink-0 text-muted-foreground">
+              {relativeTimeText(run.startedAt, now)}
+            </span>
+            <span
+              className={`w-14 shrink-0 ${
+                run.status === "failed"
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {RUN_STATUS_LABELS[run.status] ?? run.status}
+            </span>
+            <span
+              className={`min-w-0 flex-1 truncate ${
+                run.status === "failed" && run.error !== null
+                  ? "text-destructive"
+                  : "text-muted-foreground"
+              }`}
+              title={runOutcomeText(run)}
+            >
+              {runOutcomeText(run)}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 };
@@ -465,6 +543,7 @@ const ConnectionCard = ({
           <div>
             <LinkButton href="/api/oauth/google/start">Reconnect</LinkButton>
           </div>
+          <RecentActivity runs={connection.recentRuns} />
         </CardContent>
       ) : null}
       {connection.status === "error" && connection.lastError !== null ? (
@@ -476,8 +555,146 @@ const ConnectionCard = ({
         <CardContent className="flex flex-col gap-3">
           <SyncHealth connection={connection} />
           <SyncControls onSynced={onChanged} />
+          <RecentActivity runs={connection.recentRuns} />
         </CardContent>
       ) : null}
+    </Card>
+  );
+};
+
+const TestSendOutcome = ({
+  delivered,
+  mutationError,
+}: {
+  readonly delivered: boolean | undefined;
+  readonly mutationError: unknown;
+}): ReactElement | null => {
+  if (mutationError !== null && mutationError !== undefined) {
+    return (
+      <p role="status" className="text-sm text-destructive">
+        {readableError(mutationError)}
+      </p>
+    );
+  }
+  if (delivered === undefined) {
+    return null;
+  }
+  if (delivered) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Test notification sent.
+      </p>
+    );
+  }
+  return (
+    <p role="status" className="text-sm text-destructive">
+      The test notification could not be delivered. Check the URL and try again.
+    </p>
+  );
+};
+
+const NotificationsForm = ({
+  savedUrl,
+  onSaved,
+}: {
+  readonly savedUrl: string | null;
+  readonly onSaved: () => void;
+}): ReactElement => {
+  const api = useApi();
+  const save = useMutation({
+    mutationFn: (url: string) => api.saveNotifyUrl(url),
+    onSuccess: onSaved,
+  });
+  const test = useMutation({ mutationFn: () => api.sendTestNotification() });
+  // Uncontrolled on purpose: the value only matters at submit, and the
+  // form only renders once the saved URL is known.
+  const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    if (save.isPending) {
+      return;
+    }
+    const url = new FormData(event.currentTarget).get("url");
+    save.mutate(String(url ?? "").trim());
+  };
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="notify-url">Notification URL</Label>
+        <Input
+          id="notify-url"
+          name="url"
+          type="url"
+          autoComplete="off"
+          placeholder="https://ntfy.sh/your-topic"
+          defaultValue={savedUrl ?? ""}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" disabled={save.isPending}>
+          {save.isPending ? <Loader2 className="animate-spin" /> : null}
+          Save URL
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={savedUrl === null || test.isPending}
+          onClick={() => test.mutate()}
+        >
+          {test.isPending ? <Loader2 className="animate-spin" /> : null}
+          {test.isPending ? "Sending" : "Send test notification"}
+        </Button>
+      </div>
+      {save.error !== null ? (
+        <p role="status" className="text-sm text-destructive">
+          {readableError(save.error)}
+        </p>
+      ) : null}
+      {save.isSuccess && save.error === null ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Notification settings saved.
+        </p>
+      ) : null}
+      {test.isPending ? null : (
+        <TestSendOutcome
+          delivered={test.data?.delivered}
+          mutationError={test.error}
+        />
+      )}
+    </form>
+  );
+};
+
+const NotificationsSection = (): ReactElement => {
+  const api = useApi();
+  const settings = useQuery({
+    queryKey: ["notification-settings"],
+    queryFn: () => api.notificationSettings(),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle asChild>
+          <h2 className="text-sm">Notifications</h2>
+        </CardTitle>
+        <CardDescription>
+          When a sync keeps failing or a connection needs a reconnect, Halero
+          sends a JSON alert to this URL. Works with ntfy: use a topic URL like
+          https://ntfy.sh/your-topic. Leave the field empty and save to turn
+          notifications off.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {settings.data === undefined ? (
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        ) : (
+          <NotificationsForm
+            savedUrl={settings.data.url}
+            onSaved={() => {
+              void settings.refetch();
+            }}
+          />
+        )}
+      </CardContent>
     </Card>
   );
 };
@@ -552,6 +769,9 @@ export const SettingsScreen = ({
         <Banner tone="error">{callbackErrorMessage(errorCode)}</Banner>
       )}
       <div className="mt-6">{body()}</div>
+      <div className="mt-6">
+        <NotificationsSection />
+      </div>
     </div>
   );
 };
