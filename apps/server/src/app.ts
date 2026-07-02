@@ -11,7 +11,10 @@ import {
   type SchedulerHealth,
 } from "./healthz";
 import { csrfOriginCheck } from "./middleware/csrf";
-import { securityHeaders } from "./middleware/security-headers";
+import {
+  createSecureErrorHandler,
+  securityHeaders,
+} from "./middleware/security-headers";
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
 import { createNotifier, type Notifier } from "./notifier";
 import { createSpaHandler, defaultWebDistDir } from "./spa";
@@ -69,6 +72,9 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   const app = new Hono<AppEnv>();
 
   app.use("*", securityHeaders);
+  // Thrown errors skip the middleware's post-next() header pass; the
+  // error handler re-applies the security headers on those responses.
+  app.onError(createSecureErrorHandler());
   app.use(
     "/api/*",
     csrfOriginCheck(() => resolveBaseUrl(database.db, config).origin),
