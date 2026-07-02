@@ -9,7 +9,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card"
       className={cn(
         // Halero density: flat hairline-bordered panel, no decorative
-        // shadow, 16px rhythm (was gap-6/py-6/shadow-sm upstream).
+        // shadow, 16px rhythm (24px paddings and a drop shadow upstream).
         "flex flex-col gap-4 rounded-xl border bg-card py-4 text-card-foreground",
         className,
       )}

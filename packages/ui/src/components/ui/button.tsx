@@ -22,7 +22,7 @@ const buttonVariants = cva(
       },
       size: {
         // Halero density: controls sit on the 13px scale, 32px tall by
-        // default and 28px for compact rows (was h-9/h-8 upstream).
+        // default and 28px for compact rows (36px and 32px upstream).
         default: "h-8 px-3 has-[>svg]:px-2.5",
         xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1.5 rounded-md px-2.5 text-xs has-[>svg]:px-2",
