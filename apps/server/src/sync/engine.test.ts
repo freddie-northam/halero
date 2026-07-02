@@ -13,6 +13,10 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
+import {
+  buildKindRegistry,
+  defineServerModule,
+} from "@halero/module-sdk/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { kindRegistry } from "../registry";
@@ -457,7 +461,7 @@ describe("syncConnection initial full sync", () => {
     );
 
     // Pinned contract: sync_runs counts record ALL work committed during
-    // the run at page granularity, regardless of the run's outcome.
+    // the run at chunk granularity, regardless of the run's outcome.
     // Stream alpha (2 events) plus beta's first page (1 event) committed.
     expect(summary.status).toBe("failed");
     expect(summary.upserts).toBe(3);
@@ -1114,6 +1118,124 @@ describe("syncConnection windowed replay sweep", () => {
     expect(summary.deletes).toBe(1);
     expect(getEntityFor(testApp, "evt-inside").deletedAt).not.toBeNull();
     expect(getEntityFor(testApp, "evt-undated").deletedAt).toBeNull();
+  });
+});
+
+describe("syncConnection write budget", () => {
+  test("a mid-page failure keeps the committed chunks' rows and counts", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // One 251-op page: the first 250 fill a whole chunk, the 251st (an
+    // unknown kind) lands in the second chunk and fails it.
+    const ops: SyncOp[] = Array.from({ length: 250 }, (_, index) =>
+      calendarOp(`evt-${index}`),
+    );
+    ops.push({
+      op: "upsert",
+      externalId: "evt-bad",
+      spine: { kind: "widget.unknown", schemaVersion: 1 },
+    });
+
+    const summary = await syncConnection(
+      replayContext(testApp, [ops], {}),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("failed");
+    expect(summary.error).toContain("widget.unknown");
+    // The first chunk committed on its own and its work is reported
+    // (committed-work contract); the failing chunk rolled back alone.
+    expect(summary.upserts).toBe(250);
+    expect(getRef(testApp, "evt-0")).not.toBeUndefined();
+    expect(getRef(testApp, "evt-249")).not.toBeUndefined();
+    expect(getRef(testApp, "evt-bad")).toBeUndefined();
+    const run = getRuns(testApp)[0];
+    expect(run?.status).toBe("failed");
+    expect(run?.upserts).toBe(250);
+  });
+
+  test("yields to the event loop between chunk commits inside one page", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // A concurrent counter task stands in for pending HTTP work: it can
+    // only advance when the sync engine yields back to the event loop.
+    let timerTicks = 0;
+    let stopPump = false;
+    const startPump = async (): Promise<void> => {
+      while (!stopPump) {
+        timerTicks += 1;
+        await Bun.sleep(0);
+      }
+    };
+    const ticksAtOp: number[] = [];
+    const tickModule = defineServerModule({
+      id: "ticks",
+      version: "0.0.1",
+      entityKinds: [
+        {
+          kind: "tick.item",
+          schemaVersion: 1,
+          schema: z.object({}),
+          satelliteWriter: () => {
+            ticksAtOp.push(timerTicks);
+          },
+        },
+      ],
+    });
+    const kinds = buildKindRegistry([tickModule]);
+    const ops: SyncOp[] = Array.from({ length: 500 }, (_, index) => ({
+      op: "upsert",
+      externalId: `tick-${index}`,
+      spine: { kind: "tick.item", schemaVersion: 1, title: `Tick ${index}` },
+      satellite: {},
+    }));
+    const tickConnector: AnyConnector = defineConnector({
+      manifest: {
+        id: GOOGLE_CONNECTOR_ID,
+        version: "0.0.1",
+        protocolVersion: 1,
+        capabilities: ["poll"],
+        produces: [{ kind: "tick.item", schemaVersion: 1 }],
+      },
+      auth: {
+        authorizationEndpoint: "https://example.com/auth",
+        tokenEndpoint: "https://example.com/token",
+        scopes: ["readonly"],
+      },
+      configSchema: z.object({}),
+      identify: () => null,
+      discoverStreams: () => Promise.resolve([{ id: "primary" }]),
+      sync: async function* () {
+        yield ops;
+        return {};
+      },
+    });
+    const context: SyncEngineContext = {
+      database: testApp.database,
+      key: testApp.key,
+      now: () => testApp.clock.value,
+      outboundFetch: () => Promise.reject(new Error("no network expected")),
+      registry: registerConnectors([tickConnector], kinds),
+      kinds,
+      log: () => undefined,
+    };
+
+    const pump = startPump();
+    try {
+      const summary = await syncConnection(context, CONNECTION_ID);
+      expect(summary.status).toBe("success");
+      expect(summary.upserts).toBe(500);
+    } finally {
+      stopPump = true;
+      await pump;
+    }
+
+    // Ops inside one chunk apply synchronously (the counter cannot move);
+    // between the two chunks the engine yields, so the counter advances.
+    expect(ticksAtOp).toHaveLength(500);
+    expect(ticksAtOp[249]).toBe(ticksAtOp[0] ?? -1);
+    expect(ticksAtOp[250] ?? 0).toBeGreaterThan(ticksAtOp[249] ?? 0);
+    expect(ticksAtOp[499]).toBe(ticksAtOp[250] ?? -1);
   });
 });
 

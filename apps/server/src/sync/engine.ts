@@ -1,7 +1,7 @@
 // Connector-agnostic sync engine. Resolves the connection's connector
-// from the registry, hands it an auth-injecting fetch, validates and
-// applies its yielded pages in per-page transactions, and owns cursors,
-// counts, sweeps, retention hooks, and error surfacing.
+// from the registry, hands it an auth-injecting fetch, validates its
+// yielded pages and applies them in budgeted sub-transactions, and owns
+// cursors, counts, sweeps, retention hooks, and error surfacing.
 
 import {
   type DeleteSyncOp,
@@ -102,10 +102,11 @@ type Db = HaleroDatabase["db"];
 
 /**
  * Mutable accumulator for the run. Pinned contract: sync_runs counts
- * record ALL work actually committed during the run, at per-page
- * granularity, regardless of the run's outcome. Each page transaction
+ * record ALL work actually committed during the run, at per-chunk
+ * granularity, regardless of the run's outcome. Each chunk transaction
  * adds its counts here right after it commits, so a failure later in
- * the run still reports the work that landed.
+ * the run (even later in the same page) still reports the work that
+ * landed.
  */
 interface RunCounts {
   upserts: number;
@@ -354,21 +355,50 @@ const validatePage = (
   return parsed.data;
 };
 
-/** One connector page = one transaction; a crash never loses committed pages. */
-const applyPage = (
+/**
+ * Write budget for Pi-class hardware: a provider page can carry up to
+ * 2500 ops, far past the plan's ~200-500 ops-per-transaction budget, so
+ * pages are applied in sub-transactions of at most this many ops.
+ */
+const MAX_OPS_PER_TRANSACTION = 250;
+
+/** One committed chunk; a crash never loses committed chunks. */
+const applyChunk = (
   deps: StreamDeps,
   streamId: string,
   ops: readonly SyncOp[],
 ): void => {
-  const page = deps.store.withTransaction(() =>
+  const chunk = deps.store.withTransaction(() =>
     ops.reduce(
       (counts, op) => addCounts(counts, applyOp(deps, streamId, op)),
       NO_COUNTS,
     ),
   );
-  // Recorded only once the page's transaction has committed.
-  deps.runCounts.upserts += page.upserts;
-  deps.runCounts.deletes += page.deletes;
+  // Recorded only once the chunk's transaction has committed, so a
+  // failure later in the same page keeps this chunk's counts (pinned
+  // RunCounts contract: committed work is always reported).
+  deps.runCounts.upserts += chunk.upserts;
+  deps.runCounts.deletes += chunk.deletes;
+};
+
+/** Applies one connector page as budgeted chunk transactions. */
+const applyPage = async (
+  deps: StreamDeps,
+  streamId: string,
+  ops: readonly SyncOp[],
+): Promise<void> => {
+  for (let start = 0; start < ops.length; start += MAX_OPS_PER_TRANSACTION) {
+    if (start > 0) {
+      // Yield to the event loop between chunk commits so one giant page
+      // cannot starve HTTP handling for its whole duration.
+      await Bun.sleep(0);
+    }
+    applyChunk(
+      deps,
+      streamId,
+      ops.slice(start, start + MAX_OPS_PER_TRANSACTION),
+    );
+  }
 };
 
 const readCursor = (deps: StreamDeps, stream: string): string | null =>
@@ -468,9 +498,9 @@ const sweepStream = (
 };
 
 /**
- * Drains one connector sync generator, committing each yielded page as
- * its own transaction, and returns the connector's stream result
- * (cursor and declared replay window) once every page landed.
+ * Drains one connector sync generator, committing each yielded page in
+ * budgeted chunk transactions, and returns the connector's stream
+ * result (cursor and declared replay window) once every page landed.
  */
 const consumeStream = async (
   deps: StreamDeps,
@@ -485,9 +515,9 @@ const consumeStream = async (
     if (step.done) {
       return step.value;
     }
-    applyPage(deps, stream.id, validatePage(step.value, syncCtx.log));
-    // Each page commits synchronously; yield to the event loop between
-    // page transactions so a large resync cannot starve HTTP handling.
+    await applyPage(deps, stream.id, validatePage(step.value, syncCtx.log));
+    // Chunks commit synchronously; yield to the event loop between page
+    // transactions too so a large resync cannot starve HTTP handling.
     await Bun.sleep(0);
   }
 };
