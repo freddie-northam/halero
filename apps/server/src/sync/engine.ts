@@ -63,6 +63,10 @@ export interface SyncEngineContext {
   readonly now: () => number;
   /** Outbound HTTP to providers; tests inject a fake. */
   readonly outboundFetch: FetchLike;
+  /** Connector registry override; tests inject misbehaving fakes. */
+  readonly registry?: ReadonlyMap<string, AnyConnector>;
+  /** Sink for engine and connector diagnostics; defaults to console.log. */
+  readonly log?: (message: string) => void;
 }
 
 export interface SyncRunSummary {
@@ -248,10 +252,18 @@ const applyOp = (deps: StreamDeps, streamId: string, op: SyncOp): SyncCounts =>
     ? applyUpsert(deps, streamId, op)
     : applyDelete(deps, streamId, op);
 
-/** Every op is validated against the SDK schema BEFORE it is applied. */
-const validatePage = (page: SyncOp[]): SyncOp[] => {
+/**
+ * Every op is validated against the SDK schema BEFORE it is applied.
+ * The run fails with a readable message; the zod detail goes to the
+ * log so connector authors can diagnose what they produced.
+ */
+const validatePage = (
+  page: SyncOp[],
+  log: (message: string) => void,
+): SyncOp[] => {
   const parsed = syncOpsPageSchema.safeParse(page);
   if (!parsed.success) {
+    log(`Rejected a sync ops page: ${parsed.error.message}`);
     throw new Error(INVALID_OPS_MESSAGE);
   }
   return parsed.data;
@@ -375,7 +387,7 @@ const consumeStream = async (
     if (step.done) {
       return step.value.nextCursor;
     }
-    applyPage(deps, stream.id, validatePage(step.value));
+    applyPage(deps, stream.id, validatePage(step.value, syncCtx.log));
     // Each page commits synchronously; yield to the event loop between
     // page transactions so a large resync cannot starve HTTP handling.
     await Bun.sleep(0);
@@ -446,6 +458,7 @@ interface SyncableConnection {
 
 const loadSyncableConnection = (
   db: Db,
+  registry: ReadonlyMap<string, AnyConnector>,
   connectionId: string,
 ): SyncableConnection => {
   const row = db
@@ -454,7 +467,7 @@ const loadSyncableConnection = (
     .where(eq(connections.id, connectionId))
     .get();
   const connector =
-    row === undefined ? undefined : connectorRegistry.get(row.connectorId);
+    row === undefined ? undefined : registry.get(row.connectorId);
   if (row === undefined || connector === undefined) {
     throw new Error(NO_CONNECTION_MESSAGE);
   }
@@ -550,12 +563,17 @@ export const syncConnection = async (
   connectionId: string,
 ): Promise<SyncRunSummary> => {
   const db = ctx.database.db;
-  const { connection, connector } = loadSyncableConnection(db, connectionId);
+  const { connection, connector } = loadSyncableConnection(
+    db,
+    ctx.registry ?? connectorRegistry,
+    connectionId,
+  );
   const identity = parseConnectionConfig(connection);
   if (identity === null) {
     throw new Error(CONFIG_MISSING_MESSAGE);
   }
   const homeTimezone = getSetting(db, "home_timezone") ?? "UTC";
+  const log = ctx.log ?? ((message: string) => console.log(message));
   const syncCtx: SyncContext<unknown> = {
     config: parseConnectorConfig(connector, identity, homeTimezone),
     fetch: createAuthorizedFetch(
@@ -563,7 +581,7 @@ export const syncConnection = async (
       connectionId,
       connector.auth.tokenEndpoint,
     ),
-    log: (message) => console.log(`[sync:${connection.connectorId}]`, message),
+    log: (message) => log(`[sync:${connection.connectorId}] ${message}`),
     now: ctx.now,
   };
   // Committed work accumulates here at page granularity so the run row

@@ -210,7 +210,10 @@ describe("runMigrations", () => {
       backupsDir,
     });
 
-    expect(result.applied).toContain("0002_connection_backoff");
+    expect(result.applied).toEqual([
+      "0002_connection_backoff",
+      "0003_external_ref_streams",
+    ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
       .query<{ consecutive_failures: number }, []>(

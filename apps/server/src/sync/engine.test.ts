@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { defineConnector, type SyncOp } from "@halero/connector-sdk";
 import { encryptCredentials } from "@halero/core";
 import {
   calendarEvents,
@@ -9,10 +10,12 @@ import {
   syncRuns,
 } from "@halero/db";
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { makeTestApp, type TestApp } from "../test-utils";
 import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { type SyncEngineContext, syncConnection } from "./engine";
+import type { AnyConnector } from "./registry";
 
 const CONNECTION_ID = "conn-1";
 const ACCOUNT_KEY = "google-sub-1";
@@ -523,6 +526,135 @@ describe("syncConnection incremental sync", () => {
     expect(summary.deletes).toBe(0);
     expect(getEntityFor(testApp, "evt-9").deletedAt).toBeNull();
     expect(getSatelliteFor(testApp, "evt-9")?.calendarId).toBe("work");
+  });
+});
+
+describe("syncConnection raw persistence", () => {
+  test("persists the raw provider event so it parses back verbatim", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const source = timedEvent("evt-1", '"e1-v1"', "Standup");
+
+    await runInitialSync(testApp, { items: [source] });
+
+    const satellite = getSatelliteFor(testApp, "evt-1");
+    expect(JSON.parse(satellite?.raw ?? "null")).toEqual(source);
+  });
+});
+
+describe("syncConnection connector misbehavior", () => {
+  const VALID_OP: SyncOp = {
+    op: "upsert",
+    externalId: "evt-ok",
+    version: '"ok-v1"',
+    spine: { kind: "calendar.event", schemaVersion: 1, title: "Committed" },
+    satellite: {
+      calendarId: "primary",
+      allDay: 0,
+      startDate: null,
+      endDate: null,
+      location: null,
+      status: "confirmed",
+      recurringEventId: null,
+      originalStartTime: null,
+    },
+    raw: { id: "evt-ok" },
+  };
+
+  /** Registered under the Google id so the seeded connection resolves it. */
+  const rogueConnector = (pages: SyncOp[][]): AnyConnector =>
+    defineConnector({
+      manifest: {
+        id: GOOGLE_CONNECTOR_ID,
+        version: "0.0.1",
+        protocolVersion: 1,
+        capabilities: ["poll"],
+        produces: [{ kind: "calendar.event", schemaVersion: 1 }],
+      },
+      auth: {
+        authorizationEndpoint: "https://example.com/auth",
+        tokenEndpoint: "https://example.com/token",
+        scopes: ["readonly"],
+      },
+      configSchema: z.object({}),
+      identify: () => null,
+      discoverStreams: () => Promise.resolve([{ id: "primary" }]),
+      sync: async function* () {
+        for (const page of pages) {
+          yield page;
+        }
+        return { nextCursor: "rogue-cursor" };
+      },
+    });
+
+  const rogueContext = (
+    testApp: TestApp,
+    pages: SyncOp[][],
+    logs: string[],
+  ): SyncEngineContext => ({
+    database: testApp.database,
+    key: testApp.key,
+    now: () => testApp.clock.value,
+    outboundFetch: () => Promise.reject(new Error("no network expected")),
+    registry: new Map([[GOOGLE_CONNECTOR_ID, rogueConnector(pages)]]),
+    log: (message) => logs.push(message),
+  });
+
+  test("fails readably on an invalid ops page but keeps committed pages", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const invalidPage: SyncOp[] = [
+      {
+        op: "upsert",
+        externalId: "evt-bad",
+        spine: { kind: "calendar.event", schemaVersion: 1 },
+        satellite: { seen: new Date() },
+      },
+    ];
+    const logs: string[] = [];
+
+    const summary = await syncConnection(
+      rogueContext(testApp, [[VALID_OP], invalidPage], logs),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("failed");
+    expect(summary.error).toContain("could not understand");
+    // The first page committed on its own and its work is reported
+    // (pinned RunCounts contract); the stream cursor must not exist.
+    expect(summary.upserts).toBe(1);
+    expect(getEntityFor(testApp, "evt-ok").title).toBe("Committed");
+    expect(getCursor(testApp, "primary")).toBeUndefined();
+    const run = getRuns(testApp)[0];
+    expect(run?.status).toBe("failed");
+    expect(run?.upserts).toBe(1);
+    // The zod detail reaches the log so connector authors can diagnose.
+    expect(logs.join("\n")).toContain("Rejected a sync ops page");
+  });
+
+  test("fails readably when the connector produces an unknown kind", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    const unknownKindPage: SyncOp[] = [
+      {
+        op: "upsert",
+        externalId: "evt-w",
+        spine: { kind: "widget.gadget", schemaVersion: 1 },
+        satellite: { anything: true },
+      },
+    ];
+    const logs: string[] = [];
+
+    const summary = await syncConnection(
+      rogueContext(testApp, [unknownKindPage], logs),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("failed");
+    expect(summary.error).toContain("widget.gadget");
+    // The page's transaction rolled back: nothing committed, no counts.
+    expect(summary.upserts).toBe(0);
+    expect(getRef(testApp, "evt-w")).toBeUndefined();
   });
 });
 
