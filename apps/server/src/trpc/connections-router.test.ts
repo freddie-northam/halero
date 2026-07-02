@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { decryptCredentials } from "@halero/core";
+import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections } from "@halero/db";
+import { saveGoogleClient } from "../google/client-config";
 import {
   completeSetup,
+  type MakeTestAppOptions,
   makeTestApp,
   type TestApp,
   type TrpcSuccess,
@@ -203,6 +205,141 @@ describe("connections.google.status", () => {
       status: "active",
       email: "person@example.com",
       lastError: null,
+    });
+  });
+});
+
+interface SyncNowData {
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
+
+const seedSyncableConnection = (testApp: TestApp, status = "active"): void => {
+  const { database, key, clock } = testApp;
+  saveGoogleClient(database.db, key, clientInput);
+  database.db
+    .insert(connections)
+    .values({
+      id: "conn-sync-1",
+      connectorId: "google-calendar",
+      displayName: "Google Calendar",
+      config: JSON.stringify({
+        email: "person@example.com",
+        accountKey: "google-sub-1",
+      }),
+      credentialsEnc: Buffer.from(
+        encryptCredentials(
+          key,
+          JSON.stringify({
+            refreshToken: "1//refresh-a",
+            accessToken: "ya29.valid",
+            accessTokenExpiresAt: clock.value + 3_600_000,
+          }),
+        ),
+      ),
+      status,
+      nextSyncAt: clock.value,
+      createdAt: clock.value,
+    })
+    .run();
+};
+
+const happyGoogleFetch: NonNullable<MakeTestAppOptions["googleFetch"]> = (
+  input,
+) => {
+  const url = new URL(String(input));
+  if (url.pathname === "/calendar/v3/users/me/calendarList") {
+    return Promise.resolve(
+      Response.json({ items: [{ id: "primary", summary: "Personal" }] }),
+    );
+  }
+  if (url.pathname === "/calendar/v3/calendars/primary/events") {
+    return Promise.resolve(
+      Response.json({
+        items: [
+          {
+            id: "evt-1",
+            etag: '"e1-v1"',
+            status: "confirmed",
+            summary: "Standup",
+            start: { dateTime: "2025-07-02T09:30:00+01:00" },
+            end: { dateTime: "2025-07-02T09:45:00+01:00" },
+          },
+        ],
+        nextSyncToken: "sync-token-1",
+      }),
+    );
+  }
+  throw new Error(`unexpected Google call: ${url.toString()}`);
+};
+
+describe("connections.google.syncNow", () => {
+  test("rejects without a session", async () => {
+    const testApp = makeTestApp();
+    await completeSetup(testApp.app);
+    seedSyncableConnection(testApp);
+
+    const res = await trpcMutation(
+      testApp.app,
+      "connections.google.syncNow",
+      {},
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  test("rejects readably when no connection exists", async () => {
+    const { app } = makeTestApp();
+    const cookie = await completeSetup(app);
+
+    const res = await trpcMutation(
+      app,
+      "connections.google.syncNow",
+      {},
+      { cookie },
+    );
+
+    expect(res.status).toBe(412);
+    expect(await res.text()).toContain("Connect Google Calendar");
+  });
+
+  test("rejects readably when the connection needs a fresh sign-in", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    seedSyncableConnection(testApp, "reauth_required");
+
+    const res = await trpcMutation(
+      testApp.app,
+      "connections.google.syncNow",
+      {},
+      { cookie },
+    );
+
+    expect(res.status).toBe(412);
+    expect(await res.text()).toContain("econnect");
+  });
+
+  test("runs a sync and returns the run's counts", async () => {
+    const testApp = makeTestApp({ googleFetch: happyGoogleFetch });
+    const cookie = await completeSetup(testApp.app);
+    seedSyncableConnection(testApp);
+
+    const res = await trpcMutation(
+      testApp.app,
+      "connections.google.syncNow",
+      {},
+      { cookie },
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as TrpcSuccess<SyncNowData>;
+    expect(json.result.data).toEqual({
+      status: "success",
+      upserts: 1,
+      deletes: 0,
+      error: null,
     });
   });
 });

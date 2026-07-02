@@ -38,7 +38,14 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   app.get("/healthz", (c) => c.json({ status: "ok" }));
   app.all(
     "/api/trpc/*",
-    createTrpcHandler({ config, database, key, now, loginRateLimiter }),
+    createTrpcHandler({
+      config,
+      database,
+      key,
+      now,
+      loginRateLimiter,
+      googleFetch,
+    }),
   );
   app.route(
     "/api/oauth/google",
