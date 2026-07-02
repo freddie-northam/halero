@@ -568,6 +568,71 @@ describe("syncConnection 410 full resync", () => {
   });
 });
 
+describe("syncConnection event-loop friendliness", () => {
+  test("yields to the event loop between page commits", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // A concurrent counter task stands in for pending HTTP work: it can
+    // only advance when the sync engine yields back to the event loop.
+    let timerTicks = 0;
+    let stopPump = false;
+    const startPump = async (): Promise<void> => {
+      while (!stopPump) {
+        timerTicks += 1;
+        await Bun.sleep(0);
+      }
+    };
+    const ticksAtPage: number[] = [];
+    const pageBody = (page: string | null): Record<string, unknown> => {
+      if (page === null) {
+        return {
+          items: [timedEvent("evt-1", '"e1-v1"', "One")],
+          nextPageToken: "page-2",
+        };
+      }
+      if (page === "page-2") {
+        return {
+          items: [timedEvent("evt-2", '"e2-v1"', "Two")],
+          nextPageToken: "page-3",
+        };
+      }
+      return {
+        items: [timedEvent("evt-3", '"e3-v1"', "Three")],
+        nextSyncToken: "sync-token-1",
+      };
+    };
+    const fake = makeFakeGoogle((url) => {
+      if (isCalendarList(url)) {
+        return json(calendarListPage(["primary"]));
+      }
+      if (!isEvents(url, "primary")) {
+        return null;
+      }
+      ticksAtPage.push(timerTicks);
+      return json(pageBody(url.searchParams.get("pageToken")));
+    });
+
+    const pump = startPump();
+    try {
+      const summary = await syncConnection(
+        engineContext(testApp, fake.fetchLike),
+        CONNECTION_ID,
+      );
+      expect(summary.status).toBe("success");
+    } finally {
+      stopPump = true;
+      await pump;
+    }
+
+    // The counter advanced between every pair of page requests: proof
+    // the engine yields between page commits instead of starving the
+    // event loop for the whole multi-page sync.
+    expect(ticksAtPage).toHaveLength(3);
+    expect(ticksAtPage[1] ?? 0).toBeGreaterThan(ticksAtPage[0] ?? 0);
+    expect(ticksAtPage[2] ?? 0).toBeGreaterThan(ticksAtPage[1] ?? 0);
+  });
+});
+
 describe("syncConnection token handling", () => {
   test("retries once with a forced refresh after a 401 mid-sync", async () => {
     const testApp = makeTestApp();

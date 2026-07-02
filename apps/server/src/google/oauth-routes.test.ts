@@ -68,6 +68,7 @@ interface ConnectionRowRaw {
   readonly credentials_enc: Uint8Array;
   readonly status: string;
   readonly next_sync_at: number;
+  readonly consecutive_failures: number;
   readonly last_error: string | null;
 }
 
@@ -400,6 +401,14 @@ describe("GET /api/oauth/google/callback", () => {
     );
     const firstRow = onlyConnection(database);
 
+    // A stretch of failed syncs followed by a dead refresh token, as the
+    // scheduler and token refresh would leave them: reconnecting must
+    // reset all of it so the next tick picks the connection up again.
+    database.sqlite.run(
+      "UPDATE connections SET status = 'reauth_required', consecutive_failures = 4, next_sync_at = ? WHERE id = ?",
+      [clock.value + 999_999, firstRow.id],
+    );
+
     // Synced data tied to the Google account, as 6b will create it.
     database.db
       .insert(entities)
@@ -434,6 +443,10 @@ describe("GET /api/oauth/google/callback", () => {
     const secondRow = onlyConnection(database);
     expect(secondRow.id).toBe(firstRow.id);
     expect(secondRow.status).toBe("active");
+    // Reconnect resets the backoff state and makes the connection due
+    // immediately, so syncing resumes without waiting out old failures.
+    expect(secondRow.consecutive_failures).toBe(0);
+    expect(secondRow.next_sync_at).toBe(clock.value);
     const credentials = JSON.parse(
       decryptCredentials(key, secondRow.credentials_enc),
     ) as Record<string, unknown>;

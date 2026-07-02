@@ -306,6 +306,9 @@ const paginateEvents = async (
       throw new Error(googleApiErrorMessage(status));
     }
     processEventsPage(deps, calendarId, readItems(body));
+    // Each page commits synchronously; yield to the event loop between
+    // page transactions so a large resync cannot starve HTTP handling.
+    await Bun.sleep(0);
     pageToken = stringOrNull(body.nextPageToken);
     if (pageToken === null) {
       // nextSyncToken only ever arrives on the last page.

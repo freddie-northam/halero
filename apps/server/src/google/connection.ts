@@ -63,6 +63,9 @@ export const upsertGoogleConnection = (
   );
   const existing = getGoogleConnection(db);
   if (existing !== null) {
+    // A fresh sign-in wipes the failure history: the scheduler's status
+    // filter never reschedules reauth_required rows, so this reset (with
+    // next_sync_at = now) is what makes the connection due again.
     db.update(connections)
       .set({
         config,
@@ -70,6 +73,7 @@ export const upsertGoogleConnection = (
         status: "active",
         lastError: null,
         nextSyncAt: now,
+        consecutiveFailures: 0,
       })
       .where(eq(connections.id, existing.id))
       .run();
