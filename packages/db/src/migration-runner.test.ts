@@ -49,8 +49,11 @@ describe("runMigrations", () => {
       backupsDir,
     });
 
-    expect(first.applied).toEqual(["0001_core"]);
-    expect(ledgerNames(sqlite)).toEqual(["0001_core"]);
+    expect(first.applied).toEqual(["0001_core", "0002_connection_backoff"]);
+    expect(ledgerNames(sqlite)).toEqual([
+      "0001_core",
+      "0002_connection_backoff",
+    ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
 
@@ -61,7 +64,10 @@ describe("runMigrations", () => {
 
     expect(second.applied).toEqual([]);
     expect(second.snapshotPath).toBeNull();
-    expect(ledgerNames(sqlite)).toEqual(["0001_core"]);
+    expect(ledgerNames(sqlite)).toEqual([
+      "0001_core",
+      "0002_connection_backoff",
+    ]);
   });
 
   test("applies migrations ordered by numeric prefix even if the list is unordered", () => {
@@ -137,22 +143,25 @@ describe("runMigrations", () => {
     const extended: Migration[] = [
       ...coreMigrations,
       {
-        name: "0002_widgets",
+        name: "0003_widgets",
         sql: "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       },
     ];
 
     const result = runMigrations(sqlite, { migrations: extended, backupsDir });
 
-    expect(result.applied).toEqual(["0002_widgets"]);
+    expect(result.applied).toEqual(["0003_widgets"]);
     if (result.snapshotPath === null) {
       throw new Error("expected a snapshot path");
     }
-    expect(basename(result.snapshotPath)).toStartWith("pre-0002_widgets-");
+    expect(basename(result.snapshotPath)).toStartWith("pre-0003_widgets-");
     expect(existsSync(result.snapshotPath)).toBe(true);
 
     const snapshot = new Database(result.snapshotPath, { readonly: true });
-    expect(ledgerNames(snapshot)).toEqual(["0001_core"]);
+    expect(ledgerNames(snapshot)).toEqual([
+      "0001_core",
+      "0002_connection_backoff",
+    ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
   });
@@ -177,18 +186,46 @@ describe("runMigrations", () => {
     expect(readdirSync(backupsDir)).toEqual(snapshotsBefore);
   });
 
+  test("0002_connection_backoff adds consecutive_failures defaulting to 0", () => {
+    const { sqlite, backupsDir } = makeContext();
+    const coreOnly = coreMigrations.filter(
+      (migration) => migration.name === "0001_core",
+    );
+    runMigrations(sqlite, { migrations: coreOnly, backupsDir });
+    // An existing connection row must pick up the default, and because
+    // the database is non-empty the pre-migration snapshot must fire.
+    sqlite.run(
+      "INSERT INTO connections (id, connector_id, status, created_at) VALUES ('c1', 'google-calendar', 'active', 1)",
+    );
+
+    const result = runMigrations(sqlite, {
+      migrations: coreMigrations,
+      backupsDir,
+    });
+
+    expect(result.applied).toEqual(["0002_connection_backoff"]);
+    expect(result.snapshotPath).not.toBeNull();
+    const row = sqlite
+      .query<{ consecutive_failures: number }, []>(
+        "SELECT consecutive_failures FROM connections WHERE id = 'c1'",
+      )
+      .get();
+    expect(row?.consecutive_failures).toBe(0);
+    sqlite.close();
+  });
+
   test("rolls back a failed migration, keeps it out of the ledger, and stops", () => {
     const { sqlite, backupsDir } = makeContext();
     runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
     const broken: Migration = {
-      name: "0002_broken",
+      name: "0003_broken",
       sql: [
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       ].join("\n"),
     };
     const afterBroken: Migration = {
-      name: "0003_never_reached",
+      name: "0004_never_reached",
       sql: "CREATE TABLE gadgets (id TEXT PRIMARY KEY);",
     };
 
@@ -197,10 +234,13 @@ describe("runMigrations", () => {
         migrations: [...coreMigrations, broken, afterBroken],
         backupsDir,
       }),
-    ).toThrow(/0002_broken/);
+    ).toThrow(/0003_broken/);
 
     expect(tableExists(sqlite, "widgets")).toBe(false);
     expect(tableExists(sqlite, "gadgets")).toBe(false);
-    expect(ledgerNames(sqlite)).toEqual(["0001_core"]);
+    expect(ledgerNames(sqlite)).toEqual([
+      "0001_core",
+      "0002_connection_backoff",
+    ]);
   });
 });

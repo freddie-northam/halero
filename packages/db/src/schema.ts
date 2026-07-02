@@ -96,6 +96,8 @@ export const connections = sqliteTable("connections", {
   status: text("status").notNull(),
   syncIntervalSec: integer("sync_interval_sec").notNull().default(300),
   nextSyncAt: integer("next_sync_at"),
+  // Added by migrations/0002_connection_backoff.sql.
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
   lastError: text("last_error"),
   createdAt: integer("created_at").notNull(),
 });
