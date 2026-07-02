@@ -35,7 +35,14 @@ export interface EntityKindContribution {
   readonly kind: string;
   /** The schema version this build stores rows at. */
   readonly schemaVersion: number;
-  /** Validates the satellite payload shape for the current version. */
+  /**
+   * Validates the satellite payload shape for the current version.
+   * HOST-ENFORCED: the sync engine checks every upserted op's
+   * post-upcast satellite payload against this schema before storing
+   * anything; a mismatch fails the run readably and rolls the page
+   * back. Ops without a satellite payload skip the check (spine-only
+   * kinds are legal).
+   */
   readonly schema: z.ZodType<unknown>;
   readonly upcasts?: Readonly<Record<number, UpcastFn>>;
   /** Omitted for spine-only kinds that keep no satellite table. */

@@ -210,4 +210,27 @@ describe("syncConnection upcasts", () => {
     expect(getEntity(testApp, "gadget-2")?.schemaVersion).toBe(2);
     expect(captured[0]?.op.satellite).toEqual({ label: "Already current" });
   });
+
+  test("stores spine-only ops without satellite validation", async () => {
+    const testApp = makeTestApp();
+    seedWidgetConnection(testApp);
+    const captured: CapturedWrite[] = [];
+    // No satellite at all: legal for any kind, even though the widget
+    // schema would reject an empty object. Host validation must skip it.
+    const spineOnly: SyncOp = {
+      op: "upsert",
+      externalId: "gadget-3",
+      spine: { kind: "widget.gadget", schemaVersion: 2, title: "Bare" },
+    };
+
+    const summary = await syncConnection(
+      upcastContext(testApp, [[spineOnly]], captured),
+      CONNECTION_ID,
+    );
+
+    expect(summary.status).toBe("success");
+    expect(summary.upserts).toBe(1);
+    expect(getEntity(testApp, "gadget-3")?.schemaVersion).toBe(2);
+    expect(captured[0]?.op.satellite).toBeUndefined();
+  });
 });

@@ -67,6 +67,11 @@ const unknownKindMessage = (kind: string): string =>
   `The connector produced items of kind "${kind}", which this Halero ` +
   "build does not know how to store. Update Halero.";
 
+const satelliteMismatchMessage = (connectorId: string, kind: string): string =>
+  `The "${connectorId}" connector sent "${kind}" details that do not ` +
+  "match the registered shape for that kind. This is a connector bug; " +
+  "syncing stopped.";
+
 export interface SyncEngineContext {
   readonly database: HaleroDatabase;
   readonly key: Uint8Array;
@@ -115,6 +120,7 @@ interface StreamDeps {
   readonly accountKey: string;
   readonly now: () => number;
   readonly runCounts: RunCounts;
+  readonly log: (message: string) => void;
 }
 
 interface SyncCounts {
@@ -226,6 +232,32 @@ const upcastToRegistered = (
   };
 };
 
+/**
+ * Host-enforced kind contract: the POST-UPCAST satellite payload must
+ * match the schema the owning module registered, BEFORE anything is
+ * stored. The run fails with a readable message; the zod detail goes to
+ * the log so connector authors can diagnose what they produced. Ops
+ * without a satellite payload skip the check (spine-only is legal;
+ * writers may still enforce their own needs).
+ */
+const validateSatellite = (
+  deps: StreamDeps,
+  registered: RegisteredEntityKind,
+  op: UpsertSyncOp,
+): void => {
+  if (op.satellite === undefined) {
+    return;
+  }
+  const parsed = registered.schema.safeParse(op.satellite);
+  if (parsed.success) {
+    return;
+  }
+  deps.log(
+    `Rejected a "${op.spine.kind}" satellite payload: ${parsed.error.message}`,
+  );
+  throw new Error(satelliteMismatchMessage(deps.connectorId, op.spine.kind));
+};
+
 const applyUpsert = (
   deps: StreamDeps,
   streamId: string,
@@ -236,6 +268,7 @@ const applyUpsert = (
     throw new Error(unknownKindMessage(op.spine.kind));
   }
   const current = upcastToRegistered(deps, registered, op);
+  validateSatellite(deps, registered, current);
   const result = deps.store.upsertExternal({
     connectorId: deps.connectorId,
     accountKey: deps.accountKey,
@@ -647,6 +680,7 @@ export const syncConnection = async (
     accountKey: identity.accountKey,
     now: ctx.now,
     runCounts,
+    log: syncCtx.log,
   };
   const runId = startRun(db, connectionId, ctx.now());
   let error: string | null = INTERRUPTED_MESSAGE;

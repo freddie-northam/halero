@@ -659,6 +659,42 @@ describe("syncConnection connector misbehavior", () => {
     expect(summary.upserts).toBe(0);
     expect(getRef(testApp, "evt-w")).toBeUndefined();
   });
+
+  test("fails readably when a satellite does not match the registered kind schema", async () => {
+    const testApp = makeTestApp();
+    seedConnection(testApp);
+    // JSON-valid (so the page passes the protocol schema) but the wrong
+    // shape for the registered calendar.event schema.
+    const garbagePage: SyncOp[] = [
+      {
+        op: "upsert",
+        externalId: "evt-garbage",
+        spine: { kind: "calendar.event", schemaVersion: 1, title: "Bad" },
+        satellite: { calendarId: 7, allDay: "yes" },
+      },
+    ];
+    const logs: string[] = [];
+
+    const summary = await syncConnection(
+      rogueContext(testApp, [garbagePage], logs),
+      CONNECTION_ID,
+    );
+
+    // The host enforces the registered schema; the message names the
+    // connector and the kind so a self-hoster knows which side is broken.
+    expect(summary.status).toBe("failed");
+    expect(summary.error).toContain(GOOGLE_CONNECTOR_ID);
+    expect(summary.error).toContain("calendar.event");
+    expect(summary.error).toContain("registered shape");
+    // The page transaction rolled back: no ref, no satellite row, no counts.
+    expect(summary.upserts).toBe(0);
+    expect(getRef(testApp, "evt-garbage")).toBeUndefined();
+    expect(testApp.database.db.select().from(calendarEvents).all()).toEqual(
+      [],
+    );
+    // The zod detail reaches the log so connector authors can diagnose.
+    expect(logs.join("\n")).toContain("satellite payload");
+  });
 });
 
 describe("syncConnection stream provenance", () => {
