@@ -6,6 +6,7 @@ export interface TrpcContext {
   readonly db: HaleroDatabase["db"];
   readonly sqlite: HaleroDatabase["sqlite"];
   readonly config: HaleroConfig;
+  readonly key: Uint8Array;
   readonly session: SessionRecord | null;
   readonly sessionToken: string | null;
   readonly now: () => number;

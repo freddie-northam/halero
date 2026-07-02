@@ -14,6 +14,7 @@ import { appRouter } from "./router";
 export interface TrpcHandlerOptions {
   readonly config: HaleroConfig;
   readonly database: HaleroDatabase;
+  readonly key: Uint8Array;
   readonly now: () => number;
   readonly loginRateLimiter: LoginRateLimiter;
 }
@@ -35,7 +36,7 @@ const withCookies = (
 export const createTrpcHandler = (
   options: TrpcHandlerOptions,
 ): Handler<AppEnv> => {
-  const { config, database, now, loginRateLimiter } = options;
+  const { config, database, key, now, loginRateLimiter } = options;
   const secure = config.baseUrl.protocol === "https:";
   return async (c) => {
     const cookies: string[] = [];
@@ -43,6 +44,7 @@ export const createTrpcHandler = (
       db: database.db,
       sqlite: database.sqlite,
       config,
+      key,
       session: c.get("session"),
       sessionToken: c.get("sessionToken"),
       now,

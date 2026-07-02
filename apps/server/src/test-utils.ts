@@ -19,12 +19,22 @@ export interface TestApp {
   readonly database: HaleroDatabase;
   readonly dir: string;
   readonly clock: TestClock;
+  readonly key: Uint8Array;
 }
 
 export interface MakeTestAppOptions {
   readonly baseUrl?: string;
   readonly webDistDir?: string;
+  readonly googleFetch?: (
+    input: string | URL,
+    init?: RequestInit,
+  ) => Promise<Response>;
 }
+
+export const TEST_KEY: Uint8Array = Uint8Array.from(
+  { length: 32 },
+  (_, index) => index + 1,
+);
 
 export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
   const dir = mkdtempSync(join(tmpdir(), "halero-server-app-"));
@@ -41,10 +51,12 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
   const app = createApp({
     config,
     database,
+    key: TEST_KEY,
     webDistDir: options.webDistDir ?? join(dir, "missing-dist"),
     now: () => clock.value,
+    googleFetch: options.googleFetch,
   });
-  return { app, database, dir, clock };
+  return { app, database, dir, clock, key: TEST_KEY };
 };
 
 export interface TrpcCallOptions {
@@ -92,6 +104,12 @@ export const trpcMutation = (
       }),
     ),
   );
+};
+
+/** Runs first-time setup and returns a signed-in session cookie. */
+export const completeSetup = async (app: TestApp["app"]): Promise<string> => {
+  const res = await trpcMutation(app, "system.setup", setupInput);
+  return sessionCookieFrom(res);
 };
 
 export const sessionCookieFrom = (res: Response): string => {

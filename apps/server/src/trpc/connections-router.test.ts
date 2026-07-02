@@ -1,0 +1,208 @@
+import { describe, expect, test } from "bun:test";
+import { decryptCredentials } from "@halero/core";
+import { connections } from "@halero/db";
+import {
+  completeSetup,
+  makeTestApp,
+  type TestApp,
+  type TrpcSuccess,
+  trpcMutation,
+  trpcQuery,
+} from "../test-utils";
+
+const clientInput = {
+  clientId: "1234-abc.apps.googleusercontent.com",
+  clientSecret: "GOCSPX-super-secret-value",
+};
+
+interface GoogleStatusData {
+  readonly clientConfigured: boolean;
+  readonly httpsOk: boolean;
+  readonly redirectUri: string;
+  readonly connection: {
+    readonly id: string;
+    readonly status: string;
+    readonly email: string | null;
+    readonly lastError: string | null;
+  } | null;
+}
+
+const readSetting = (
+  database: TestApp["database"],
+  key: string,
+): string | null => {
+  const row = database.sqlite
+    .query<{ value: string }, [string]>(
+      "SELECT value FROM settings WHERE key = ?",
+    )
+    .get(key);
+  return row?.value ?? null;
+};
+
+const readGoogleStatus = async (
+  app: TestApp["app"],
+  cookie: string,
+): Promise<GoogleStatusData> => {
+  const res = await trpcQuery(app, "connections.google.status", { cookie });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as TrpcSuccess<GoogleStatusData>;
+  return json.result.data;
+};
+
+describe("connections.google.saveClient", () => {
+  test("rejects without a session", async () => {
+    const { app } = makeTestApp();
+    await completeSetup(app);
+
+    const res = await trpcMutation(
+      app,
+      "connections.google.saveClient",
+      clientInput,
+    );
+
+    expect(res.status).toBe(401);
+  });
+
+  test("stores the client ID plainly and the secret encrypted", async () => {
+    const { app, database, key } = makeTestApp();
+    const cookie = await completeSetup(app);
+
+    const res = await trpcMutation(
+      app,
+      "connections.google.saveClient",
+      clientInput,
+      { cookie },
+    );
+
+    expect(res.status).toBe(200);
+    expect(readSetting(database, "google_oauth_client_id")).toBe(
+      clientInput.clientId,
+    );
+    const storedSecret = readSetting(
+      database,
+      "google_oauth_client_secret_enc",
+    );
+    if (storedSecret === null) {
+      throw new Error("expected the encrypted client secret to be stored");
+    }
+    expect(storedSecret).not.toContain(clientInput.clientSecret);
+    const decrypted = decryptCredentials(
+      key,
+      Uint8Array.from(Buffer.from(storedSecret, "base64")),
+    );
+    expect(decrypted).toBe(clientInput.clientSecret);
+  });
+
+  test("rejects an empty client ID or secret with a readable error", async () => {
+    const { app } = makeTestApp();
+    const cookie = await completeSetup(app);
+
+    const emptyId = await trpcMutation(
+      app,
+      "connections.google.saveClient",
+      { ...clientInput, clientId: "  " },
+      { cookie },
+    );
+    const emptySecret = await trpcMutation(
+      app,
+      "connections.google.saveClient",
+      { ...clientInput, clientSecret: "" },
+      { cookie },
+    );
+
+    expect(emptyId.status).toBe(400);
+    expect(await emptyId.text()).toContain("client ID");
+    expect(emptySecret.status).toBe(400);
+    expect(await emptySecret.text()).toContain("client secret");
+  });
+});
+
+describe("connections.google.status", () => {
+  test("rejects without a session", async () => {
+    const { app } = makeTestApp();
+    await completeSetup(app);
+
+    const res = await trpcQuery(app, "connections.google.status");
+
+    expect(res.status).toBe(401);
+  });
+
+  test("reports unconfigured with https ok on the localhost default", async () => {
+    const { app } = makeTestApp();
+    const cookie = await completeSetup(app);
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status).toEqual({
+      clientConfigured: false,
+      httpsOk: true,
+      redirectUri: "http://localhost:4253/api/oauth/google/callback",
+      connection: null,
+    });
+  });
+
+  test("reports clientConfigured after saveClient", async () => {
+    const { app } = makeTestApp();
+    const cookie = await completeSetup(app);
+    await trpcMutation(app, "connections.google.saveClient", clientInput, {
+      cookie,
+    });
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status.clientConfigured).toBe(true);
+  });
+
+  test("reports httpsOk false for a plain-http non-localhost base URL", async () => {
+    const { app } = makeTestApp({ baseUrl: "http://halero.internal:8080" });
+    const cookie = await completeSetup(app);
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status.httpsOk).toBe(false);
+    expect(status.redirectUri).toBe(
+      "http://halero.internal:8080/api/oauth/google/callback",
+    );
+  });
+
+  test("reports httpsOk true for an https base URL", async () => {
+    const { app } = makeTestApp({ baseUrl: "https://halero.example.com" });
+    const cookie = await completeSetup(app);
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status.httpsOk).toBe(true);
+    expect(status.redirectUri).toBe(
+      "https://halero.example.com/api/oauth/google/callback",
+    );
+  });
+
+  test("includes the connection with its email once one exists", async () => {
+    const { app, database, clock } = makeTestApp();
+    const cookie = await completeSetup(app);
+    database.db
+      .insert(connections)
+      .values({
+        id: "conn-status-1",
+        connectorId: "google-calendar",
+        displayName: "Google Calendar",
+        config: JSON.stringify({
+          email: "person@example.com",
+          accountKey: "google-sub-1",
+        }),
+        status: "active",
+        nextSyncAt: clock.value,
+        createdAt: clock.value,
+      })
+      .run();
+
+    const status = await readGoogleStatus(app, cookie);
+
+    expect(status.connection).toEqual({
+      id: "conn-status-1",
+      status: "active",
+      email: "person@example.com",
+      lastError: null,
+    });
+  });
+});

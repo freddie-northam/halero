@@ -3,8 +3,8 @@ import { boot } from "./boot";
 import { loadConfig } from "./config";
 
 const config = loadConfig(process.env);
-const { database } = boot(config);
-const app = createApp({ config, database });
+const { database, key } = boot(config);
+const app = createApp({ config, database, key });
 
 Bun.serve({ port: config.port, fetch: app.fetch });
 

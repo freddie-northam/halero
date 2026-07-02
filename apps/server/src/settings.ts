@@ -14,3 +14,7 @@ export const setSetting = (db: Db, key: string, value: string): void => {
     .onConflictDoUpdate({ target: settings.key, set: { value } })
     .run();
 };
+
+export const deleteSetting = (db: Db, key: string): void => {
+  db.delete(settings).where(eq(settings.key, key)).run();
+};
