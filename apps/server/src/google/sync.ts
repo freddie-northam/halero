@@ -482,6 +482,25 @@ const runAllStreams = async (deps: StreamDeps): Promise<SyncCounts> => {
   return counts;
 };
 
+const startRun = (db: Db, connectionId: string, startedAt: number): string => {
+  const runId = ulid(startedAt);
+  db.insert(syncRuns)
+    .values({ id: runId, connectionId, startedAt, status: "running" })
+    .run();
+  return runId;
+};
+
+const setLastError = (
+  db: Db,
+  connectionId: string,
+  message: string | null,
+): void => {
+  db.update(connections)
+    .set({ lastError: message })
+    .where(eq(connections.id, connectionId))
+    .run();
+};
+
 /**
  * Runs one sync for the connection. Guard failures (missing connection,
  * reauth required) throw readable errors BEFORE a run row exists; once
@@ -507,15 +526,7 @@ export const syncConnection = async (
     homeTimezone: getSetting(db, "home_timezone") ?? "UTC",
     now: ctx.now,
   };
-  const runId = ulid(ctx.now());
-  db.insert(syncRuns)
-    .values({
-      id: runId,
-      connectionId,
-      startedAt: ctx.now(),
-      status: "running",
-    })
-    .run();
+  const runId = startRun(db, connectionId, ctx.now());
   let summary: SyncRunSummary = {
     status: "failed",
     upserts: 0,
@@ -525,16 +536,10 @@ export const syncConnection = async (
   try {
     const counts = await runAllStreams(deps);
     summary = { status: "success", ...counts, error: null };
-    db.update(connections)
-      .set({ lastError: null })
-      .where(eq(connections.id, connectionId))
-      .run();
+    setLastError(db, connectionId, null);
   } catch (error) {
     summary = { ...summary, error: readableSyncError(error) };
-    db.update(connections)
-      .set({ lastError: summary.error })
-      .where(eq(connections.id, connectionId))
-      .run();
+    setLastError(db, connectionId, summary.error);
   } finally {
     finalizeRun(db, runId, summary, ctx.now());
   }

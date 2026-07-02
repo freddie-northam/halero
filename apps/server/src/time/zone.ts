@@ -106,10 +106,7 @@ export const dayBoundsInZone = (
 });
 
 /** The calendar date ("YYYY-MM-DD") an instant falls on in the zone. */
-export const dateStringInZone = (
-  epochMs: number,
-  timeZone: string,
-): string => {
+export const dateStringInZone = (epochMs: number, timeZone: string): string => {
   const wall = wallClockAt(timeZone, epochMs);
   const month = String(wall.month).padStart(2, "0");
   const day = String(wall.day).padStart(2, "0");

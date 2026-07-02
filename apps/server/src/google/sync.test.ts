@@ -51,6 +51,8 @@ const seedConnection = (testApp: TestApp, options: SeedOptions = {}): void => {
       ),
       status: options.status ?? "active",
       nextSyncAt: clock.value,
+      // Seeded stale so a successful run provably CLEARS it.
+      lastError: "A previous sync failed.",
       createdAt: clock.value,
     })
     .run();
