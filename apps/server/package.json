@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./trpc": "./src/trpc/router.ts"
+  },
   "scripts": {
     "dev": "bun run --hot src/main.ts",
     "typecheck": "tsc --noEmit"

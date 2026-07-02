@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@halero/ui/theme.css";
+
+/* The ui package lives outside this app's root, so Tailwind's automatic
+   source detection misses it. Point at it explicitly. */
+@source "../../../packages/ui/src";
