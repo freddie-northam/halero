@@ -19,10 +19,8 @@ const coreNav: readonly NavContribution[] = [
 /** The web modules this build ships with, wired to the tRPC client. */
 export const buildWebModules = (client: TrpcClient): readonly WebModule[] => [
   createCalendarWebModule({
-    agenda: (days) =>
-      client.modules.calendar.agenda.query(
-        days === undefined ? undefined : { days },
-      ),
+    today: () => client.modules.calendar.today.query(),
+    range: (from, to) => client.modules.calendar.range.query({ from, to }),
   }),
 ];
 

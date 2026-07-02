@@ -1,144 +1,215 @@
-// The agenda page, moved from the app's routes. Composes @halero/ui
-// (shadcn) exports only; its data arrives through the narrow CalendarApi
-// interface the host's registry wires up from the tRPC client.
+// The calendar page: month / week / agenda views switched and anchored
+// entirely through URL search params (view + date). Data arrives through
+// the narrow CalendarApi seam the host registry wires up from its tRPC
+// client; every day boundary is computed server-side in the home
+// timezone and this screen only renders the groups it gets back.
 
-import { Alert, AlertDescription, Badge, Card, Loader2 } from "@halero/ui";
+import { Alert, AlertDescription, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
-import type { ComponentType, ReactElement } from "react";
-import type { Agenda, AgendaDay, AgendaEvent } from "../contract";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import type { ReactElement } from "react";
+import type { CalendarRange, CalendarToday } from "../contract";
+import { CalendarHeader } from "./components/calendar-header";
+import {
+  AGENDA_DAYS,
+  type CalendarSearch,
+  type CalendarView,
+  normalizeCalendarSearch,
+  viewWindow,
+} from "./helpers/calendar-search";
+import { addDays, addMonths, mondayOf } from "./helpers/date-matrix";
+import { formatDayRangeLabel, formatMonthLabel } from "./helpers/format";
 import { readableError } from "./readable-error";
+import { AgendaView } from "./views/agenda-view";
+import { MonthView } from "./views/month-view";
+import { WeekView } from "./views/week-view";
 
-/** What the calendar page needs from the host: its own agenda query. */
+/** What the calendar page needs from the host: its own module queries. */
 export interface CalendarApi {
-  readonly agenda: (days?: number) => Promise<Agenda>;
+  readonly today: () => Promise<CalendarToday>;
+  readonly range: (from: string, to: string) => Promise<CalendarRange>;
 }
 
-const AGENDA_DAYS = 7;
-
-// The date string is a home-timezone calendar date; formatting it as UTC
-// midnight keeps the label on that exact date regardless of the browser's
-// own timezone.
-const formatDayHeading = (date: string): string =>
-  new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  }).format(new Date(`${date}T00:00:00Z`));
-
-const formatTime = (epochMs: number, timeZone: string): string =>
-  new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone,
-  }).format(epochMs);
-
-const EventRow = ({
-  event,
-  timeZone,
-}: {
-  readonly event: AgendaEvent;
-  readonly timeZone: string;
-}): ReactElement => (
-  <li>
-    <Card className="flex-row items-baseline gap-3 rounded-xl px-3 py-2">
-      {event.allDay ? (
-        <Badge variant="secondary" className="shrink-0 text-muted-foreground">
-          all day
-        </Badge>
-      ) : (
-        <span className="tnum shrink-0 text-sm text-muted-foreground">
-          {formatTime(event.start, timeZone)} -{" "}
-          {formatTime(event.end, timeZone)}
-        </span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">
-          {event.title}
-        </span>
-        {event.location === null ? null : (
-          <span className="block truncate text-xs text-muted-foreground">
-            {event.location}
-          </span>
-        )}
-      </span>
-    </Card>
-  </li>
-);
-
-const DayGroup = ({
-  day,
-  timeZone,
-}: {
-  readonly day: AgendaDay;
-  readonly timeZone: string;
-}): ReactElement => (
-  <section>
-    <h2 className="text-sm font-semibold tracking-tight">
-      {formatDayHeading(day.date)}
-    </h2>
-    <ul className="mt-2 flex flex-col gap-1.5">
-      {day.events.map((event) => (
-        <EventRow key={event.entityId} event={event} timeZone={timeZone} />
-      ))}
-    </ul>
-  </section>
-);
-
-const EmptyState = (): ReactElement => (
-  <Card className="gap-1 px-4 py-8 text-center">
-    <p className="text-sm font-medium">
-      No events in the next {AGENDA_DAYS} days.
-    </p>
-    <p className="text-sm text-muted-foreground">
-      Events appear here after a sync. You can run one from Settings.
-    </p>
-  </Card>
-);
-
-const AgendaList = ({ agenda }: { readonly agenda: Agenda }): ReactElement => {
-  if (agenda.days.length === 0) {
-    return <EmptyState />;
+const rangeLabel = (view: CalendarView, anchor: string): string => {
+  if (view === "month") {
+    return formatMonthLabel(anchor);
   }
+  if (view === "week") {
+    const monday = mondayOf(anchor);
+    return formatDayRangeLabel(monday, addDays(monday, 6));
+  }
+  return formatDayRangeLabel(anchor, addDays(anchor, AGENDA_DAYS - 1));
+};
+
+/** The anchor one step back or forward: a month or a week. */
+const steppedAnchor = (
+  view: CalendarView,
+  anchor: string,
+  direction: 1 | -1,
+): string =>
+  view === "month"
+    ? addMonths(anchor, direction)
+    : addDays(anchor, direction * 7);
+
+const LoadingState = (): ReactElement => (
+  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+);
+
+const CalendarBody = ({
+  view,
+  anchor,
+  today,
+  range,
+  onOpenDay,
+}: {
+  readonly view: CalendarView;
+  readonly anchor: string;
+  readonly today: string;
+  readonly range: CalendarRange;
+  readonly onOpenDay: (date: string) => void;
+}): ReactElement => {
+  if (view === "agenda") {
+    return <AgendaView days={range.days} timeZone={range.homeTimezone} />;
+  }
+  const eventsByDate = new Map(range.days.map((day) => [day.date, day.events]));
+  const grid =
+    view === "month" ? (
+      <MonthView
+        anchor={anchor}
+        today={today}
+        eventsByDate={eventsByDate}
+        timeZone={range.homeTimezone}
+        onOpenDay={onOpenDay}
+      />
+    ) : (
+      <WeekView
+        anchor={anchor}
+        today={today}
+        eventsByDate={eventsByDate}
+        timeZone={range.homeTimezone}
+      />
+    );
   return (
-    <div className="flex flex-col gap-6">
-      {agenda.days.map((day) => (
-        <DayGroup key={day.date} day={day} timeZone={agenda.homeTimezone} />
-      ))}
+    <div>
+      {grid}
+      {range.days.length === 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No events in this {view}. Events appear here after a sync.
+        </p>
+      ) : null}
     </div>
   );
 };
 
-/** Builds the page component around the host-wired agenda query. */
-export const createCalendarScreen = (api: CalendarApi): ComponentType => {
+/**
+ * Module pages mount into the host's route tree dynamically, so the
+ * host's literal route types cannot know this path at compile time; a
+ * narrow structural signature keeps navigation typed on the module side.
+ */
+type CalendarNavigate = (options: {
+  readonly to: "/calendar";
+  readonly search: CalendarSearch;
+}) => Promise<void>;
+
+interface CalendarData {
+  /** Today in the home timezone, once the server has answered. */
+  readonly today: string | undefined;
+  /** The anchor date the views are built around. */
+  readonly anchor: string | undefined;
+  readonly range: CalendarRange | undefined;
+  readonly error: Error | null;
+}
+
+const useCalendarData = (
+  api: CalendarApi,
+  view: CalendarView,
+  date: string | undefined,
+): CalendarData => {
+  const todayQuery = useQuery({
+    queryKey: ["calendar", "today"],
+    queryFn: () => api.today(),
+  });
+  const today = todayQuery.data?.today;
+  // The anchor defaults to today in the HOME timezone, which only the
+  // server knows; the client never derives dates from its own clock.
+  const anchor = date ?? today;
+  const dateWindow =
+    anchor === undefined ? undefined : viewWindow(view, anchor);
+  const rangeQuery = useQuery({
+    queryKey: ["calendar", "range", dateWindow?.from, dateWindow?.to],
+    queryFn: () => {
+      if (dateWindow === undefined) {
+        throw new Error("The calendar window is not ready yet.");
+      }
+      return api.range(dateWindow.from, dateWindow.to);
+    },
+    enabled: dateWindow !== undefined,
+  });
+  return {
+    today,
+    anchor,
+    range: rangeQuery.data,
+    error: todayQuery.error ?? rangeQuery.error,
+  };
+};
+
+/** Builds the page component around the host-wired calendar queries. */
+export const createCalendarScreen = (api: CalendarApi) => {
   const CalendarScreen = (): ReactElement => {
-    const agenda = useQuery({
-      queryKey: ["agenda", AGENDA_DAYS],
-      queryFn: () => api.agenda(AGENDA_DAYS),
-    });
+    const rawSearch: unknown = useSearch({ strict: false });
+    const { view, date } = normalizeCalendarSearch(rawSearch);
+    const navigate = useNavigate() as unknown as CalendarNavigate;
+    const { today, anchor, range, error } = useCalendarData(api, view, date);
+
+    const setSearch = (next: CalendarSearch): void => {
+      void navigate({
+        to: "/calendar",
+        search: { view: next.view, date: next.date },
+      });
+    };
 
     const body = (): ReactElement => {
-      if (agenda.data !== undefined) {
-        return <AgendaList agenda={agenda.data} />;
-      }
-      if (agenda.error !== null) {
+      if (error !== null) {
         return (
           <Alert variant="destructive">
-            <AlertDescription>{readableError(agenda.error)}</AlertDescription>
+            <AlertDescription>{readableError(error)}</AlertDescription>
           </Alert>
         );
       }
-      return <Loader2 className="size-4 animate-spin text-muted-foreground" />;
+      if (anchor === undefined || today === undefined || range === undefined) {
+        return <LoadingState />;
+      }
+      return (
+        <CalendarBody
+          view={view}
+          anchor={anchor}
+          today={today}
+          range={range}
+          onOpenDay={(day) => setSearch({ view: "agenda", date: day })}
+        />
+      );
     };
 
     return (
-      <div className="mx-auto w-full max-w-2xl px-6 py-8">
-        <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The next {AGENDA_DAYS} days across your connected calendars.
-        </p>
-        <div className="mt-6">{body()}</div>
+      <div className="mx-auto w-full max-w-5xl px-6 py-6">
+        <CalendarHeader
+          label={anchor === undefined ? "" : rangeLabel(view, anchor)}
+          view={view}
+          onViewChange={(next) => setSearch({ view: next, date })}
+          onPrevious={() => {
+            if (anchor !== undefined) {
+              setSearch({ view, date: steppedAnchor(view, anchor, -1) });
+            }
+          }}
+          onToday={() => setSearch({ view })}
+          onNext={() => {
+            if (anchor !== undefined) {
+              setSearch({ view, date: steppedAnchor(view, anchor, 1) });
+            }
+          }}
+          navDisabled={anchor === undefined}
+        />
+        <div className="mt-4">{body()}</div>
       </div>
     );
   };

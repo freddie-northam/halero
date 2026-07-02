@@ -7,7 +7,7 @@ import {
   CALENDAR_EVENT_KIND,
   calendarEventSatelliteSchema,
 } from "@halero/schemas";
-import { calendarRouter } from "./agenda-router";
+import { calendarRouter } from "./router";
 import { writeCalendarEventSatellite } from "./satellite";
 
 /** The calendar.event satellite schema version this build stores. */
@@ -27,4 +27,10 @@ export const calendarServerModule = defineServerModule({
   router: calendarRouter,
 });
 
-export type { Agenda, AgendaDay, AgendaEvent } from "../contract";
+export type {
+  Agenda,
+  AgendaDay,
+  AgendaEvent,
+  CalendarRange,
+  CalendarToday,
+} from "../contract";

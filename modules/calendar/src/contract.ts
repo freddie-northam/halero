@@ -12,6 +12,8 @@ export interface AgendaEvent {
   readonly end: number;
   readonly location: string | null;
   readonly calendarId: string;
+  /** True for instances expanded from a recurring event. */
+  readonly recurring: boolean;
 }
 
 export interface AgendaDay {
@@ -22,4 +24,21 @@ export interface AgendaDay {
 export interface Agenda {
   readonly homeTimezone: string;
   readonly days: readonly AgendaDay[];
+}
+
+/**
+ * Day-grouped events for an explicit half-open [from, to) date window.
+ * Unlike the agenda, an event appears under EVERY home-timezone day its
+ * [start, end) window intersects, so multi-day events span correctly.
+ */
+export interface CalendarRange {
+  readonly homeTimezone: string;
+  readonly days: readonly AgendaDay[];
+}
+
+/** The server-computed "today" anchor; the client never does tz math. */
+export interface CalendarToday {
+  readonly homeTimezone: string;
+  /** Calendar date ("YYYY-MM-DD") of now in the home timezone. */
+  readonly today: string;
 }

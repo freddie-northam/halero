@@ -5,7 +5,11 @@ import { buildNav, buildWebModules } from "./registry";
 const stubClient = {
   modules: {
     calendar: {
-      agenda: {
+      today: {
+        query: () =>
+          Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14" }),
+      },
+      range: {
         query: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
       },
     },
