@@ -15,6 +15,7 @@ export type {
   CalendarToday,
 } from "../contract";
 export type { CalendarApi } from "./calendar-screen";
+export { createTodayAgendaSection } from "./today-agenda-section";
 
 export const createCalendarWebModule = (api: CalendarApi): WebModule =>
   defineWebModule({
