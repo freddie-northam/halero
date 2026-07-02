@@ -34,6 +34,7 @@
       "dependencies": {
         "@halero/module-calendar": "workspace:*",
         "@halero/module-sdk": "workspace:*",
+        "@halero/module-today": "workspace:*",
         "@halero/ui": "workspace:*",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-router": "^1.170.17",
@@ -78,6 +79,29 @@
         "@trpc/server": "^11.10.0",
         "drizzle-orm": "^0.44.7",
         "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "^20.10.6",
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19.2.17",
+        "@types/react-dom": "^19.2.3",
+        "happy-dom": "^20.10.6",
+        "react": "^19.2.7",
+        "react-dom": "^19.2.7",
+      },
+      "peerDependencies": {
+        "react": "^19.0.0",
+      },
+    },
+    "modules/today": {
+      "name": "@halero/module-today",
+      "version": "0.1.0",
+      "dependencies": {
+        "@halero/module-sdk": "workspace:*",
+        "@halero/ui": "workspace:*",
+        "@tanstack/react-query": "^5.101.2",
+        "@tanstack/react-router": "^1.170.17",
       },
       "devDependencies": {
         "@happy-dom/global-registrator": "^20.10.6",
@@ -211,6 +235,8 @@
     "@halero/module-calendar": ["@halero/module-calendar@workspace:modules/calendar"],
 
     "@halero/module-sdk": ["@halero/module-sdk@workspace:packages/module-sdk"],
+
+    "@halero/module-today": ["@halero/module-today@workspace:modules/today"],
 
     "@halero/schemas": ["@halero/schemas@workspace:packages/schemas"],
 
