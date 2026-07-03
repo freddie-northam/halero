@@ -3,7 +3,7 @@
 // ascending. Dates are 'YYYY-MM-DD', so string comparison orders them.
 
 import { activityDaily, type HaleroDatabase } from "@halero/db";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lte, max } from "drizzle-orm";
 
 type Db = HaleroDatabase["db"];
 
@@ -57,3 +57,11 @@ export const readRange = (
     )
     .orderBy(asc(activityDaily.date))
     .all();
+
+/** When a source was last refreshed (max updatedAt), or null if never. */
+export const lastUpdatedAt = (db: Db, source: string): number | null =>
+  db
+    .select({ value: max(activityDaily.updatedAt) })
+    .from(activityDaily)
+    .where(eq(activityDaily.source, source))
+    .get()?.value ?? null;
