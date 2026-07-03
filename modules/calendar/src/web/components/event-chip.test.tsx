@@ -42,7 +42,7 @@ test("a user (editable) event renders the accent dot and is clickable", () => {
     <EventChip
       event={userEvent}
       timeZone={HOME_TZ}
-      onEdit={(clickedEvent) => clicks.push(clickedEvent)}
+      onSelect={(clickedEvent) => clicks.push(clickedEvent)}
     />,
   );
 
@@ -53,18 +53,22 @@ test("a user (editable) event renders the accent dot and is clickable", () => {
   expect(clicks).toEqual([userEvent]);
 });
 
-test("a Google (non-editable) event stays a static, inert element with no accent dot", () => {
+test("a Google (non-editable) event is selectable but carries no accent dot", () => {
   const googleEvent = event({ entityId: "ev-google", title: "Dentist" });
-  const onEdit = () => {
-    throw new Error("should never be called");
-  };
+  const clicks: AgendaEvent[] = [];
   const view = render(
-    <EventChip event={googleEvent} timeZone={HOME_TZ} onEdit={onEdit} />,
+    <EventChip
+      event={googleEvent}
+      timeZone={HOME_TZ}
+      onSelect={(clickedEvent) => clicks.push(clickedEvent)}
+    />,
   );
 
-  expect(view.queryByRole("button")).toBeNull();
-  const chip = view.getByText("Dentist").closest("div");
-  expect(chip?.querySelector("span.rounded-full")).toBeNull();
+  const chip = view.getByRole("button", { name: /Dentist/ });
+  expect(chip.querySelector("span.rounded-full")).toBeNull();
+
+  fireEvent.click(chip);
+  expect(clicks).toEqual([googleEvent]);
 });
 
 test("stopping propagation: clicking an editable chip does not bubble to a wrapping day click", () => {
@@ -82,7 +86,7 @@ test("stopping propagation: clicking an editable chip does not bubble to a wrapp
         dayClicked = true;
       }}
     >
-      <EventChip event={userEvent} timeZone={HOME_TZ} onEdit={() => {}} />
+      <EventChip event={userEvent} timeZone={HOME_TZ} onSelect={() => {}} />
     </div>,
   );
 

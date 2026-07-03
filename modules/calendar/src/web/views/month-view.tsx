@@ -20,8 +20,8 @@ export interface MonthViewProps {
   readonly onOpenDay: (date: string) => void;
   /** The per-cell "add event" affordance opens the create modal on that day. */
   readonly onCreateOn: (date: string) => void;
-  /** A user (editable) event chip opens it in the edit modal. */
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  /** Any event chip click selects it into the context panel. */
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }
 
 /** Up to this many chips per cell before the "+N more" affordance. */
@@ -67,7 +67,7 @@ const DayCell = ({
   timeZone,
   onOpenDay,
   onCreateOn,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly date: string;
   readonly inMonth: boolean;
@@ -76,7 +76,7 @@ const DayCell = ({
   readonly timeZone: string;
   readonly onOpenDay: (date: string) => void;
   readonly onCreateOn: (date: string) => void;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const overflow = events.length - MAX_CHIPS;
   return (
@@ -99,7 +99,7 @@ const DayCell = ({
           key={event.entityId}
           event={event}
           timeZone={timeZone}
-          onEdit={onEditEvent}
+          onSelect={onSelectEvent}
         />
       ))}
       {overflow > 0 ? (
@@ -122,7 +122,7 @@ export const MonthView = ({
   timeZone,
   onOpenDay,
   onCreateOn,
-  onEditEvent,
+  onSelectEvent,
 }: MonthViewProps): ReactElement => {
   const matrix = monthMatrix(anchor);
   const month = monthOf(anchor);
@@ -150,7 +150,7 @@ export const MonthView = ({
             timeZone={timeZone}
             onOpenDay={onOpenDay}
             onCreateOn={onCreateOn}
-            onEditEvent={onEditEvent}
+            onSelectEvent={onSelectEvent}
           />
         ))}
       </div>

@@ -1,8 +1,10 @@
 // The calendar page: month / week / agenda views switched and anchored
-// entirely through URL search params (view + date). Data arrives through
-// the narrow CalendarApi seam the host registry wires up from its tRPC
-// client; every day boundary is computed server-side in the home
-// timezone and this screen only renders the groups it gets back.
+// entirely through URL search params (view + date), plus a read-only
+// right-side context panel showing the soonest upcoming event and
+// whichever event a view last selected. Data arrives through the narrow
+// CalendarApi seam the host registry wires up from its tRPC client;
+// every day boundary (and "now", for the panel) is computed server-side
+// in the home timezone, and this screen only renders what it gets back.
 
 import { Alert, AlertDescription, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +17,7 @@ import type {
 } from "../contract";
 import type { CalendarApi } from "./api";
 import { CalendarHeader } from "./components/calendar-header";
+import { ContextPanel } from "./components/context-panel";
 import { EventModal, type EventModalTarget } from "./components/event-modal";
 import {
   AGENDA_DAYS,
@@ -30,6 +33,9 @@ import { AgendaView } from "./views/agenda-view";
 import { ListView } from "./views/list-view";
 import { MonthView } from "./views/month-view";
 import { WeekView } from "./views/week-view";
+
+/** The context panel's "Next up" card only ever needs the soonest event. */
+const UPCOMING_LIMIT = 1;
 
 const rangeLabel = (view: CalendarView, anchor: string): string => {
   if (view === "month" || view === "list") {
@@ -66,7 +72,7 @@ const CalendarBody = ({
   range,
   onOpenDay,
   onCreateOn,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly view: CalendarView;
   readonly anchor: string;
@@ -74,10 +80,16 @@ const CalendarBody = ({
   readonly range: CalendarRange;
   readonly onOpenDay: (date: string) => void;
   readonly onCreateOn: (date: string) => void;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   if (view === "agenda") {
-    return <AgendaView days={range.days} timeZone={range.homeTimezone} />;
+    return (
+      <AgendaView
+        days={range.days}
+        timeZone={range.homeTimezone}
+        onSelectEvent={onSelectEvent}
+      />
+    );
   }
   const eventsByDate = new Map(range.days.map((day) => [day.date, day.events]));
   const grid =
@@ -89,7 +101,7 @@ const CalendarBody = ({
         timeZone={range.homeTimezone}
         onOpenDay={onOpenDay}
         onCreateOn={onCreateOn}
-        onEditEvent={onEditEvent}
+        onSelectEvent={onSelectEvent}
       />
     ) : (
       <WeekView
@@ -98,7 +110,7 @@ const CalendarBody = ({
         eventsByDate={eventsByDate}
         timeZone={range.homeTimezone}
         onCreateOn={onCreateOn}
-        onEditEvent={onEditEvent}
+        onSelectEvent={onSelectEvent}
       />
     );
   return (
@@ -131,6 +143,8 @@ interface CalendarData {
   readonly range: CalendarRange | undefined;
   /** The flat events feed, fetched only for the list view. */
   readonly events: CalendarEventList | undefined;
+  /** The soonest future event for the panel's "Next up" card, or null. */
+  readonly upcoming: AgendaEvent | null;
   readonly error: Error | null;
 }
 
@@ -175,6 +189,15 @@ const useCalendarData = (
     },
     enabled: view === "list" && dateWindow !== undefined,
   });
+  // The panel's own feed, fetched independently of the active view and
+  // never folded into the page-level error gate below: a failure here
+  // must not hide the calendar, only leave the panel showing "Nothing
+  // coming up." instead of the real next event.
+  const upcomingQuery = useQuery({
+    queryKey: ["calendar", "upcoming", UPCOMING_LIMIT],
+    queryFn: () => api.upcoming(UPCOMING_LIMIT),
+    enabled: today !== undefined,
+  });
   // Only the ACTIVE feed's error counts: a disabled query keeps its last
   // (possibly errored) state frozen, so surfacing the inactive feed's
   // error would strand a freshly loaded view behind a stale alert after a
@@ -185,6 +208,7 @@ const useCalendarData = (
     anchor,
     range: rangeQuery.data,
     events: eventsQuery.data,
+    upcoming: upcomingQuery.data?.events[0] ?? null,
     error: todayQuery.error ?? feedError,
   };
 };
@@ -195,7 +219,7 @@ export const createCalendarScreen = (api: CalendarApi) => {
     const rawSearch: unknown = useSearch({ strict: false });
     const { view, date } = normalizeCalendarSearch(rawSearch);
     const navigate = useNavigate() as unknown as CalendarNavigate;
-    const { today, anchor, range, events, error } = useCalendarData(
+    const { today, anchor, range, events, upcoming, error } = useCalendarData(
       api,
       view,
       date,
@@ -205,6 +229,9 @@ export const createCalendarScreen = (api: CalendarApi) => {
     // loaded (never both, per useCalendarData's mutually exclusive gate).
     const homeTimezone = range?.homeTimezone ?? events?.homeTimezone;
     const [target, setTarget] = useState<EventModalTarget | null>(null);
+    // Clicking any event (editable or not) selects it into the panel;
+    // editing is now an explicit button there, not a view click.
+    const [selected, setSelected] = useState<AgendaEvent | null>(null);
 
     const setSearch = (next: CalendarSearch): void => {
       void navigate({
@@ -214,8 +241,13 @@ export const createCalendarScreen = (api: CalendarApi) => {
     };
     const onCreateOn = (day: string): void =>
       setTarget({ mode: "create", date: day });
-    const onEditEvent = (event: AgendaEvent): void =>
+    const onEdit = (event: AgendaEvent): void =>
       setTarget({ mode: "edit", event });
+    // Avoids a stale selection pointing at an event that no longer exists.
+    const clearIfDeleted = (entityId: string): void =>
+      setSelected((current) =>
+        current?.entityId === entityId ? null : current,
+      );
 
     const body = (): ReactElement => {
       if (error !== null) {
@@ -238,7 +270,7 @@ export const createCalendarScreen = (api: CalendarApi) => {
           <ListView
             events={events.events}
             timeZone={events.homeTimezone}
-            onEditEvent={onEditEvent}
+            onSelectEvent={setSelected}
           />
         );
       }
@@ -253,13 +285,13 @@ export const createCalendarScreen = (api: CalendarApi) => {
           range={range}
           onOpenDay={(day) => setSearch({ view: "agenda", date: day })}
           onCreateOn={onCreateOn}
-          onEditEvent={onEditEvent}
+          onSelectEvent={setSelected}
         />
       );
     };
 
     return (
-      <div className="mx-auto w-full max-w-5xl px-6 py-6">
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
         <CalendarHeader
           label={anchor === undefined ? "" : rangeLabel(view, anchor)}
           view={view}
@@ -282,7 +314,23 @@ export const createCalendarScreen = (api: CalendarApi) => {
             }
           }}
         />
-        <div className="mt-4">{body()}</div>
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1">{body()}</div>
+          {homeTimezone === undefined ? null : (
+            <aside
+              aria-label="Event details"
+              className="w-full lg:w-72 lg:shrink-0"
+            >
+              <ContextPanel
+                upcoming={upcoming}
+                selected={selected}
+                timeZone={homeTimezone}
+                onEdit={onEdit}
+                onClearSelection={() => setSelected(null)}
+              />
+            </aside>
+          )}
+        </div>
         {homeTimezone === undefined ? null : (
           <EventModal
             target={target}
@@ -295,7 +343,10 @@ export const createCalendarScreen = (api: CalendarApi) => {
               api.updateEvent(input).then(() => setTarget(null))
             }
             onDelete={(entityId) =>
-              api.deleteEvent(entityId).then(() => setTarget(null))
+              api.deleteEvent(entityId).then(() => {
+                setTarget(null);
+                clearIfDeleted(entityId);
+              })
             }
           />
         )}

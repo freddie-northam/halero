@@ -50,7 +50,7 @@ test("renders a row per event with date, time, and location text", () => {
     <ListView
       events={[timed, allDay]}
       timeZone={HOME_TZ}
-      onEditEvent={() => {}}
+      onSelectEvent={() => {}}
     />,
   );
 
@@ -62,7 +62,7 @@ test("renders a row per event with date, time, and location text", () => {
   expect(view.getByText("All day")).toBeTruthy();
 });
 
-test("a user (editable) event's title is a button that calls onEditEvent", () => {
+test("a user (editable) event's title is a button that calls onSelectEvent", () => {
   const userEvent = event({
     entityId: "ev-user",
     title: "1:1 with Sam",
@@ -73,7 +73,7 @@ test("a user (editable) event's title is a button that calls onEditEvent", () =>
     <ListView
       events={[userEvent]}
       timeZone={HOME_TZ}
-      onEditEvent={(clicked) => calls.push(clicked)}
+      onSelectEvent={(clicked) => calls.push(clicked)}
     />,
   );
 
@@ -84,30 +84,29 @@ test("a user (editable) event's title is a button that calls onEditEvent", () =>
   expect(calls).toEqual([userEvent]);
 });
 
-test("a Google (non-editable) event's title is plain text with no accent dot", () => {
+test("a Google (non-editable) event's title is also a button, with no accent dot", () => {
   const googleEvent = event({ entityId: "ev-google", title: "Dentist" });
+  const calls: AgendaEvent[] = [];
   const view = render(
     <ListView
       events={[googleEvent]}
       timeZone={HOME_TZ}
-      onEditEvent={() => {
-        throw new Error("should never be called");
-      }}
+      onSelectEvent={(clicked) => calls.push(clicked)}
     />,
   );
 
-  expect(view.queryByRole("button", { name: /Dentist/ })).toBeNull();
-  // Assert at the whole cell, not the text span (the dot is a sibling of
-  // the text, so a span-scoped query would miss a mistakenly added dot).
-  const cell = view.getByText("Dentist").closest("td");
-  expect(cell?.querySelector("span.rounded-full")).toBeNull();
+  const button = view.getByRole("button", { name: /Dentist/ });
+  expect(button.querySelector("span.rounded-full")).toBeNull();
+  fireEvent.click(button);
+
+  expect(calls).toEqual([googleEvent]);
 });
 
 test("clicking a sortable header reorders rows and toggles aria-sort", () => {
   const a = event({ entityId: "a", title: "Alpha", start: 200 });
   const b = event({ entityId: "b", title: "Beta", start: 100 });
   const view = render(
-    <ListView events={[a, b]} timeZone={HOME_TZ} onEditEvent={() => {}} />,
+    <ListView events={[a, b]} timeZone={HOME_TZ} onSelectEvent={() => {}} />,
   );
 
   const titleHeader = view.getByRole("columnheader", { name: /Title/ });
@@ -134,7 +133,7 @@ test("the Date header starts as the active ascending sort", () => {
     <ListView
       events={[event({ entityId: "a" })]}
       timeZone={HOME_TZ}
-      onEditEvent={() => {}}
+      onSelectEvent={() => {}}
     />,
   );
 
@@ -145,7 +144,7 @@ test("the Date header starts as the active ascending sort", () => {
 
 test("renders the empty state when there are no events", () => {
   const view = render(
-    <ListView events={[]} timeZone={HOME_TZ} onEditEvent={() => {}} />,
+    <ListView events={[]} timeZone={HOME_TZ} onSelectEvent={() => {}} />,
   );
 
   expect(view.getByText("No events this month.")).toBeTruthy();

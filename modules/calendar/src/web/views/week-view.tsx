@@ -27,8 +27,8 @@ export interface WeekViewProps {
   readonly timeZone: string;
   /** The per-day "+" create affordance opens the create modal on that day. */
   readonly onCreateOn: (date: string) => void;
-  /** A user (editable) event opens it in the edit modal. */
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  /** Any event click selects it into the context panel. */
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }
 
 /** Exported so tests can compute the exact pixel offsets they expect. */
@@ -114,11 +114,11 @@ const DayHeader = ({
 const AllDayCell = ({
   events,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly events: readonly AgendaEvent[];
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => (
   <div className="flex min-h-7 min-w-0 flex-col gap-px bg-background p-1">
     {events.map((event) => (
@@ -126,7 +126,7 @@ const AllDayCell = ({
         key={event.entityId}
         event={event}
         timeZone={timeZone}
-        onEdit={onEditEvent}
+        onSelect={onSelectEvent}
       />
     ))}
   </div>
@@ -136,12 +136,12 @@ const AllDayRow = ({
   dates,
   eventsFor,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly dates: readonly string[];
   readonly eventsFor: (date: string) => readonly AgendaEvent[];
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => (
   <div className={cn("grid gap-px border-b bg-border", GRID_COLUMNS)}>
     <div className="bg-background px-1.5 py-1 text-[11px] text-muted-foreground">
@@ -152,7 +152,7 @@ const AllDayRow = ({
         key={date}
         events={eventsFor(date).filter((event) => event.allDay)}
         timeZone={timeZone}
-        onEditEvent={onEditEvent}
+        onSelectEvent={onSelectEvent}
       />
     ))}
   </div>
@@ -184,12 +184,12 @@ const TimedGrid = ({
   dates,
   eventsFor,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly dates: readonly string[];
   readonly eventsFor: (date: string) => readonly AgendaEvent[];
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => (
   <div className="max-h-[65vh] overflow-y-auto">
     <div className={cn("grid gap-px bg-border", GRID_COLUMNS)}>
@@ -199,7 +199,7 @@ const TimedGrid = ({
           key={date}
           events={eventsFor(date)}
           timeZone={timeZone}
-          onEditEvent={onEditEvent}
+          onSelectEvent={onSelectEvent}
         />
       ))}
     </div>
@@ -275,16 +275,21 @@ const TimedBlockLabel = ({
   </>
 );
 
+/**
+ * Every timed block is a keyboard-focusable button that selects the
+ * event into the context panel; the accent border still distinguishes
+ * editable (user) events from Google ones at a glance.
+ */
 const TimedBlock = ({
   event,
   timeZone,
   layout,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly event: AgendaEvent;
   readonly timeZone: string;
   readonly layout: TimedLayout;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const style: CSSProperties = {
     top: layout.top,
@@ -292,42 +297,30 @@ const TimedBlock = ({
     left: `${layout.left}%`,
     width: `${layout.width}%`,
   };
-  const label = <TimedBlockLabel event={event} timeZone={timeZone} />;
-  if (event.editable) {
-    return (
-      <button
-        type="button"
-        style={style}
-        title={event.title}
-        onClick={() => onEditEvent(event)}
-        className={cn(
-          timedBlockClassName(true),
-          "w-full focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-        )}
-      >
-        {label}
-      </button>
-    );
-  }
   return (
-    <div
+    <button
+      type="button"
       style={style}
       title={event.title}
-      className={timedBlockClassName(false)}
+      onClick={() => onSelectEvent(event)}
+      className={cn(
+        timedBlockClassName(event.editable),
+        "w-full focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+      )}
     >
-      {label}
-    </div>
+      <TimedBlockLabel event={event} timeZone={timeZone} />
+    </button>
   );
 };
 
 const DayColumn = ({
   events,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly events: readonly AgendaEvent[];
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const timed = events.filter((event) => !event.allDay);
   const slots = packEventLanes(timed);
@@ -347,7 +340,7 @@ const DayColumn = ({
             timeZone,
             slots[index] ?? { lane: 0, laneCount: 1 },
           )}
-          onEditEvent={onEditEvent}
+          onSelectEvent={onSelectEvent}
         />
       ))}
     </div>
@@ -360,7 +353,7 @@ export const WeekView = ({
   eventsByDate,
   timeZone,
   onCreateOn,
-  onEditEvent,
+  onSelectEvent,
 }: WeekViewProps): ReactElement => {
   const dates = weekDates(anchor);
   const eventsFor = (date: string): readonly AgendaEvent[] =>
@@ -372,13 +365,13 @@ export const WeekView = ({
         dates={dates}
         eventsFor={eventsFor}
         timeZone={timeZone}
-        onEditEvent={onEditEvent}
+        onSelectEvent={onSelectEvent}
       />
       <TimedGrid
         dates={dates}
         eventsFor={eventsFor}
         timeZone={timeZone}
-        onEditEvent={onEditEvent}
+        onSelectEvent={onSelectEvent}
       />
     </div>
   );

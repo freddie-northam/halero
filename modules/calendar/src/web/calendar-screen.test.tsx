@@ -114,6 +114,7 @@ const fixtureApi: CalendarApi = {
       homeTimezone: HOME_TZ,
       events: fixtureEvents,
     }),
+  upcoming: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
   createEvent: () => Promise.reject(new Error("not under test")),
   updateEvent: () => Promise.reject(new Error("not under test")),
   deleteEvent: () => Promise.reject(new Error("not under test")),
@@ -144,6 +145,10 @@ const renderCalendar = async (api: CalendarApi, url: string) => {
 
 const searchOf = (router: { state: { location: { search: unknown } } }) =>
   normalizeCalendarSearch(router.state.location.search);
+
+/** The context panel is the page's one "Event details" landmark. */
+const contextPanel = (view: ReturnType<typeof render>) =>
+  within(view.getByRole("complementary", { name: "Event details" }));
 
 test("defaults to the agenda anchored on the server's today", async () => {
   const { view } = await renderCalendar(fixtureApi, "/calendar");
@@ -323,7 +328,43 @@ test("the New event button opens the create modal at the anchor and closes on su
   expect(view.queryByRole("dialog")).toBeNull();
 });
 
-test("saving an edit on a user event's chip calls updateEvent and closes the modal", async () => {
+test("clicking a user event's chip selects it into the panel; its Edit button opens the modal", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+  expect(panel.getAllByText("1:1 with Sam").length).toBeGreaterThan(0);
+  expect(view.queryByRole("dialog")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+});
+
+test("saving an edit opened from the panel calls updateEvent and closes the modal", async () => {
   const editableEvent = event({
     entityId: "ev-user",
     title: "1:1 with Sam",
@@ -350,8 +391,9 @@ test("saving an edit on a user event's chip calls updateEvent and closes the mod
   );
   await view.findByText("July 2025");
 
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
   await act(async () => {
-    fireEvent.click(view.getByTitle("1:1 with Sam"));
+    fireEvent.click(contextPanel(view).getByRole("button", { name: "Edit" }));
   });
   const dialog = within(await view.findByRole("dialog"));
   expect(dialog.getByText("Edit event")).toBeTruthy();
@@ -369,7 +411,7 @@ test("saving an edit on a user event's chip calls updateEvent and closes the mod
   expect(view.queryByRole("dialog")).toBeNull();
 });
 
-test("deleting from a user event's edit modal calls deleteEvent and closes it", async () => {
+test("deleting from an edit modal opened from the panel calls deleteEvent, closes it, and clears the selection", async () => {
   const editableEvent = event({
     entityId: "ev-user",
     title: "1:1 with Sam",
@@ -396,8 +438,12 @@ test("deleting from a user event's edit modal calls deleteEvent and closes it", 
   );
   await view.findByText("July 2025");
 
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
   await act(async () => {
-    fireEvent.click(view.getByTitle("1:1 with Sam"));
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
   });
   const dialog = within(await view.findByRole("dialog"));
   expect(dialog.getByText("Edit event")).toBeTruthy();
@@ -413,6 +459,108 @@ test("deleting from a user event's edit modal calls deleteEvent and closes it", 
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(view.queryByRole("dialog")).toBeNull();
+  expect(panel.queryByText("Selected")).toBeNull();
+});
+
+test("clicking a Google event selects it into the panel with no Edit button", async () => {
+  const googleEvent = event({
+    entityId: "ev-google",
+    title: "Dentist",
+    start: Date.UTC(2025, 6, 2, 8, 30, 0),
+    end: Date.UTC(2025, 6, 2, 8, 45, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [googleEvent] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("Dentist"));
+
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+  expect(panel.getAllByText("Dentist").length).toBeGreaterThan(0);
+  expect(panel.queryByRole("button", { name: "Edit" })).toBeNull();
+});
+
+test("clearing the selection removes the Selected section from the panel", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
+  fireEvent.click(panel.getByRole("button", { name: "Clear selection" }));
+
+  expect(panel.queryByText("Selected")).toBeNull();
+});
+
+test("the panel's Next up card shows the soonest upcoming event", async () => {
+  const upcomingEvent = event({
+    entityId: "ev-upcoming",
+    title: "Board sync",
+    start: Date.UTC(2025, 6, 4, 9, 0, 0),
+    end: Date.UTC(2025, 6, 4, 9, 30, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    upcoming: () =>
+      Promise.resolve({ homeTimezone: HOME_TZ, events: [upcomingEvent] }),
+  };
+  const { view } = await renderCalendar(api, "/calendar");
+  await view.findByText("Wednesday 2 July");
+
+  const panel = contextPanel(view);
+  expect(await panel.findByText("Board sync")).toBeTruthy();
+});
+
+test("the panel shows Nothing coming up when there is no upcoming event", async () => {
+  const { view } = await renderCalendar(fixtureApi, "/calendar");
+  await view.findByText("Wednesday 2 July");
+
+  expect(
+    await contextPanel(view).findByText("Nothing coming up."),
+  ).toBeTruthy();
+});
+
+test("an upcoming fetch error does not hide the calendar", async () => {
+  const api: CalendarApi = {
+    ...fixtureApi,
+    upcoming: () => Promise.reject(new Error("boom")),
+  };
+  const { view } = await renderCalendar(api, "/calendar");
+
+  expect(await view.findByText("Wednesday 2 July")).toBeTruthy();
+  expect(
+    await contextPanel(view).findByText("Nothing coming up."),
+  ).toBeTruthy();
 });
 
 test("the list view fetches via api.events and renders the table; range is not fetched", async () => {
@@ -471,7 +619,7 @@ test("the list view's empty state renders when the feed has no events", async ()
   expect(await view.findByText("No events this month.")).toBeTruthy();
 });
 
-test("editing a user event from the list view opens the edit modal and saves", async () => {
+test("selecting a user event from the list view and clicking Edit opens the modal and saves", async () => {
   const editableEvent = event({
     entityId: "ev-user",
     title: "1:1 with Sam",
@@ -496,8 +644,12 @@ test("editing a user event from the list view opens the edit modal and saves", a
     "/calendar?view=list&date=2025-07-02",
   );
 
+  fireEvent.click(await view.findByRole("button", { name: /1:1 with Sam/ }));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
   await act(async () => {
-    fireEvent.click(await view.findByRole("button", { name: /1:1 with Sam/ }));
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
   });
   const dialog = within(await view.findByRole("dialog"));
   expect(dialog.getByText("Edit event")).toBeTruthy();

@@ -11,17 +11,37 @@ import { formatDayHeading, formatTime } from "../helpers/format";
 export interface AgendaViewProps {
   readonly days: readonly AgendaDay[];
   readonly timeZone: string;
+  /** Any event row click selects it into the context panel. */
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }
 
+/**
+ * A keyboard-focusable button styled like the read-only Card the row used
+ * to be, so selecting an agenda entry looks and feels the same as every
+ * other view's event affordance. The accent dot marks editable (user)
+ * events, matching the chip and list-view cues.
+ */
 const EventRow = ({
   event,
   timeZone,
+  onSelectEvent,
 }: {
   readonly event: AgendaEvent;
   readonly timeZone: string;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => (
   <li>
-    <Card className="flex-row items-baseline gap-3 rounded-xl px-3 py-2">
+    <button
+      type="button"
+      onClick={() => onSelectEvent(event)}
+      className="flex w-full flex-row items-baseline gap-3 rounded-xl border bg-card px-3 py-2 text-left text-card-foreground hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+    >
+      {event.editable ? (
+        <span
+          aria-hidden="true"
+          className="size-1.5 shrink-0 self-center rounded-full bg-primary"
+        />
+      ) : null}
       {event.allDay ? (
         <Badge variant="secondary" className="shrink-0 text-muted-foreground">
           all day
@@ -43,16 +63,18 @@ const EventRow = ({
           </span>
         )}
       </span>
-    </Card>
+    </button>
   </li>
 );
 
 const DayGroup = ({
   day,
   timeZone,
+  onSelectEvent,
 }: {
   readonly day: AgendaDay;
   readonly timeZone: string;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => (
   <section>
     <h2 className="text-sm font-semibold tracking-tight">
@@ -60,7 +82,12 @@ const DayGroup = ({
     </h2>
     <ul className="mt-2 flex flex-col gap-1.5">
       {day.events.map((event) => (
-        <EventRow key={event.entityId} event={event} timeZone={timeZone} />
+        <EventRow
+          key={event.entityId}
+          event={event}
+          timeZone={timeZone}
+          onSelectEvent={onSelectEvent}
+        />
       ))}
     </ul>
   </section>
@@ -78,6 +105,7 @@ const EmptyState = (): ReactElement => (
 export const AgendaView = ({
   days,
   timeZone,
+  onSelectEvent,
 }: AgendaViewProps): ReactElement => {
   if (days.length === 0) {
     return (
@@ -89,7 +117,12 @@ export const AgendaView = ({
   return (
     <div className="flex w-full flex-col gap-6">
       {days.map((day) => (
-        <DayGroup key={day.date} day={day} timeZone={timeZone} />
+        <DayGroup
+          key={day.date}
+          day={day}
+          timeZone={timeZone}
+          onSelectEvent={onSelectEvent}
+        />
       ))}
     </div>
   );

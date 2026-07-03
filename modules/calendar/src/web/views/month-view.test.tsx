@@ -35,7 +35,7 @@ const event = (
 interface Handlers {
   readonly onOpenDay?: (date: string) => void;
   readonly onCreateOn?: (date: string) => void;
-  readonly onEditEvent?: (event: AgendaEvent) => void;
+  readonly onSelectEvent?: (event: AgendaEvent) => void;
 }
 
 const renderMonth = (
@@ -50,7 +50,7 @@ const renderMonth = (
       timeZone={HOME_TZ}
       onOpenDay={handlers.onOpenDay ?? (() => {})}
       onCreateOn={handlers.onCreateOn ?? (() => {})}
-      onEditEvent={handlers.onEditEvent ?? (() => {})}
+      onSelectEvent={handlers.onSelectEvent ?? (() => {})}
     />,
   );
 
@@ -65,7 +65,7 @@ test("the add-event affordance calls onCreateOn with that cell's date", () => {
   expect(calls).toEqual([ANCHOR]);
 });
 
-test("a user (editable) event chip click calls onEditEvent", () => {
+test("a user (editable) event chip click calls onSelectEvent", () => {
   const userEvent = event({
     entityId: "ev-user",
     title: "1:1",
@@ -73,7 +73,7 @@ test("a user (editable) event chip click calls onEditEvent", () => {
   });
   const calls: AgendaEvent[] = [];
   const view = renderMonth(new Map([[ANCHOR, [userEvent]]]), {
-    onEditEvent: (clickedEvent) => calls.push(clickedEvent),
+    onSelectEvent: (clickedEvent) => calls.push(clickedEvent),
   });
 
   fireEvent.click(view.getByRole("button", { name: /1:1/ }));
@@ -81,16 +81,16 @@ test("a user (editable) event chip click calls onEditEvent", () => {
   expect(calls).toEqual([userEvent]);
 });
 
-test("a Google (non-editable) event chip click does not call onEditEvent", () => {
+test("a Google (non-editable) event chip click also calls onSelectEvent", () => {
   const googleEvent = event({ entityId: "ev-google", title: "Dentist" });
   const calls: AgendaEvent[] = [];
   const view = renderMonth(new Map([[ANCHOR, [googleEvent]]]), {
-    onEditEvent: (clickedEvent) => calls.push(clickedEvent),
+    onSelectEvent: (clickedEvent) => calls.push(clickedEvent),
   });
 
-  fireEvent.click(view.getByText("Dentist"));
+  fireEvent.click(view.getByRole("button", { name: /Dentist/ }));
 
-  expect(calls).toEqual([]);
+  expect(calls).toEqual([googleEvent]);
 });
 
 test("+N more still hands off to onOpenDay", () => {

@@ -38,7 +38,7 @@ const event = (
 
 interface Handlers {
   readonly onCreateOn?: (date: string) => void;
-  readonly onEditEvent?: (event: AgendaEvent) => void;
+  readonly onSelectEvent?: (event: AgendaEvent) => void;
 }
 
 const renderWeek = (
@@ -52,7 +52,7 @@ const renderWeek = (
       eventsByDate={eventsByDate}
       timeZone={HOME_TZ}
       onCreateOn={handlers.onCreateOn ?? (() => {})}
-      onEditEvent={handlers.onEditEvent ?? (() => {})}
+      onSelectEvent={handlers.onSelectEvent ?? (() => {})}
     />,
   );
 
@@ -125,7 +125,7 @@ test("an all-day event renders in the all-day row", () => {
   expect(view.getByText("Bank Holiday")).toBeTruthy();
 });
 
-test("a user (editable) timed event is a button that calls onEditEvent", () => {
+test("a user (editable) timed event is a button that calls onSelectEvent", () => {
   const userEvent = event({
     entityId: "ev-user",
     title: "1:1",
@@ -135,7 +135,7 @@ test("a user (editable) timed event is a button that calls onEditEvent", () => {
   });
   const calls: AgendaEvent[] = [];
   const view = renderWeek(new Map([[ANCHOR, [userEvent]]]), {
-    onEditEvent: (clicked) => calls.push(clicked),
+    onSelectEvent: (clicked) => calls.push(clicked),
   });
 
   fireEvent.click(view.getByRole("button", { name: /1:1/ }));
@@ -143,7 +143,7 @@ test("a user (editable) timed event is a button that calls onEditEvent", () => {
   expect(calls).toEqual([userEvent]);
 });
 
-test("a Google (non-editable) timed event is not clickable", () => {
+test("a Google (non-editable) timed event is also a button that calls onSelectEvent", () => {
   const googleEvent = event({
     entityId: "ev-google",
     title: "Dentist",
@@ -152,15 +152,15 @@ test("a Google (non-editable) timed event is not clickable", () => {
   });
   const calls: AgendaEvent[] = [];
   const view = renderWeek(new Map([[ANCHOR, [googleEvent]]]), {
-    onEditEvent: (clicked) => calls.push(clicked),
+    onSelectEvent: (clicked) => calls.push(clicked),
   });
 
-  fireEvent.click(view.getByText("Dentist"));
+  fireEvent.click(view.getByRole("button", { name: /Dentist/ }));
 
-  expect(calls).toEqual([]);
+  expect(calls).toEqual([googleEvent]);
 });
 
-test("a user all-day chip calls onEditEvent, a Google all-day chip does not", () => {
+test("both a user and a Google all-day chip call onSelectEvent", () => {
   const userHoliday = event({
     entityId: "ev-user-allday",
     title: "Day off",
@@ -174,13 +174,13 @@ test("a user all-day chip calls onEditEvent, a Google all-day chip does not", ()
   });
   const calls: AgendaEvent[] = [];
   const view = renderWeek(new Map([[ANCHOR, [userHoliday, googleHoliday]]]), {
-    onEditEvent: (clicked) => calls.push(clicked),
+    onSelectEvent: (clicked) => calls.push(clicked),
   });
 
   fireEvent.click(view.getByRole("button", { name: /Day off/ }));
-  fireEvent.click(view.getByText("Bank Holiday"));
+  fireEvent.click(view.getByRole("button", { name: /Bank Holiday/ }));
 
-  expect(calls).toEqual([userHoliday]);
+  expect(calls).toEqual([userHoliday, googleHoliday]);
 });
 
 test("two overlapping timed events render side by side in distinct lanes", () => {

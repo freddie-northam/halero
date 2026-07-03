@@ -1,9 +1,9 @@
 // The list view: a flat, client-sortable table of every event in the
 // current month window. Unlike the day-grouped range the other views
 // use, this reads the module's dedicated events(from,to) feed so a
-// multi-day event appears exactly once. User events stay editable via
-// T6's modal; Google-synced ones stay read-only, matching every other
-// view's discipline.
+// multi-day event appears exactly once. Every row's title selects the
+// event into the context panel; editing happens from there, matching
+// every other view's discipline.
 
 import type { ReactElement } from "react";
 import { useState } from "react";
@@ -24,7 +24,7 @@ import {
 export interface ListViewProps {
   readonly events: readonly AgendaEvent[];
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }
 
 type AriaSort = "ascending" | "descending" | "none";
@@ -69,53 +69,41 @@ const SortableHeader = ({
 };
 
 /**
- * User events get the accent dot and become a button that opens T6's
- * edit modal (the same cue EventChip uses); Google events stay plain,
- * inert text with no click affordance.
+ * Every title is a button that selects the event into the context panel
+ * (the same cue EventChip uses); user events keep the accent dot so they
+ * still read as distinct from Google ones at a glance.
  */
 const TitleCell = ({
   event,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly event: AgendaEvent;
-  readonly onEditEvent: (event: AgendaEvent) => void;
-}): ReactElement => {
-  const label = (
-    <>
-      <span className="truncate">{event.title}</span>
-      {event.recurring ? <RecurrenceIcon /> : null}
-    </>
-  );
-  if (event.editable) {
-    return (
-      <button
-        type="button"
-        onClick={() => onEditEvent(event)}
-        className="flex min-w-0 items-center gap-1.5 text-left text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-      >
-        <span
-          aria-hidden="true"
-          className="size-1.5 shrink-0 rounded-full bg-primary"
-        />
-        {label}
-      </button>
-    );
-  }
-  return (
-    <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
-      {label}
-    </span>
-  );
-};
+  readonly onSelectEvent: (event: AgendaEvent) => void;
+}): ReactElement => (
+  <button
+    type="button"
+    onClick={() => onSelectEvent(event)}
+    className="flex min-w-0 items-center gap-1.5 text-left text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+  >
+    {event.editable ? (
+      <span
+        aria-hidden="true"
+        className="size-1.5 shrink-0 rounded-full bg-primary"
+      />
+    ) : null}
+    <span className="truncate">{event.title}</span>
+    {event.recurring ? <RecurrenceIcon /> : null}
+  </button>
+);
 
 const Row = ({
   event,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: {
   readonly event: AgendaEvent;
   readonly timeZone: string;
-  readonly onEditEvent: (event: AgendaEvent) => void;
+  readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const dateText = formatDayHeading(formatDateInZone(event.start, timeZone));
   const timeText = event.allDay
@@ -124,7 +112,7 @@ const Row = ({
   return (
     <tr className="border-b last:border-0">
       <td className="px-3 py-2">
-        <TitleCell event={event} onEditEvent={onEditEvent} />
+        <TitleCell event={event} onSelectEvent={onSelectEvent} />
       </td>
       <td className="px-3 py-2 text-sm text-muted-foreground">{dateText}</td>
       <td className="tnum px-3 py-2 text-sm text-muted-foreground">
@@ -140,7 +128,7 @@ const Row = ({
 export const ListView = ({
   events,
   timeZone,
-  onEditEvent,
+  onSelectEvent,
 }: ListViewProps): ReactElement => {
   const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
 
@@ -195,7 +183,7 @@ export const ListView = ({
               key={event.entityId}
               event={event}
               timeZone={timeZone}
-              onEditEvent={onEditEvent}
+              onSelectEvent={onSelectEvent}
             />
           ))}
         </tbody>
