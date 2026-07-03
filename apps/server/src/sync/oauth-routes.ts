@@ -7,6 +7,7 @@ import {
   asRecord,
   type FetchLike,
   type IdTokenClaims,
+  type OAuth2Auth,
   stringOrNull,
 } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
@@ -23,6 +24,21 @@ import {
 import { upsertConnection } from "./connection";
 import { consumeOauthState, createOauthState } from "./oauth-state";
 import type { AnyConnector } from "./registry";
+
+/**
+ * These routes only ever run against an OAuth2 connector; narrow the
+ * connector's auth union to the OAuth2 variant so the flow can read its
+ * endpoints and scopes. (The generic multi-auth surface lives in the
+ * connections layer; this file is the OAuth-only path.)
+ */
+const oauth2AuthOf = (connector: AnyConnector): OAuth2Auth => {
+  if (connector.auth.kind !== "oauth2") {
+    throw new Error(
+      `The "${connector.manifest.id}" connector does not use OAuth2.`,
+    );
+  }
+  return connector.auth;
+};
 
 export interface GoogleOauthOptions {
   readonly config: HaleroConfig;
@@ -148,7 +164,7 @@ const handleCallback = async (
   const redirectUri = googleRedirectUri(resolveBaseUrl(db, config));
   const grant = await exchangeCode(
     outboundFetch,
-    connector.auth.tokenEndpoint,
+    oauth2AuthOf(connector).tokenEndpoint,
     client,
     code,
     redirectUri,
@@ -200,17 +216,16 @@ export const createGoogleOauthRoutes = (
     if (client === null) {
       return c.json({ error: CLIENT_MISSING_MESSAGE }, 409);
     }
-    const authUrl = new URL(connector.auth.authorizationEndpoint);
+    const auth = oauth2AuthOf(connector);
+    const authUrl = new URL(auth.authorizationEndpoint);
     authUrl.searchParams.set("client_id", client.clientId);
     authUrl.searchParams.set("redirect_uri", googleRedirectUri(baseUrl));
     authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", connector.auth.scopes.join(" "));
+    authUrl.searchParams.set("scope", auth.scopes.join(" "));
     // Provider quirks (e.g. Google's access_type=offline and
     // prompt=consent, both required for a refresh token on reconnect)
     // are declared by the connector, not hardcoded here.
-    for (const [name, value] of Object.entries(
-      connector.auth.extraAuthParams ?? {},
-    )) {
+    for (const [name, value] of Object.entries(auth.extraAuthParams ?? {})) {
       authUrl.searchParams.set(name, value);
     }
     authUrl.searchParams.set("state", createOauthState(db, now()));

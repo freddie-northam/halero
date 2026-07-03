@@ -66,6 +66,7 @@ const echoConnector = (pages: SyncOp[][]) =>
       produces: [{ kind: "widget.gadget", schemaVersion: 1 }],
     },
     auth: {
+      kind: "oauth2",
       authorizationEndpoint: "https://example.com/auth",
       tokenEndpoint: "https://example.com/token",
       scopes: ["readonly"],

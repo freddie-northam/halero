@@ -203,6 +203,7 @@ const replayConnector = (
       produces: [{ kind: "calendar.event", schemaVersion: 1 }],
     },
     auth: {
+      kind: "oauth2",
       authorizationEndpoint: "https://example.com/auth",
       tokenEndpoint: "https://example.com/token",
       scopes: ["readonly"],
@@ -665,6 +666,7 @@ describe("syncConnection connector misbehavior", () => {
         produces: [{ kind: "calendar.event", schemaVersion: 1 }],
       },
       auth: {
+        kind: "oauth2",
         authorizationEndpoint: "https://example.com/auth",
         tokenEndpoint: "https://example.com/token",
         scopes: ["readonly"],
@@ -1198,6 +1200,7 @@ describe("syncConnection write budget", () => {
         produces: [{ kind: "tick.item", schemaVersion: 1 }],
       },
       auth: {
+        kind: "oauth2",
         authorizationEndpoint: "https://example.com/auth",
         tokenEndpoint: "https://example.com/token",
         scopes: ["readonly"],
