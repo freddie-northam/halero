@@ -4,6 +4,11 @@
 // see the Settings forms); the due date is controlled, since DatePicker
 // itself is controlled and carries no native form field to read back.
 // Validation errors read like sentences, not stack traces.
+//
+// The title sits on its own row above the date picker and submit button:
+// the board's To do column is only ~1/3 of the page width, and a single
+// row of title + "Due date" (min-w-36) + "Add" clips the title's
+// placeholder there.
 
 import { Button, DatePicker, Input } from "@halero/ui";
 import { type FormEvent, type ReactElement, useState } from "react";
@@ -45,22 +50,24 @@ export const QuickAddForm = ({ onCreate }: QuickAddFormProps): ReactElement => {
 
   return (
     <form onSubmit={(event) => void submit(event)}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-2">
         <Input
           name="title"
           autoComplete="off"
           placeholder="Add a task..."
           aria-label="Task title"
         />
-        <DatePicker
-          value={dueDate}
-          onChange={setDueDate}
-          placeholder="Due date"
-          aria-label="Due date"
-        />
-        <Button type="submit" disabled={saving}>
-          Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <DatePicker
+            value={dueDate}
+            onChange={setDueDate}
+            placeholder="Due date"
+            aria-label="Due date"
+          />
+          <Button type="submit" disabled={saving}>
+            Add
+          </Button>
+        </div>
       </div>
       {error === null ? null : (
         <p className="mt-1.5 text-sm text-destructive">{error}</p>

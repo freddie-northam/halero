@@ -714,6 +714,27 @@ test("the list view's quick-add still creates a task", async () => {
   expect(calls.create).toEqual([{ title: "Pay rent" }]);
 });
 
+// Regression: in the narrow To do board column, the title input rendered
+// on the same row as "Due date" and "Add" and clipped to "Add a tas...".
+// The title now has its own row (see quick-add-form.tsx), so this checks
+// it still renders unclipped in the board and that the form still works.
+test("the board's To do quick-add renders the title input and still creates a task", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+
+  const titleInput = await view.findByLabelText("Task title");
+  expect(titleInput).toBeTruthy();
+  expect(titleInput.getAttribute("placeholder")).toBe("Add a task...");
+  expect(view.getByLabelText("Due date")).toBeTruthy();
+
+  fireEvent.change(titleInput, { target: { value: "Renew passport" } });
+  fireEvent.submit(titleInput);
+
+  expect(await view.findByText("Renew passport")).toBeTruthy();
+  expect(calls.create).toEqual([{ title: "Renew passport" }]);
+});
+
 test("toggling in the list view moves a task from Open to Done", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api, "/tasks?view=list");
