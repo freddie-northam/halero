@@ -20,6 +20,7 @@ import {
   tagBadgeClass,
 } from "../helpers/board-style";
 import { formatDueDate, isDueOrOverdue } from "../helpers/due-date";
+import { formatMinutes } from "../helpers/format-minutes";
 import { EditTaskButton } from "./edit-task-button";
 
 export interface TaskCardProps {
@@ -29,23 +30,32 @@ export interface TaskCardProps {
   readonly onOpen: () => void;
 }
 
-const formatMinutes = (minutes: number): string => {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) {
-    return `${mins}m`;
-  }
-  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
-};
-
+/**
+ * "Est 3h · Logged 2h 50m": both halves show when present, either alone
+ * when only one is set, and nothing when neither is. Logged time past
+ * the estimate gets a light warning tint, not a hard error color.
+ */
 const TimeFooter = ({ task }: { readonly task: Task }): ReactElement | null => {
-  if (task.loggedMinutes > 0) {
-    return <span>{`Logged ${formatMinutes(task.loggedMinutes)}`}</span>;
+  const { estimateMinutes, loggedMinutes } = task;
+  if (estimateMinutes === null && loggedMinutes === 0) {
+    return null;
   }
-  if (task.estimateMinutes !== null) {
-    return <span>{`Est ${formatMinutes(task.estimateMinutes)}`}</span>;
-  }
-  return null;
+  const overEstimate =
+    estimateMinutes !== null && loggedMinutes > estimateMinutes;
+  const loggedText = `Logged ${formatMinutes(loggedMinutes)}`;
+  return (
+    <span className="tnum">
+      {estimateMinutes === null
+        ? null
+        : `Est ${formatMinutes(estimateMinutes)}`}
+      {estimateMinutes !== null && loggedMinutes > 0 ? " · " : null}
+      {loggedMinutes === 0 ? null : overEstimate ? (
+        <span className="text-amber-600 dark:text-amber-500">{loggedText}</span>
+      ) : (
+        loggedText
+      )}
+    </span>
+  );
 };
 
 const CardBody = ({
