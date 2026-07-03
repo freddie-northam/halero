@@ -4,12 +4,14 @@ import { connectionsRouter } from "./connections-router";
 import { router } from "./init";
 import { notificationsRouter } from "./notifications-router";
 import { systemRouter } from "./system-router";
+import { tokensRouter } from "./tokens-router";
 
 export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
   connections: connectionsRouter,
   notifications: notificationsRouter,
+  tokens: tokensRouter,
   /** Module routers, one namespace per registered module id. */
   modules: modulesRouter,
 });

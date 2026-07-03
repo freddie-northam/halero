@@ -64,6 +64,40 @@ export interface BaseUrlSettings {
   readonly url: string;
 }
 
+export interface ApiTokenSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: number;
+  /** Epoch ms of the last authenticated use; null when never used. */
+  readonly lastUsedAt: number | null;
+  /** Epoch ms of revocation; null while the token is live. */
+  readonly revokedAt: number | null;
+}
+
+export interface CreatedApiToken {
+  readonly id: string;
+  readonly name: string;
+  /** The plaintext token. Shown exactly once; never retrievable again. */
+  readonly token: string;
+}
+
+export interface SearchResult {
+  readonly entityId: string;
+  readonly kind: string;
+  readonly title: string | null;
+  /** Server highlight() output; split on the marker chars to render. */
+  readonly titleHighlighted: string;
+  readonly snippetHighlighted: string | null;
+  readonly occurredStart: number | null;
+  /** Home-timezone date of the hit; the client does no timezone math. */
+  readonly occurredDate: string | null;
+}
+
+export interface SearchOptions {
+  readonly kind?: string;
+  readonly limit?: number;
+}
+
 /**
  * The narrow surface of the CORE server API that the UI consumes.
  * Components depend on this interface instead of the raw tRPC client so
@@ -86,6 +120,13 @@ export interface HaleroApi {
   readonly sendTestNotification: () => Promise<TestNotificationResult>;
   readonly baseUrl: () => Promise<BaseUrlSettings>;
   readonly saveBaseUrl: (url: string) => Promise<void>;
+  readonly listApiTokens: () => Promise<readonly ApiTokenSummary[]>;
+  readonly createApiToken: (name: string) => Promise<CreatedApiToken>;
+  readonly revokeApiToken: (id: string) => Promise<void>;
+  readonly search: (
+    query: string,
+    opts?: SearchOptions,
+  ) => Promise<readonly SearchResult[]>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -113,4 +154,11 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   saveBaseUrl: async (url) => {
     await client.system.setBaseUrl.mutate({ baseUrl: url });
   },
+  listApiTokens: () => client.tokens.list.query(),
+  createApiToken: (name) => client.tokens.create.mutate({ name }),
+  revokeApiToken: async (id) => {
+    await client.tokens.revoke.mutate({ id });
+  },
+  search: async (query, opts) =>
+    (await client.system.search.query({ query, ...opts })).results,
 });

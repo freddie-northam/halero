@@ -9,7 +9,8 @@
     "apps/*",
     "packages/*",
     "modules/*",
-    "connectors/*"
+    "connectors/*",
+    "clients/*"
   ],
   "scripts": {
     "test": "bun test",

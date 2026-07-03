@@ -156,6 +156,31 @@ export const syncRuns = sqliteTable(
   ],
 );
 
+export const tasks = sqliteTable(
+  "tasks",
+  {
+    entityId: text("entity_id")
+      .primaryKey()
+      .references(() => entities.id),
+    status: text("status", { enum: ["open", "done"] })
+      .notNull()
+      .default("open"),
+    dueDate: text("due_date"),
+    completedAt: integer("completed_at"),
+    notes: text("notes"),
+  },
+  (table) => [index("idx_tasks_status_due").on(table.status, table.dueDate)],
+);
+
+export const apiTokens = sqliteTable("api_tokens", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: integer("created_at").notNull(),
+  lastUsedAt: integer("last_used_at"),
+  revokedAt: integer("revoked_at"),
+});
+
 export const sessions = sqliteTable("sessions", {
   tokenHash: text("token_hash").primaryKey(),
   createdAt: integer("created_at").notNull(),

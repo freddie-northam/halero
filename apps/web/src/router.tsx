@@ -1,4 +1,7 @@
 import type {
+  CommandContribution,
+  EntityLink,
+  EntityLinkContribution,
   NavContribution,
   PageContribution,
   WebModule,
@@ -16,7 +19,7 @@ import type { ReactElement } from "react";
 import type { HaleroApi } from "./lib/api";
 import { readableError } from "./lib/errors";
 import { guardAuthenticated, guardEntry } from "./lib/guards";
-import { buildNav } from "./registry";
+import { buildCommands, buildEntityLinks, buildNav } from "./registry";
 import { LoginScreen } from "./routes/login";
 import { SettingsScreen } from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
@@ -26,6 +29,10 @@ export interface RouterContext {
   readonly api: HaleroApi;
   /** Nav entries from the registry; the shell reads them per route. */
   readonly nav: readonly NavContribution[];
+  /** Entity links from the registry, for the shell's command palette. */
+  readonly entityLinks: ReadonlyMap<string, EntityLinkContribution>;
+  /** Module commands from the registry, for the palette's Commands group. */
+  readonly commands: readonly CommandContribution[];
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
@@ -60,8 +67,14 @@ const useShellProps = (activePath: string) => {
   return {
     activePath,
     nav: router.options.context.nav,
+    entityLinks: router.options.context.entityLinks,
+    commands: router.options.context.commands,
     onNavigate: (path: string) => {
       void router.navigate({ to: path });
+    },
+    // Search hits carry module-built links: a path plus search params.
+    onOpenLink: (link: EntityLink) => {
+      void router.navigate({ to: link.path, search: link.search ?? {} });
     },
     onLoggedOut: () => {
       void router.navigate({ to: "/login" });
@@ -186,7 +199,15 @@ export const createAppRouter = (
   return createRouter({
     routeTree,
     ...(history === undefined ? {} : { history }),
-    context: { api, nav: buildNav(webModules) },
+    context: {
+      api,
+      nav: buildNav(webModules),
+      // Built here so a duplicate entity-link kind or command id fails
+      // at startup, not when the palette first routes a hit or runs a
+      // command.
+      entityLinks: buildEntityLinks(webModules),
+      commands: buildCommands(webModules),
+    },
     defaultPendingComponent: PendingScreen,
     defaultErrorComponent: ErrorScreen,
   });

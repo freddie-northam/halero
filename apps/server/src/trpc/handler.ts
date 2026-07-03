@@ -1,4 +1,5 @@
 import type { FetchLike } from "@halero/connector-sdk";
+import { createEntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { Handler } from "hono";
@@ -46,6 +47,9 @@ export const createTrpcHandler = (
   const { config, database, key, now, loginRateLimiter, outboundFetch } =
     options;
   const { syncRunner, notifier } = options;
+  // One store per app, not per request: it is a stateless bundle of
+  // closures over the shared database handle.
+  const entities = createEntityStore(database);
   // Evaluated when a cookie is built, not when the handler is created, so
   // the Secure flag follows the same base-URL authority as everything else
   // (even for the setup request that stores base_url itself).
@@ -56,10 +60,10 @@ export const createTrpcHandler = (
     const context: TrpcContext = {
       db: database.db,
       sqlite: database.sqlite,
+      entities,
       config,
       key,
       session: c.get("session"),
-      sessionToken: c.get("sessionToken"),
       now,
       loginRateLimiter,
       outboundFetch,

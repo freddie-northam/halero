@@ -56,10 +56,33 @@ export interface CreateLinkInput {
   readonly metadata?: string | null;
 }
 
+export interface CreateUserEntityInput {
+  readonly kind: string;
+  readonly schemaVersion: number;
+  readonly title?: string;
+  readonly snippet?: string;
+  readonly occurredStart?: number;
+  readonly occurredEnd?: number;
+}
+
+/**
+ * Omitted fields preserve their stored values (the streamPatch
+ * precedent); an explicit null clears the nullable occurred fields.
+ */
+export interface UpdateUserEntityPatch {
+  readonly title?: string;
+  readonly snippet?: string;
+  readonly occurredStart?: number | null;
+  readonly occurredEnd?: number | null;
+}
+
 export interface EntityStore {
   withTransaction<T>(fn: () => T): T;
   upsertExternal(input: UpsertExternalInput): UpsertExternalResult;
   tombstoneExternal(key: ExternalRefKey): { entityId: string } | null;
+  createUserEntity(input: CreateUserEntityInput): { entityId: string };
+  updateUserEntity(id: string, patch: UpdateUserEntityPatch): void;
+  deleteUserEntity(id: string): void;
   getEntity(id: string): EntityRow | null;
   resolveAlias(id: string): string;
   createLink(input: CreateLinkInput): LinkRow;
@@ -80,6 +103,92 @@ const spineValues = (spine: SpineInput) => ({
   occurredEnd: spine.occurredEnd ?? null,
   source: spine.source,
 });
+
+type DrizzleDb = HaleroDatabase["db"];
+
+const USER_ENTITY_MISSING_MESSAGE = "This item could not be found.";
+const USER_ENTITY_DELETED_MESSAGE = "This item was deleted.";
+const CONNECTOR_MANAGED_MESSAGE =
+  "This item is managed by a connector sync and cannot be edited.";
+
+const insertUserEntity = (
+  db: DrizzleDb,
+  input: CreateUserEntityInput,
+): { entityId: string } => {
+  const now = Date.now();
+  const entityId = ulid(now);
+  db.insert(entities)
+    .values({
+      id: entityId,
+      kind: input.kind,
+      schemaVersion: input.schemaVersion,
+      title: input.title ?? null,
+      snippet: input.snippet ?? null,
+      occurredStart: input.occurredStart ?? null,
+      occurredEnd: input.occurredEnd ?? null,
+      source: "user",
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    })
+    .run();
+  return { entityId };
+};
+
+/**
+ * Loads the row behind a user write and rejects what no user write may
+ * touch: a missing entity and a connector-managed one. Tombstones stay
+ * with the caller because update and delete disagree about them
+ * (update rejects, delete treats a repeat as a no-op).
+ */
+const requireUserManagedEntity = (db: DrizzleDb, id: string): EntityRow => {
+  const row = db.select().from(entities).where(eq(entities.id, id)).get();
+  if (row === undefined) {
+    throw new Error(USER_ENTITY_MISSING_MESSAGE);
+  }
+  if (row.source === "connector") {
+    throw new Error(CONNECTOR_MANAGED_MESSAGE);
+  }
+  return row;
+};
+
+/** Empty per omitted field: omission preserves (streamPatch precedent). */
+const userEntityPatchValues = (patch: UpdateUserEntityPatch) => ({
+  ...(patch.title === undefined ? {} : { title: patch.title }),
+  ...(patch.snippet === undefined ? {} : { snippet: patch.snippet }),
+  ...(patch.occurredStart === undefined
+    ? {}
+    : { occurredStart: patch.occurredStart }),
+  ...(patch.occurredEnd === undefined
+    ? {}
+    : { occurredEnd: patch.occurredEnd }),
+});
+
+const applyUserEntityUpdate = (
+  db: DrizzleDb,
+  id: string,
+  patch: UpdateUserEntityPatch,
+): void => {
+  const row = requireUserManagedEntity(db, id);
+  if (row.deletedAt !== null) {
+    throw new Error(USER_ENTITY_DELETED_MESSAGE);
+  }
+  db.update(entities)
+    .set({ ...userEntityPatchValues(patch), updatedAt: Date.now() })
+    .where(eq(entities.id, id))
+    .run();
+};
+
+const applyUserEntityDelete = (db: DrizzleDb, id: string): void => {
+  const row = requireUserManagedEntity(db, id);
+  if (row.deletedAt !== null) {
+    return;
+  }
+  db.update(entities)
+    .set({ deletedAt: Date.now() })
+    .where(eq(entities.id, id))
+    .run();
+};
 
 export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
   const { sqlite, db } = handle;
@@ -182,6 +291,18 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
       return { entityId: ref.entityId };
     });
 
+  // Self-wrapped like upsertExternal: atomic alone, and nestable inside
+  // a caller transaction that bundles satellite writes with the spine.
+  const createUserEntity = (
+    input: CreateUserEntityInput,
+  ): { entityId: string } => withTransaction(() => insertUserEntity(db, input));
+
+  const updateUserEntity = (id: string, patch: UpdateUserEntityPatch): void =>
+    withTransaction(() => applyUserEntityUpdate(db, id, patch));
+
+  const deleteUserEntity = (id: string): void =>
+    withTransaction(() => applyUserEntityDelete(db, id));
+
   const getEntity = (id: string): EntityRow | null =>
     db.select().from(entities).where(eq(entities.id, id)).get() ?? null;
 
@@ -238,6 +359,9 @@ export const createEntityStore = (handle: HaleroDatabase): EntityStore => {
     withTransaction,
     upsertExternal,
     tombstoneExternal,
+    createUserEntity,
+    updateUserEntity,
+    deleteUserEntity,
     getEntity,
     resolveAlias,
     createLink,

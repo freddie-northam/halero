@@ -80,6 +80,8 @@ export const makeTestApp = (options: MakeTestAppOptions = {}): TestApp => {
 export interface TrpcCallOptions {
   readonly cookie?: string;
   readonly origin?: string;
+  /** Raw Authorization header value, e.g. "Bearer halero_...". */
+  readonly authorization?: string;
 }
 
 export const trpcQuery = (
@@ -90,6 +92,9 @@ export const trpcQuery = (
   const headers: Record<string, string> = {};
   if (options.cookie !== undefined) {
     headers.cookie = options.cookie;
+  }
+  if (options.authorization !== undefined) {
+    headers.authorization = options.authorization;
   }
   return Promise.resolve(
     app.fetch(
@@ -112,6 +117,9 @@ export const trpcMutation = (
   }
   if (options.origin !== undefined) {
     headers.origin = options.origin;
+  }
+  if (options.authorization !== undefined) {
+    headers.authorization = options.authorization;
   }
   return Promise.resolve(
     app.fetch(

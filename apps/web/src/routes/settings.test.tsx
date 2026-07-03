@@ -5,8 +5,14 @@ import {
   fireEvent,
   type RenderResult,
   render,
+  waitFor,
 } from "@testing-library/react";
-import type { GoogleConnection, GoogleStatus, HaleroApi } from "../lib/api";
+import type {
+  ApiTokenSummary,
+  GoogleConnection,
+  GoogleStatus,
+  HaleroApi,
+} from "../lib/api";
 import { ApiProvider } from "../lib/api-context";
 import { registerHappyDom, unregisterHappyDom } from "../test/happy-dom";
 import { SettingsScreen } from "./settings";
@@ -45,8 +51,21 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   sendTestNotification: () => Promise.resolve({ delivered: true }),
   baseUrl: () => Promise.resolve({ url: "https://halero.example.com/" }),
   saveBaseUrl: () => Promise.resolve(),
+  listApiTokens: () => Promise.resolve([]),
+  createApiToken: (name: string) =>
+    Promise.resolve({ id: "tok-1", name, token: `halero_${"a".repeat(64)}` }),
+  revokeApiToken: () => Promise.resolve(),
+  search: () => Promise.resolve([]),
   ...overrides,
 });
+
+const liveToken: ApiTokenSummary = {
+  id: "tok-live",
+  name: "Raycast",
+  createdAt: Date.now() - 5 * 60_000,
+  lastUsedAt: null,
+  revokedAt: null,
+};
 
 const activeConnection: GoogleConnection = {
   id: "conn-1",
@@ -534,4 +553,115 @@ test("turns a callback error code into a readable banner", async () => {
 
   await view.findByText(/Connect Google Calendar/);
   expect(view.getByText(/offline access/)).toBeTruthy();
+});
+
+test("shows the API tokens card with the warning and the empty state", async () => {
+  const view = renderSettings(stubApi());
+
+  expect(await view.findByText("No API tokens yet.")).toBeTruthy();
+  expect(view.getByText("API tokens")).toBeTruthy();
+  // The ruled warning copy, word for word.
+  expect(
+    view.getByText(
+      "A token has the same power as your password session, including data " +
+        "export. Treat it like a password.",
+    ),
+  ).toBeTruthy();
+});
+
+test("mints a token and shows the show-once block exactly once", async () => {
+  const names: string[] = [];
+  const view = renderSettings(
+    stubApi({
+      createApiToken: (name: string) => {
+        names.push(name);
+        return Promise.resolve({ id: "tok-9", name, token: "halero_abc123" });
+      },
+    }),
+  );
+
+  const input = await view.findByLabelText("Token name");
+  fireEvent.change(input, { target: { value: "  Raycast  " } });
+  fireEvent.click(view.getByRole("button", { name: "Create token" }));
+
+  expect(await view.findByText("halero_abc123")).toBeTruthy();
+  expect(
+    view.getByText("This is the only time the token is shown."),
+  ).toBeTruthy();
+  expect(names).toEqual(["Raycast"]);
+});
+
+test("lists token rows with created, last used, and a revoked badge", async () => {
+  const now = Date.now();
+  const view = renderSettings(
+    stubApi({
+      listApiTokens: () =>
+        Promise.resolve([
+          { ...liveToken, lastUsedAt: now - 60_000 },
+          {
+            id: "tok-old",
+            name: "Old laptop",
+            createdAt: now - 3 * 60 * 60_000,
+            lastUsedAt: null,
+            revokedAt: now - 60_000,
+          },
+        ]),
+    }),
+  );
+
+  expect(await view.findByText("Raycast")).toBeTruthy();
+  expect(
+    view.getByText("Created 5 min ago · Last used 1 min ago"),
+  ).toBeTruthy();
+  expect(view.getByText("Old laptop")).toBeTruthy();
+  expect(view.getByText("Created 3 hr ago · Last used Never")).toBeTruthy();
+  expect(view.getByText("Revoked")).toBeTruthy();
+  // Only the live row offers a Revoke action.
+  expect(
+    view.getByRole("button", { name: "Revoke token: Raycast" }),
+  ).toBeTruthy();
+  expect(
+    view.queryByRole("button", { name: "Revoke token: Old laptop" }),
+  ).toBeNull();
+});
+
+test("revokes a token and refreshes the list", async () => {
+  let listCalls = 0;
+  const revoked: string[] = [];
+  const view = renderSettings(
+    stubApi({
+      listApiTokens: () => {
+        listCalls += 1;
+        return Promise.resolve([liveToken]);
+      },
+      revokeApiToken: (id: string) => {
+        revoked.push(id);
+        return Promise.resolve();
+      },
+    }),
+  );
+
+  fireEvent.click(
+    await view.findByRole("button", { name: "Revoke token: Raycast" }),
+  );
+
+  await waitFor(() => expect(revoked).toEqual(["tok-live"]));
+  await waitFor(() => expect(listCalls).toBeGreaterThan(1));
+});
+
+test("shows the readable rejection when minting fails", async () => {
+  const view = renderSettings(
+    stubApi({
+      createApiToken: () =>
+        Promise.reject(
+          new Error("Give the token a name, like Raycast on my laptop."),
+        ),
+    }),
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: "Create token" }));
+
+  expect(
+    await view.findByText("Give the token a name, like Raycast on my laptop."),
+  ).toBeTruthy();
 });

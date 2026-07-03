@@ -30,8 +30,12 @@ describe("healthz", () => {
 describe("security headers", () => {
   // Pinned on purpose: loosening the policy must show up as a failing
   // test, with the observed violation recorded next to the relaxation.
+  // style-src carries 'unsafe-inline' because Radix and cmdk apply inline
+  // styles the browser blocks otherwise (focus outlines, dialog scroll-lock,
+  // runtime positioning). script-src stays strict 'self'. See the rationale
+  // in middleware/security-headers.ts.
   const EXPECTED_CSP =
-    "default-src 'self'; script-src 'self'; style-src 'self'; " +
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; font-src 'self'; connect-src 'self'; " +
     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 

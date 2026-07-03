@@ -14,6 +14,9 @@ COPY apps ./apps
 COPY packages ./packages
 COPY modules ./modules
 COPY connectors ./connectors
+# The Raycast client is not part of the image, but its manifest must be
+# present for the frozen lockfile to resolve the workspace tree.
+COPY clients/raycast/package.json ./clients/raycast/package.json
 RUN bun install --frozen-lockfile
 RUN bun run --filter '@halero/web' build
 
@@ -27,6 +30,10 @@ COPY apps/web/package.json ./apps/web/package.json
 COPY packages ./packages
 COPY modules ./modules
 COPY connectors ./connectors
+# Manifest only, same reason as the build stage. All Raycast extension
+# dependencies are devDependencies, so the production install stays
+# native-module-free.
+COPY clients/raycast/package.json ./clients/raycast/package.json
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 # The bun user and group ship with the oven/bun image.

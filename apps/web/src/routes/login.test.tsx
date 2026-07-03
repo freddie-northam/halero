@@ -40,6 +40,11 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   sendTestNotification: () => Promise.resolve({ delivered: true }),
   baseUrl: () => Promise.resolve({ url: "http://localhost:4253/" }),
   saveBaseUrl: () => Promise.resolve(),
+  listApiTokens: () => Promise.resolve([]),
+  createApiToken: (name: string) =>
+    Promise.resolve({ id: "tok-1", name, token: `halero_${"a".repeat(64)}` }),
+  revokeApiToken: () => Promise.resolve(),
+  search: () => Promise.resolve([]),
   ...overrides,
 });
 

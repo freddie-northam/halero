@@ -8,6 +8,7 @@ export { coreMigrations } from "./migrations";
 export type { HaleroDatabase } from "./open-database";
 export { openDatabase } from "./open-database";
 export {
+  apiTokens,
   calendarEvents,
   connections,
   entities,
@@ -18,5 +19,6 @@ export {
   settings,
   syncCursors,
   syncRuns,
+  tasks,
 } from "./schema";
 export { createSnapshot } from "./snapshot";

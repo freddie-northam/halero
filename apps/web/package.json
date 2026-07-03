@@ -11,6 +11,7 @@
   "dependencies": {
     "@halero/module-calendar": "workspace:*",
     "@halero/module-sdk": "workspace:*",
+    "@halero/module-tasks": "workspace:*",
     "@halero/module-today": "workspace:*",
     "@halero/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.2",

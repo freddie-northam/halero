@@ -34,11 +34,65 @@ export interface PageContribution {
   readonly validateSearch?: SearchValidator;
 }
 
+/**
+ * The slice of a search hit a module needs to build a link: the entity's
+ * identity plus the home-timezone date the server already derived. The
+ * web app never does timezone math to route a hit.
+ */
+export interface EntityLinkHit {
+  readonly entityId: string;
+  readonly occurredDate: string | null;
+}
+
+/** An in-app destination: a route path plus optional search params. */
+export interface EntityLink {
+  readonly path: string;
+  readonly search?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Declares where entities of one kind live in the web app, so core
+ * surfaces like the search palette can navigate to a hit without core
+ * ever hardcoding module kinds.
+ */
+export interface EntityLinkContribution {
+  readonly kind: string;
+  /** Group heading for hits of this kind, e.g. "Event". */
+  readonly label: string;
+  readonly buildLink: (hit: EntityLinkHit) => EntityLink;
+}
+
+/**
+ * What a palette command reports after running: a confirmation message
+ * plus an optional in-app destination. The destination reuses the
+ * EntityLink shape so the host navigates command results and search
+ * hits through the same mechanism; everything stays JSON-serializable.
+ */
+export interface CommandRunResult {
+  readonly message: string;
+  readonly navigateTo?: EntityLink;
+}
+
+/**
+ * An action a module offers the command palette. `describe` labels the
+ * row for the palette's current input (null hides the row for that
+ * input); `run` receives the raw input untrimmed, because trimming and
+ * validation belong to the contribution, not the palette.
+ */
+export interface CommandContribution {
+  /** Module-scoped and globally unique, e.g. "tasks.new". */
+  readonly id: string;
+  readonly describe: (input: string) => string | null;
+  readonly run: (input: string) => Promise<CommandRunResult>;
+}
+
 export interface WebModule {
   /** Must match the server module id, e.g. "calendar". */
   readonly id: string;
   readonly nav?: readonly NavContribution[];
   readonly pages?: readonly PageContribution[];
+  readonly entityLinks?: readonly EntityLinkContribution[];
+  readonly commands?: readonly CommandContribution[];
 }
 
 /**

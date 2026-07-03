@@ -6,8 +6,16 @@
 
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
 // indicator; the chevrons drive prev/next navigation; Repeat marks
-// recurring calendar items.
-export { ChevronLeft, ChevronRight, Loader2, Repeat } from "lucide-react";
+// recurring calendar items; StickyNote marks tasks carrying notes; X is
+// the inline delete/dismiss affordance.
+export {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Repeat,
+  StickyNote,
+  X,
+} from "lucide-react";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
 export { Button, buttonVariants } from "./components/ui/button";
@@ -20,6 +28,30 @@ export {
   CardHeader,
   CardTitle,
 } from "./components/ui/card";
+export { Checkbox } from "./components/ui/checkbox";
+export {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "./components/ui/command";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./components/ui/dialog";
 export { Input } from "./components/ui/input";
 export { Label } from "./components/ui/label";
 export {

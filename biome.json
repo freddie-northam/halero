@@ -45,6 +45,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["clients/raycast/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
     }
   ],
   "assist": {

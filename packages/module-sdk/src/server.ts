@@ -66,6 +66,43 @@ export interface ServerModule {
 export const defineServerModule = <M extends ServerModule>(module: M): M =>
   module;
 
+export interface CreateUserEntityInput {
+  readonly kind: string;
+  readonly schemaVersion: number;
+  readonly title?: string;
+  readonly snippet?: string;
+  readonly occurredStart?: number;
+  readonly occurredEnd?: number;
+}
+
+/**
+ * Omitted fields preserve their stored values; an explicit null clears
+ * the nullable occurred fields.
+ */
+export interface UpdateUserEntityPatch {
+  readonly title?: string;
+  readonly snippet?: string;
+  readonly occurredStart?: number | null;
+  readonly occurredEnd?: number | null;
+}
+
+/**
+ * The user-entity write capability a host guarantees to module
+ * procedures. Defined structurally here so modules never import core;
+ * core's EntityStore happens to satisfy it, and the host pins that with
+ * a compile-time proof next to its registry.
+ *
+ * withTransaction lets a module bundle satellite writes with the spine
+ * write atomically; every method also self-wraps, so single calls are
+ * atomic on their own.
+ */
+export interface UserEntityStore {
+  withTransaction<T>(fn: () => T): T;
+  createUserEntity(input: CreateUserEntityInput): { entityId: string };
+  updateUserEntity(id: string, patch: UpdateUserEntityPatch): void;
+  deleteUserEntity(id: string): void;
+}
+
 /**
  * The request context a host guarantees to module procedures. The host's
  * own tRPC context must be a structural superset of this.
@@ -75,6 +112,8 @@ export interface ModuleRequestContext {
   readonly now: () => number;
   /** Non-null once the visitor is signed in; modules guard on it. */
   readonly session: object | null;
+  /** User-entity writes; connector-managed entities stay off limits. */
+  readonly entities: UserEntityStore;
 }
 
 /** One registered entity kind, annotated with the module that owns it. */

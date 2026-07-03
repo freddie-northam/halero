@@ -1,0 +1,5 @@
+# bun test shares one module graph across all test files; the preload
+# evaluates the UI component graph with a DOM present so Radix portals
+# work no matter which test file loads first. See the preload's header.
+[test]
+preload = ["./apps/web/src/test/preload.ts"]
