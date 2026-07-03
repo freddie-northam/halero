@@ -94,6 +94,19 @@
         "react": "^19.0.0",
       },
     },
+    "modules/tasks": {
+      "name": "@halero/module-tasks",
+      "version": "0.1.0",
+      "dependencies": {
+        "@halero/connector-sdk": "workspace:*",
+        "@halero/db": "workspace:*",
+        "@halero/module-sdk": "workspace:*",
+        "@halero/schemas": "workspace:*",
+        "@trpc/server": "^11.10.0",
+        "drizzle-orm": "^0.44.7",
+        "zod": "^4.4.3",
+      },
+    },
     "modules/today": {
       "name": "@halero/module-today",
       "version": "0.1.0",
@@ -236,6 +249,8 @@
     "@halero/module-calendar": ["@halero/module-calendar@workspace:modules/calendar"],
 
     "@halero/module-sdk": ["@halero/module-sdk@workspace:packages/module-sdk"],
+
+    "@halero/module-tasks": ["@halero/module-tasks@workspace:modules/tasks"],
 
     "@halero/module-today": ["@halero/module-today@workspace:modules/today"],
 

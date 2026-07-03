@@ -1,0 +1,21 @@
+{
+  "name": "@halero/module-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./server": "./src/server/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@halero/connector-sdk": "workspace:*",
+    "@halero/db": "workspace:*",
+    "@halero/module-sdk": "workspace:*",
+    "@halero/schemas": "workspace:*",
+    "@trpc/server": "^11.10.0",
+    "drizzle-orm": "^0.44.7",
+    "zod": "^4.4.3"
+  }
+}
