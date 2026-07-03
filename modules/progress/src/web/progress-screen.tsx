@@ -34,13 +34,13 @@ import { progressHeatmapKey, progressStatusKey } from "./queries";
 import { readableError } from "./readable-error";
 
 // Per-source colour ramps (empty -> max). "all" (the merged view) and any
-// source without its own ramp use the Halero brand ramp.
+// source without its own ramp use the Halero brand ramp (coral #FF5A5F).
 const BRAND_RAMP = [
   "#f5f5f4",
-  "#c7d2fe",
-  "#a5b4fc",
-  "#818cf8",
-  "#4f46e5",
+  "#ffd0d1",
+  "#ffa5a8",
+  "#ff7a7e",
+  "#ff5a5f",
 ] as const;
 const RAMPS: Record<string, readonly string[]> = {
   all: BRAND_RAMP,
