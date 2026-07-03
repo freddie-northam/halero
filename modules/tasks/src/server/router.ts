@@ -77,6 +77,11 @@ const updateInput = z.object({
 
 const entityIdInput = z.object({ entityId: z.string() });
 
+const logTimeInput = z.object({
+  entityId: z.string(),
+  minutes: z.number(),
+});
+
 const badRequest = (message: string): TRPCError =>
   new TRPCError({ code: "BAD_REQUEST", message });
 
@@ -173,6 +178,14 @@ const validatedEstimate = (raw: number): number => {
     throw badRequest(
       "The estimate must be a whole number of minutes, zero or more.",
     );
+  }
+  return raw;
+};
+
+/** Nonzero so every call moves the total; negative corrects an over-log. */
+const validatedLogMinutes = (raw: number): number => {
+  if (!Number.isInteger(raw) || raw === 0) {
+    throw badRequest("Logged time must be a non-zero whole number of minutes.");
   }
   return raw;
 };
@@ -632,6 +645,28 @@ export const tasksRouter = moduleRouter({
         .set({
           status: completing ? "done" : "todo",
           completedAt: completing ? ctx.now() : null,
+        })
+        .where(eq(tasks.entityId, input.entityId))
+        .run();
+      return readTask(ctx.db, input.entityId);
+    });
+  }),
+
+  // Adds (or, negative, corrects) logged minutes in a single atomic
+  // UPDATE: the SQL expression reads and writes logged_minutes in the
+  // same statement, so concurrent logTime calls always accumulate
+  // instead of racing on a read-modify-write round trip. The result is
+  // clamped at zero so an over-correction never goes negative.
+  logTime: protectedProcedure.input(logTimeInput).mutation(({ ctx, input }) => {
+    const minutes = validatedLogMinutes(input.minutes);
+    requireTaskSatellite(ctx.db, input.entityId);
+    return ctx.entities.withTransaction(() => {
+      // Bumps updated_at and enforces the store's guards.
+      ctx.entities.updateUserEntity(input.entityId, {});
+      ctx.db
+        .update(tasks)
+        .set({
+          loggedMinutes: sql`max(0, ${tasks.loggedMinutes} + ${minutes})`,
         })
         .where(eq(tasks.entityId, input.entityId))
         .run();

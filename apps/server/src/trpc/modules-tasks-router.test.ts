@@ -158,6 +158,23 @@ const deleteTask = async (
   expect(res.status).toBe(200);
 };
 
+const logTime = async (
+  app: TestApp["app"],
+  cookie: string,
+  entityId: string,
+  minutes: number,
+): Promise<TaskData> => {
+  const res = await trpcMutation(
+    app,
+    "modules.tasks.logTime",
+    { entityId, minutes },
+    { cookie },
+  );
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as TrpcSuccess<TaskData>;
+  return json.result.data;
+};
+
 const mutationError = async (
   app: TestApp["app"],
   cookie: string,
@@ -262,6 +279,7 @@ describe("modules.tasks auth", () => {
       ["modules.tasks.toggle", { entityId: "t1" }],
       ["modules.tasks.delete", { entityId: "t1" }],
       ["modules.tasks.move", { entityId: "t1", status: "doing", sortOrder: 1 }],
+      ["modules.tasks.logTime", { entityId: "t1", minutes: 15 }],
     ];
     for (const [procedure, input] of mutations) {
       const res = await trpcMutation(app, procedure, input);
@@ -892,6 +910,106 @@ describe("modules.tasks.toggle", () => {
   });
 });
 
+describe("modules.tasks.logTime", () => {
+  test("adds minutes to a fresh task's logged total", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+
+    const logged = await logTime(testApp.app, cookie, task.entityId, 45);
+
+    expect(logged.loggedMinutes).toBe(45);
+    expect(readSatelliteRow(testApp, task.entityId)?.loggedMinutes).toBe(45);
+  });
+
+  test("accumulates across repeated calls", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+
+    await logTime(testApp.app, cookie, task.entityId, 30);
+    await logTime(testApp.app, cookie, task.entityId, 20);
+    const third = await logTime(testApp.app, cookie, task.entityId, 15);
+
+    expect(third.loggedMinutes).toBe(65);
+  });
+
+  test("a negative correction subtracts from the total", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+    await logTime(testApp.app, cookie, task.entityId, 60);
+
+    const corrected = await logTime(testApp.app, cookie, task.entityId, -25);
+
+    expect(corrected.loggedMinutes).toBe(35);
+  });
+
+  test("clamps an over-correction at zero instead of going negative", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+    await logTime(testApp.app, cookie, task.entityId, 10);
+
+    const corrected = await logTime(testApp.app, cookie, task.entityId, -100);
+
+    expect(corrected.loggedMinutes).toBe(0);
+    expect(readSatelliteRow(testApp, task.entityId)?.loggedMinutes).toBe(0);
+  });
+
+  test("rejects zero minutes readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.logTime",
+      { entityId: task.entityId, minutes: 0 },
+      400,
+    );
+
+    expect(message).toBe(
+      "Logged time must be a non-zero whole number of minutes.",
+    );
+  });
+
+  test("rejects a fractional minute count readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.logTime",
+      { entityId: task.entityId, minutes: 12.5 },
+      400,
+    );
+
+    expect(message).toBe(
+      "Logged time must be a non-zero whole number of minutes.",
+    );
+  });
+
+  test("bumps the spine updated_at", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Touch" });
+    testApp.database.sqlite.run(
+      "UPDATE entities SET updated_at = 111 WHERE id = ?",
+      [task.entityId],
+    );
+
+    await logTime(testApp.app, cookie, task.entityId, 15);
+
+    expect(readEntityRow(testApp, task.entityId)?.updatedAt).toBeGreaterThan(
+      111,
+    );
+  });
+});
+
 describe("modules.tasks.update", () => {
   test("a title-only update preserves the due date and its spine anchor", async () => {
     const testApp = makeTestApp();
@@ -1156,6 +1274,7 @@ describe("modules.tasks.update", () => {
         "modules.tasks.move",
         { entityId: task.entityId, status: "doing", sortOrder: 1 },
       ],
+      ["modules.tasks.logTime", { entityId: task.entityId, minutes: 15 }],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(
@@ -1294,6 +1413,7 @@ describe("the task guard", () => {
       ["modules.tasks.toggle", { entityId }],
       ["modules.tasks.delete", { entityId }],
       ["modules.tasks.move", { entityId, status: "doing", sortOrder: 1 }],
+      ["modules.tasks.logTime", { entityId, minutes: 15 }],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(
@@ -1320,6 +1440,7 @@ describe("the task guard", () => {
         "modules.tasks.move",
         { entityId: "synced-task-1", status: "doing", sortOrder: 1 },
       ],
+      ["modules.tasks.logTime", { entityId: "synced-task-1", minutes: 15 }],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(
