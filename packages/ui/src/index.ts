@@ -8,16 +8,28 @@
 // indicator; the chevrons drive prev/next navigation; Pencil is the
 // edit affordance (opens the task detail sheet); Repeat marks recurring
 // calendar items; StickyNote marks tasks carrying notes; X is the inline
-// delete/dismiss affordance.
+// delete/dismiss affordance. The Integrations marketplace adds: Check
+// (connected state), Search (marketplace filter), ExternalLink (docs/OAuth
+// links), AlertCircle (error/warning state), ChevronDown (collapsible
+// disclosure), Plug (connector affordance/fallback), Trash2 (disconnect).
 export {
+  AlertCircle,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Loader2,
   Pencil,
+  Plug,
   Repeat,
+  Search,
   StickyNote,
+  Trash2,
   X,
 } from "lucide-react";
+export { ConnectorLogo } from "./brand/connector-logo";
+export { InterestedAvatars } from "./brand/interested-avatars";
 export { DatePicker } from "./components/date-picker";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
@@ -33,6 +45,11 @@ export {
   CardTitle,
 } from "./components/ui/card";
 export { Checkbox } from "./components/ui/checkbox";
+export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 export {
   Command,
   CommandDialog,
