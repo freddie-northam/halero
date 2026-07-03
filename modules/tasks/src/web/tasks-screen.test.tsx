@@ -14,7 +14,7 @@ import {
   render,
   within,
 } from "@testing-library/react";
-import type { Task } from "../contract";
+import type { Task, TaskStatus } from "../contract";
 import type { TasksApi, TaskUpdateInput } from "./api";
 import { normalizeTasksSearch } from "./helpers/board-search";
 import { withTasksInvalidation } from "./queries";
@@ -75,7 +75,7 @@ const fixtureTasks: readonly Task[] = [
 ];
 
 interface StubCalls {
-  readonly create: { title: string; dueDate?: string }[];
+  readonly create: { title: string; dueDate?: string; status?: TaskStatus }[];
   readonly update: TaskUpdateInput[];
   readonly move: { entityId: string; status: string; sortOrder: number }[];
   readonly toggle: string[];
@@ -136,11 +136,14 @@ const makeStubApi = (initial: readonly Task[]) => {
       }),
     create: (input) => {
       calls.create.push(input);
+      const status = input.status ?? "todo";
       const created = task({
         entityId: `t-new-${calls.create.length}`,
         title: input.title,
+        status,
         dueDate: input.dueDate ?? null,
-        sortOrder: nextSortOrder("todo"),
+        sortOrder: nextSortOrder(status),
+        completedAt: status === "done" ? Date.now() : null,
       });
       tasks = [...tasks, created];
       return Promise.resolve(created);
@@ -714,25 +717,70 @@ test("the list view's quick-add still creates a task", async () => {
   expect(calls.create).toEqual([{ title: "Pay rent" }]);
 });
 
-// Regression: in the narrow To do board column, the title input rendered
-// on the same row as "Due date" and "Add" and clipped to "Add a tas...".
-// The title now has its own row (see quick-add-form.tsx), so this checks
-// it still renders unclipped in the board and that the form still works.
-test("the board's To do quick-add renders the title input and still creates a task", async () => {
-  const { api, calls } = makeStubApi(fixtureTasks);
+// v0.4: the bulky quick-add form (title + due date + Add button) that
+// used to sit in the To do column header is gone from the board; the
+// List view still has its own full quick-add (checked above).
+test("the board no longer renders the old due-date quick-add form", async () => {
+  const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
-  const titleInput = await view.findByLabelText("Task title");
-  expect(titleInput).toBeTruthy();
-  expect(titleInput.getAttribute("placeholder")).toBe("Add a task...");
-  expect(view.getByLabelText("Due date")).toBeTruthy();
+  expect(view.queryByLabelText("Due date")).toBeNull();
+  expect(view.queryByPlaceholderText("Add a task...")).toBeNull();
+});
 
-  fireEvent.change(titleInput, { target: { value: "Renew passport" } });
+test("each board column shows a compact + Add task affordance", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+
+  expect(view.getAllByRole("button", { name: "Add task" })).toHaveLength(3);
+});
+
+test("clicking + Add task in a column reveals a title input, and Enter creates a task in that column's status", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const doingColumn = within(view.getByRole("region", { name: "Doing" }));
+
+  fireEvent.click(doingColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = doingColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Review PR" } });
   fireEvent.submit(titleInput);
 
-  expect(await view.findByText("Renew passport")).toBeTruthy();
-  expect(calls.create).toEqual([{ title: "Renew passport" }]);
+  expect(await view.findByText("Review PR")).toBeTruthy();
+  expect(calls.create).toEqual([{ title: "Review PR", status: "doing" }]);
+  // The input hides again once the task is created.
+  expect(doingColumn.queryByLabelText("Task title")).toBeNull();
+});
+
+test("Escape cancels the inline add without creating a task", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Abandoned" } });
+  fireEvent.keyDown(titleInput, { key: "Escape" });
+
+  expect(todoColumn.queryByLabelText("Task title")).toBeNull();
+  expect(todoColumn.getByRole("button", { name: "Add task" })).toBeTruthy();
+  expect(calls.create).toEqual([]);
+});
+
+test("an empty title is a no-op on submit", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const doneColumn = within(view.getByRole("region", { name: "Done" }));
+
+  fireEvent.click(doneColumn.getByRole("button", { name: "Add task" }));
+  fireEvent.submit(doneColumn.getByLabelText("Task title"));
+
+  expect(calls.create).toEqual([]);
+  expect(doneColumn.queryByLabelText("Task title")).toBeNull();
 });
 
 test("toggling in the list view moves a task from Open to Done", async () => {

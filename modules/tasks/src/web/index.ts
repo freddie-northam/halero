@@ -21,6 +21,7 @@ export type {
   TasksToday,
 } from "../contract";
 export type {
+  TaskCreateInput,
   TaskLogTimeInput,
   TaskMoveInput,
   TasksApi,

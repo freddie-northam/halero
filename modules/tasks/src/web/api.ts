@@ -11,6 +11,13 @@ import type {
   TasksToday,
 } from "../contract";
 
+export interface TaskCreateInput {
+  readonly title: string;
+  readonly dueDate?: string;
+  /** Board columns create straight into their own status; List omits it. */
+  readonly status?: TaskStatus;
+}
+
 export interface TaskUpdateInput {
   readonly entityId: string;
   readonly title?: string;
@@ -37,10 +44,7 @@ export interface TasksApi {
   readonly list: (filter: TaskFilter) => Promise<TaskList>;
   readonly today: () => Promise<TasksToday>;
   readonly board: () => Promise<TaskBoard>;
-  readonly create: (input: {
-    readonly title: string;
-    readonly dueDate?: string;
-  }) => Promise<Task>;
+  readonly create: (input: TaskCreateInput) => Promise<Task>;
   readonly update: (input: TaskUpdateInput) => Promise<Task>;
   readonly move: (input: TaskMoveInput) => Promise<Task>;
   readonly toggle: (entityId: string) => Promise<Task>;

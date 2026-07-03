@@ -19,10 +19,8 @@ import { type ComputedMove, createDragEndHandler } from "../helpers/board-drag";
 export interface BoardViewProps {
   readonly board: TaskBoard;
   readonly onMove: (move: ComputedMove) => void;
-  readonly onCreate: (input: {
-    readonly title: string;
-    readonly dueDate?: string;
-  }) => Promise<void>;
+  /** Creates a task directly into the given column's status. */
+  readonly onCreate: (status: TaskStatus, title: string) => Promise<void>;
   readonly onOpenTask: (task: Task) => void;
 }
 
@@ -66,7 +64,7 @@ export const BoardView = ({
             tasks={board.columns[status]}
             today={board.today}
             onOpenTask={onOpenTask}
-            onCreate={status === "todo" ? onCreate : undefined}
+            onCreate={(title) => onCreate(status, title)}
           />
         ))}
       </div>

@@ -6,14 +6,16 @@
 
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
 // indicator; the chevrons drive prev/next navigation; Pencil is the
-// edit affordance (opens the task detail dialog); Repeat marks recurring
-// calendar items; StickyNote marks tasks carrying notes; X is the inline
-// delete/dismiss affordance.
+// edit affordance (opens the task detail dialog); Plus marks an inline
+// add affordance (the board's per-column "+ Add task" row); Repeat marks
+// recurring calendar items; StickyNote marks tasks carrying notes; X is
+// the inline delete/dismiss affordance.
 export {
   ChevronLeft,
   ChevronRight,
   Loader2,
   Pencil,
+  Plus,
   Repeat,
   StickyNote,
   X,

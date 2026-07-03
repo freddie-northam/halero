@@ -65,7 +65,9 @@ const BoardBody = ({
     <BoardView
       board={board}
       onMove={(move) => void api.move(move)}
-      onCreate={async (input) => void (await api.create(input))}
+      onCreate={async (status, title) =>
+        void (await api.create({ title, status }))
+      }
       onOpenTask={onOpenTask}
     />
   );
