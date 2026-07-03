@@ -172,6 +172,15 @@ export const tasks = sqliteTable(
   (table) => [index("idx_tasks_status_due").on(table.status, table.dueDate)],
 );
 
+export const apiTokens = sqliteTable("api_tokens", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdAt: integer("created_at").notNull(),
+  lastUsedAt: integer("last_used_at"),
+  revokedAt: integer("revoked_at"),
+});
+
 export const sessions = sqliteTable("sessions", {
   tokenHash: text("token_hash").primaryKey(),
   createdAt: integer("created_at").notNull(),

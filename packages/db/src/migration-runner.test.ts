@@ -54,12 +54,14 @@ describe("runMigrations", () => {
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -76,6 +78,7 @@ describe("runMigrations", () => {
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
   });
 
@@ -152,18 +155,18 @@ describe("runMigrations", () => {
     const extended: Migration[] = [
       ...coreMigrations,
       {
-        name: "0005_widgets",
+        name: "0006_widgets",
         sql: "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       },
     ];
 
     const result = runMigrations(sqlite, { migrations: extended, backupsDir });
 
-    expect(result.applied).toEqual(["0005_widgets"]);
+    expect(result.applied).toEqual(["0006_widgets"]);
     if (result.snapshotPath === null) {
       throw new Error("expected a snapshot path");
     }
-    expect(basename(result.snapshotPath)).toStartWith("pre-0005_widgets-");
+    expect(basename(result.snapshotPath)).toStartWith("pre-0006_widgets-");
     expect(existsSync(result.snapshotPath)).toBe(true);
 
     const snapshot = new Database(result.snapshotPath, { readonly: true });
@@ -172,6 +175,7 @@ describe("runMigrations", () => {
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -218,6 +222,7 @@ describe("runMigrations", () => {
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
@@ -327,18 +332,57 @@ describe("runMigrations", () => {
     sqlite.close();
   });
 
+  test("0005_api_tokens creates the api_tokens table and snapshots a non-empty database", () => {
+    const { sqlite, backupsDir } = makeContext();
+    const preApiTokens = coreMigrations.filter(
+      (migration) => migration.name !== "0005_api_tokens",
+    );
+    runMigrations(sqlite, { migrations: preApiTokens, backupsDir });
+    // Any pre-existing row makes the database non-empty, so the
+    // pre-migration snapshot must fire.
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-1', 'note', 1, 'user', 1, 1)`,
+    );
+
+    const result = runMigrations(sqlite, {
+      migrations: coreMigrations,
+      backupsDir,
+    });
+
+    expect(result.applied).toEqual(["0005_api_tokens"]);
+    expect(result.snapshotPath).not.toBeNull();
+    expect(tableExists(sqlite, "api_tokens")).toBe(true);
+    sqlite.close();
+  });
+
+  test("0005_api_tokens enforces UNIQUE token_hash", () => {
+    const { sqlite, backupsDir } = makeContext();
+    runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
+    const insertToken = (id: string): void => {
+      sqlite.run(
+        "INSERT INTO api_tokens (id, name, token_hash, created_at) VALUES (?, 'Raycast', 'same-hash', 1)",
+        [id],
+      );
+    };
+    insertToken("tok-1");
+
+    expect(() => insertToken("tok-2")).toThrow(/UNIQUE/);
+    sqlite.close();
+  });
+
   test("rolls back a failed migration, keeps it out of the ledger, and stops", () => {
     const { sqlite, backupsDir } = makeContext();
     runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
     const broken: Migration = {
-      name: "0005_broken",
+      name: "0006_broken",
       sql: [
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       ].join("\n"),
     };
     const afterBroken: Migration = {
-      name: "0006_never_reached",
+      name: "0007_never_reached",
       sql: "CREATE TABLE gadgets (id TEXT PRIMARY KEY);",
     };
 
@@ -347,7 +391,7 @@ describe("runMigrations", () => {
         migrations: [...coreMigrations, broken, afterBroken],
         backupsDir,
       }),
-    ).toThrow(/0005_broken/);
+    ).toThrow(/0006_broken/);
 
     expect(tableExists(sqlite, "widgets")).toBe(false);
     expect(tableExists(sqlite, "gadgets")).toBe(false);
@@ -356,6 +400,7 @@ describe("runMigrations", () => {
       "0002_connection_backoff",
       "0003_external_ref_streams",
       "0004_tasks",
+      "0005_api_tokens",
     ]);
   });
 });
