@@ -63,6 +63,7 @@ const createInput = z.object({
   priority: z.string().optional(),
   tags: z.array(z.string()).optional(),
   estimateMinutes: numberInput.optional(),
+  status: z.string().optional(),
 });
 
 const updateInput = z.object({
@@ -546,6 +547,8 @@ export const tasksRouter = moduleRouter({
       input.estimateMinutes === undefined
         ? null
         : validatedEstimate(input.estimateMinutes);
+    const status =
+      input.status === undefined ? "todo" : validatedStatus(input.status);
     const homeTimezone = homeTimezoneOf(ctx.db);
     const snippet = taskSnippet(tags, input.notes ?? null);
     return ctx.entities.withTransaction(() => {
@@ -562,15 +565,15 @@ export const tasksRouter = moduleRouter({
         .insert(tasks)
         .values({
           entityId,
-          status: "todo",
+          status,
           priority,
           tags: tagsColumnValue(tags),
           dueDate: input.dueDate ?? null,
-          completedAt: null,
+          completedAt: status === "done" ? ctx.now() : null,
           notes: input.notes ?? null,
           estimateMinutes,
-          // Appended to the todo column, after every migrated row.
-          sortOrder: nextSortOrder(ctx.db, "todo"),
+          // Appended to the target column, after every migrated row.
+          sortOrder: nextSortOrder(ctx.db, status),
         })
         .run();
       return readTask(ctx.db, entityId);
