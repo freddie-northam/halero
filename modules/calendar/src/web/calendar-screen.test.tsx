@@ -411,6 +411,75 @@ test("saving an edit opened from the panel calls updateEvent and closes the moda
   expect(view.queryByRole("dialog")).toBeNull();
 });
 
+test("a second edit from the panel prefills from the saved state, not a stale snapshot", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const calls: { readonly title?: string }[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+    // Echo the submitted title back as the server would, so the refreshed
+    // selection reflects the save.
+    updateEvent: (input) => {
+      calls.push({ title: input.title });
+      return Promise.resolve({
+        ...editableEvent,
+        editable: true,
+        title: input.title ?? editableEvent.title,
+      });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const firstDialog = within(await view.findByRole("dialog"));
+  fireEvent.change(firstDialog.getByLabelText("Title"), {
+    target: { value: "1:1 with Sam (moved)" },
+  });
+  await act(async () => {
+    fireEvent.click(firstDialog.getByRole("button", { name: "Save" }));
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  // The panel snapshot refreshed to the saved title.
+  expect(panel.getAllByText("1:1 with Sam (moved)").length).toBeGreaterThan(0);
+
+  // Editing again and saving unchanged must preserve the renamed title,
+  // not revert it (full-replace over a stale snapshot would drop it).
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const secondDialog = within(await view.findByRole("dialog"));
+  expect(secondDialog.getByLabelText("Title").getAttribute("value")).toBe(
+    "1:1 with Sam (moved)",
+  );
+  await act(async () => {
+    fireEvent.click(secondDialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.title).toBe("1:1 with Sam (moved)");
+});
+
 test("deleting from an edit modal opened from the panel calls deleteEvent, closes it, and clears the selection", async () => {
   const editableEvent = event({
     entityId: "ev-user",

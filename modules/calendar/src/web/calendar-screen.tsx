@@ -340,7 +340,15 @@ export const createCalendarScreen = (api: CalendarApi) => {
               api.createEvent(input).then(() => setTarget(null))
             }
             onUpdate={(input) =>
-              api.updateEvent(input).then(() => setTarget(null))
+              api.updateEvent(input).then((updated) => {
+                setTarget(null);
+                // Refresh the panel's snapshot so a second edit prefills
+                // from the saved state; without this, updateEvent's full
+                // replace would revert the first edit's changes.
+                setSelected((current) =>
+                  current?.entityId === updated.entityId ? updated : current,
+                );
+              })
             }
             onDelete={(entityId) =>
               api.deleteEvent(entityId).then(() => {
