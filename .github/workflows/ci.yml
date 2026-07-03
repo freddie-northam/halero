@@ -2,7 +2,15 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
+
+# One run per ref: a new push cancels the stale in-flight run instead of
+# queueing a duplicate, and same-repo PRs no longer double-run with push.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ci:
