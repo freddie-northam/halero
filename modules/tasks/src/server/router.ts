@@ -34,8 +34,13 @@ const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const PRIORITIES: readonly TaskPriority[] = ["high", "medium", "low"];
 const TASK_STATUSES: readonly TaskStatus[] = ["todo", "doing", "done"];
 
+/** list()'s filter values; "active" is todo+doing, i.e. not done. */
+type TaskListFilter = "todo" | "doing" | "done" | "active" | "all";
+
 const listInput = z
-  .object({ filter: z.enum(["todo", "done", "all"]).optional() })
+  .object({
+    filter: z.enum(["todo", "doing", "done", "active", "all"]).optional(),
+  })
   .optional();
 
 const moveInput = z.object({
@@ -327,15 +332,21 @@ const requireTaskSatellite = (
   return row;
 };
 
-const statusFilter = (filter: "todo" | "done" | "all") =>
-  filter === "all" ? undefined : eq(tasks.status, filter);
+const statusFilter = (filter: TaskListFilter) => {
+  if (filter === "all") {
+    return undefined;
+  }
+  // "active" spans two statuses, so it filters by exclusion instead of
+  // an eq(); every other value names exactly one status.
+  return filter === "active"
+    ? ne(tasks.status, "done")
+    : eq(tasks.status, filter);
+};
 
 /** Live tasks, due-dated first (soonest first), then dateless; ties by
- * creation time. */
-const liveTasks = (
-  db: ModuleDb,
-  filter: "todo" | "done" | "all",
-): readonly Task[] =>
+ * creation time. Kept for the List view; the board orders by sort_order
+ * instead, since drag position is that view's source of truth. */
+const liveTasks = (db: ModuleDb, filter: TaskListFilter): readonly Task[] =>
   db
     .select(taskColumns)
     .from(entities)

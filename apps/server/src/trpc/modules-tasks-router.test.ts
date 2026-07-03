@@ -50,6 +50,8 @@ interface TaskBoardData {
   };
 }
 
+type TaskListFilter = "todo" | "doing" | "done" | "active" | "all";
+
 interface TrpcErrorBody {
   readonly error: { readonly message: string };
 }
@@ -79,7 +81,7 @@ const createTask = async (
 const listTasks = async (
   app: TestApp["app"],
   cookie: string,
-  filter?: "todo" | "done" | "all",
+  filter?: TaskListFilter,
 ): Promise<TaskListData> => {
   const procedure =
     filter === undefined
@@ -599,6 +601,36 @@ describe("modules.tasks.list", () => {
       noDueEarly.entityId,
       noDueLate.entityId,
     ]);
+  });
+
+  test("filters doing and active, where active excludes only done", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const todoTask = await createTask(testApp.app, cookie, {
+      title: "Still todo",
+    });
+    const doingTask = await createTask(testApp.app, cookie, {
+      title: "In progress",
+    });
+    await moveTask(testApp.app, cookie, {
+      entityId: doingTask.entityId,
+      status: "doing",
+      sortOrder: 1,
+    });
+    const doneTask = await createTask(testApp.app, cookie, {
+      title: "Finished",
+    });
+    await toggleTask(testApp.app, cookie, doneTask.entityId);
+
+    const doing = await listTasks(testApp.app, cookie, "doing");
+    const active = await listTasks(testApp.app, cookie, "active");
+
+    expect(doing.tasks.map((item) => item.entityId)).toEqual([
+      doingTask.entityId,
+    ]);
+    expect(active.tasks.map((item) => item.entityId).toSorted()).toEqual(
+      [todoTask.entityId, doingTask.entityId].toSorted(),
+    );
   });
 });
 
