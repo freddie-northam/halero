@@ -183,6 +183,17 @@ export const tasks = sqliteTable(
   ],
 );
 
+// Added by migrations/0007_notes.sql for the Notes module.
+export const notes = sqliteTable("notes", {
+  entityId: text("entity_id")
+    .primaryKey()
+    .references(() => entities.id),
+  /** BlockNote block document, stored as a JSON string. */
+  document: text("document").notNull(),
+  /** JSON string array, nullable. */
+  tags: text("tags"),
+});
+
 export const apiTokens = sqliteTable("api_tokens", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
