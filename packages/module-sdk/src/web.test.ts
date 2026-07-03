@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { defineWebModule, type WebModule } from "./web";
+import {
+  type CommandContribution,
+  type CommandRunResult,
+  defineWebModule,
+  type WebModule,
+} from "./web";
 
 describe("defineWebModule", () => {
   test("returns the module untouched", () => {
@@ -19,6 +24,30 @@ describe("defineWebModule", () => {
     });
 
     expect(module.nav[0]?.order).toBe(20);
+  });
+
+  test("passes command contributions through untouched", async () => {
+    const contribution: CommandContribution = {
+      id: "tasks.new",
+      describe: (input) =>
+        input.trim() === "" ? null : `New task: ${input.trim()}`,
+      run: (input) =>
+        Promise.resolve({
+          message: `Added ${input}.`,
+          navigateTo: { path: "/tasks", search: { filter: "open" } },
+        }),
+    };
+    const module = defineWebModule({ id: "tasks", commands: [contribution] });
+
+    const command = module.commands[0];
+    expect(command?.id).toBe("tasks.new");
+    expect(command?.describe("")).toBeNull();
+    expect(command?.describe("buy milk")).toBe("New task: buy milk");
+    const result: CommandRunResult | undefined = await command?.run("buy milk");
+    expect(result).toEqual({
+      message: "Added buy milk.",
+      navigateTo: { path: "/tasks", search: { filter: "open" } },
+    });
   });
 
   test("passes entity link contributions through untouched", () => {
