@@ -56,3 +56,13 @@ export interface CalendarEventList {
   readonly homeTimezone: string;
   readonly events: readonly AgendaEvent[];
 }
+
+/**
+ * The soonest live calendar events starting now or later, ascending, for
+ * the context panel's "Next up" card. The server computes "now" via
+ * ctx.now(); the client never derives it from its own clock.
+ */
+export interface CalendarUpcoming {
+  readonly homeTimezone: string;
+  readonly events: readonly AgendaEvent[];
+}

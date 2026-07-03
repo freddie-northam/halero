@@ -6,6 +6,7 @@ import type {
   CalendarEventList,
   CalendarRange,
   CalendarToday,
+  CalendarUpcoming,
 } from "../contract";
 
 export interface CalendarEventInput {
@@ -32,6 +33,8 @@ export interface CalendarApi {
   readonly today: () => Promise<CalendarToday>;
   readonly range: (from: string, to: string) => Promise<CalendarRange>;
   readonly events: (from: string, to: string) => Promise<CalendarEventList>;
+  /** The soonest future events for the context panel's "Next up" card. */
+  readonly upcoming: (limit?: number) => Promise<CalendarUpcoming>;
   readonly createEvent: (input: CalendarEventInput) => Promise<AgendaEvent>;
   readonly updateEvent: (
     input: CalendarEventUpdateInput,

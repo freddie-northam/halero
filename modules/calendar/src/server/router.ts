@@ -13,7 +13,7 @@ import { calendarEvents, entities, settings } from "@halero/db";
 import type { ModuleDb } from "@halero/module-sdk/server";
 import { CALENDAR_EVENT_KIND, UNTITLED_EVENT_TITLE } from "@halero/schemas";
 import { TRPCError } from "@trpc/server";
-import { and, eq, gt, gte, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import type {
   Agenda,
@@ -22,6 +22,7 @@ import type {
   CalendarEventList,
   CalendarRange,
   CalendarToday,
+  CalendarUpcoming,
 } from "../contract";
 import { moduleRouter, protectedProcedure } from "./trpc";
 
@@ -32,6 +33,7 @@ export const CALENDAR_EVENT_SCHEMA_VERSION = 1;
 const HALERO_LOCAL_CALENDAR_ID = "halero-local";
 
 const DEFAULT_AGENDA_DAYS = 7;
+const DEFAULT_UPCOMING_LIMIT = 1;
 const RANGE_CAP_DAYS = 62;
 const DAY_MS = 86_400_000;
 const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,6 +49,10 @@ const agendaInput = z
 const rangeInput = z.object({ from: z.string(), to: z.string() });
 
 const entityIdInput = z.object({ entityId: z.string() });
+
+const upcomingInput = z
+  .object({ limit: z.number().int().min(1).max(10).optional() })
+  .optional();
 
 // Shape only; the handlers validate values themselves so rejections
 // carry readable messages instead of zod issue dumps. Optional fields
@@ -397,6 +403,33 @@ const eventsIntersecting = (
     .filter((row) => row.occurredStart !== null)
     .map(toAgendaEvent);
 
+/**
+ * Live calendar events starting now or later, soonest first, capped at
+ * `limit`. Backs the context panel's "Next up" card; the panel never
+ * computes "now" itself.
+ */
+const upcomingEvents = (
+  db: ModuleDb,
+  now: number,
+  limit: number,
+): readonly AgendaEvent[] =>
+  db
+    .select(eventColumns)
+    .from(entities)
+    .innerJoin(calendarEvents, eq(calendarEvents.entityId, entities.id))
+    .where(
+      and(
+        eq(entities.kind, CALENDAR_EVENT_KIND),
+        isNull(entities.deletedAt),
+        gte(entities.occurredStart, now),
+      ),
+    )
+    .orderBy(asc(entities.occurredStart))
+    .limit(limit)
+    .all()
+    .filter((row) => row.occurredStart !== null)
+    .map(toAgendaEvent);
+
 /** Reads one event back after a write; the row is known to exist. */
 const readEvent = (db: ModuleDb, entityId: string): AgendaEvent => {
   const row = db
@@ -524,6 +557,16 @@ export const calendarRouter = moduleRouter({
       events: [...events].sort(compareEvents),
     };
     return list;
+  }),
+
+  upcoming: protectedProcedure.input(upcomingInput).query(({ ctx, input }) => {
+    const homeTimezone = homeTimezoneOf(ctx.db);
+    const limit = input?.limit ?? DEFAULT_UPCOMING_LIMIT;
+    const upcoming: CalendarUpcoming = {
+      homeTimezone,
+      events: upcomingEvents(ctx.db, ctx.now(), limit),
+    };
+    return upcoming;
   }),
 
   createEvent: protectedProcedure

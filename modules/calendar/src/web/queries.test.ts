@@ -33,6 +33,10 @@ const makeStub = () => {
       calls.push("events");
       return Promise.resolve({ homeTimezone: "UTC", events: [event] });
     },
+    upcoming: () => {
+      calls.push("upcoming");
+      return Promise.resolve({ homeTimezone: "UTC", events: [event] });
+    },
     createEvent: () => {
       calls.push("createEvent");
       return Promise.resolve(event);
@@ -91,7 +95,8 @@ describe("withCalendarInvalidation", () => {
     await wrapped.today();
     await wrapped.range("2025-07-01", "2025-07-08");
     await wrapped.events("2025-07-01", "2025-07-08");
-    expect(calls).toEqual(["today", "range", "events"]);
+    await wrapped.upcoming(1);
+    expect(calls).toEqual(["today", "range", "events", "upcoming"]);
     expect(invalidated()).toBe(0);
   });
 

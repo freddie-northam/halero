@@ -11,10 +11,11 @@ const calendarRootKey = ["calendar"] as const;
 
 /**
  * Wraps a CalendarApi so every successful mutation invalidates the
- * module's queries (today, every range window, and the flat events feed)
- * and resolves only after active ones refetched. No optimistic updates:
- * invalidate-and-refetch keeps every view (month, week, agenda) consistent
- * after a create, edit, or delete.
+ * module's queries (today, every range window, the flat events feed, and
+ * the context panel's upcoming query) and resolves only after active ones
+ * refetched. No optimistic updates: invalidate-and-refetch keeps every
+ * view (month, week, agenda) and the panel consistent after a create,
+ * edit, or delete.
  */
 export const withCalendarInvalidation = (
   api: CalendarApi,
@@ -27,6 +28,7 @@ export const withCalendarInvalidation = (
     today: api.today,
     range: api.range,
     events: api.events,
+    upcoming: api.upcoming,
     createEvent: async (input) => {
       const event = await api.createEvent(input);
       await invalidate();

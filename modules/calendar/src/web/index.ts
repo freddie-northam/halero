@@ -16,6 +16,7 @@ export type {
   CalendarEventList,
   CalendarRange,
   CalendarToday,
+  CalendarUpcoming,
 } from "../contract";
 export type {
   CalendarApi,

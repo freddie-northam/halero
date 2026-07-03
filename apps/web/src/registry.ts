@@ -73,6 +73,10 @@ export const buildCalendarApi = (
       today: () => client.modules.calendar.today.query(),
       range: (from, to) => client.modules.calendar.range.query({ from, to }),
       events: (from, to) => client.modules.calendar.events.query({ from, to }),
+      upcoming: (limit) =>
+        client.modules.calendar.upcoming.query(
+          limit === undefined ? undefined : { limit },
+        ),
       createEvent: (input) => client.modules.calendar.createEvent.mutate(input),
       updateEvent: (input) => client.modules.calendar.updateEvent.mutate(input),
       deleteEvent: (entityId) =>

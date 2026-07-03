@@ -104,6 +104,21 @@ const listEvents = async (
   return json.result.data;
 };
 
+const readUpcoming = async (
+  app: TestApp["app"],
+  cookie: string,
+  limit?: number,
+): Promise<CalendarEventListData> => {
+  const procedure =
+    limit === undefined
+      ? "modules.calendar.upcoming"
+      : `modules.calendar.upcoming?input=${encodeURIComponent(JSON.stringify({ limit }))}`;
+  const res = await trpcQuery(app, procedure, { cookie });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as TrpcSuccess<CalendarEventListData>;
+  return json.result.data;
+};
+
 const mutationError = async (
   app: TestApp["app"],
   cookie: string,
@@ -167,6 +182,48 @@ const seedConnectorEvent = (testApp: TestApp, id: string): void => {
     .run();
 };
 
+/** A live connector-owned event with a real occurredStart/End, notes, and
+ * a url, for asserting `upcoming` maps a synced (Google) row correctly. */
+const seedFutureConnectorEvent = (
+  testApp: TestApp,
+  id: string,
+  occurredStart: number,
+  occurredEnd: number,
+): void => {
+  testApp.database.db
+    .insert(entities)
+    .values({
+      id,
+      kind: "calendar.event",
+      schemaVersion: 1,
+      title: "Team sync",
+      snippet: null,
+      occurredStart,
+      occurredEnd,
+      source: "connector",
+      createdAt: 1,
+      updatedAt: 1,
+      deletedAt: null,
+    })
+    .run();
+  testApp.database.db
+    .insert(calendarEvents)
+    .values({
+      entityId: id,
+      calendarId: "primary",
+      allDay: 0,
+      startDate: null,
+      endDate: null,
+      location: "HQ",
+      status: "confirmed",
+      recurringEventId: null,
+      originalStartTime: null,
+      notes: "agenda notes",
+      url: "https://meet.example.com/sync",
+    })
+    .run();
+};
+
 const NOT_AN_EVENT_MESSAGE = "This item is not a calendar event.";
 const EVENT_DELETED_MESSAGE = "This event was deleted.";
 const CONNECTOR_MANAGED_MESSAGE =
@@ -182,6 +239,8 @@ describe("modules.calendar create/update/delete/events auth", () => {
       `modules.calendar.events?input=${encodeURIComponent(JSON.stringify({ from: "2023-11-01", to: "2023-11-02" }))}`,
     );
     expect(query.status).toBe(401);
+    const upcomingQuery = await trpcQuery(app, "modules.calendar.upcoming");
+    expect(upcomingQuery.status).toBe(401);
 
     const mutations: readonly (readonly [string, unknown])[] = [
       [
@@ -736,5 +795,138 @@ describe("modules.calendar.events", () => {
     expect(json.error.message).toBe(
       "The range start date must come before its end date.",
     );
+  });
+});
+
+describe("modules.calendar.upcoming", () => {
+  // The test clock is 2023-11-14T22:13:20Z; every "future" fixture below
+  // starts well after that.
+  test("returns the soonest future event first, ascending", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const later = await createEvent(testApp.app, cookie, {
+      title: "Later",
+      allDay: false,
+      date: "2023-11-17",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+    const sooner = await createEvent(testApp.app, cookie, {
+      title: "Sooner",
+      allDay: false,
+      date: "2023-11-16",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+
+    const upcoming = await readUpcoming(testApp.app, cookie, 5);
+
+    expect(upcoming.homeTimezone).toBe(HOME_TZ);
+    expect(upcoming.events.map((e) => e.entityId)).toEqual([
+      sooner.entityId,
+      later.entityId,
+    ]);
+  });
+
+  test("excludes events that already started", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    await createEvent(testApp.app, cookie, {
+      title: "Past",
+      allDay: false,
+      date: "2023-11-14",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+    const future = await createEvent(testApp.app, cookie, {
+      title: "Future",
+      allDay: false,
+      date: "2023-11-20",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+
+    const upcoming = await readUpcoming(testApp.app, cookie);
+
+    expect(upcoming.events.map((e) => e.entityId)).toEqual([future.entityId]);
+  });
+
+  test("excludes a deleted event", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const created = await createEvent(testApp.app, cookie, {
+      title: "Cancelled",
+      allDay: false,
+      date: "2023-11-20",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+    await deleteEvent(testApp.app, cookie, created.entityId);
+
+    const upcoming = await readUpcoming(testApp.app, cookie);
+
+    expect(upcoming.events).toEqual([]);
+  });
+
+  test("respects the limit input", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    for (const date of ["2023-11-16", "2023-11-17", "2023-11-18"]) {
+      await createEvent(testApp.app, cookie, {
+        title: `Event ${date}`,
+        allDay: false,
+        date,
+        startTime: "09:00",
+        endTime: "09:30",
+      });
+    }
+
+    const upcoming = await readUpcoming(testApp.app, cookie, 2);
+
+    expect(upcoming.events).toHaveLength(2);
+  });
+
+  test("defaults to a limit of 1", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    await createEvent(testApp.app, cookie, {
+      title: "First",
+      allDay: false,
+      date: "2023-11-16",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+    await createEvent(testApp.app, cookie, {
+      title: "Second",
+      allDay: false,
+      date: "2023-11-17",
+      startTime: "09:00",
+      endTime: "09:30",
+    });
+
+    const upcoming = await readUpcoming(testApp.app, cookie);
+
+    expect(upcoming.events).toHaveLength(1);
+  });
+
+  test("includes a connector (Google) event as non-editable, with its notes and url", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    seedFutureConnectorEvent(
+      testApp,
+      "synced-upcoming",
+      Date.UTC(2023, 10, 20, 9, 0, 0),
+      Date.UTC(2023, 10, 20, 9, 30, 0),
+    );
+
+    const upcoming = await readUpcoming(testApp.app, cookie);
+
+    expect(upcoming.events).toHaveLength(1);
+    const [synced] = upcoming.events;
+    expect(synced?.entityId).toBe("synced-upcoming");
+    expect(synced?.editable).toBe(false);
+    expect(synced?.location).toBe("HQ");
+    expect(synced?.notes).toBe("agenda notes");
+    expect(synced?.url).toBe("https://meet.example.com/sync");
   });
 });

@@ -69,6 +69,7 @@ const fixtureApi: CalendarApi = {
       days: from === TODAY ? [{ date: TODAY, events: todaysEvents }] : [],
     }),
   events: () => Promise.reject(new Error("not under test")),
+  upcoming: () => Promise.reject(new Error("not under test")),
   createEvent: () => Promise.reject(new Error("not under test")),
   updateEvent: () => Promise.reject(new Error("not under test")),
   deleteEvent: () => Promise.reject(new Error("not under test")),

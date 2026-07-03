@@ -62,6 +62,9 @@ const stubClient = {
       events: {
         query: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
       },
+      upcoming: {
+        query: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+      },
       createEvent: {
         mutate: () => Promise.resolve(stubEvent),
       },
@@ -114,6 +117,7 @@ const stubCalendarApi: CalendarApi = {
   today: () => Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14" }),
   range: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
   events: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+  upcoming: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
   createEvent: () => Promise.reject(new Error("not under test")),
   updateEvent: () => Promise.reject(new Error("not under test")),
   deleteEvent: () => Promise.reject(new Error("not under test")),
@@ -216,9 +220,11 @@ describe("buildCalendarApi", () => {
     const today = await api.today();
     const range = await api.range("2023-11-14", "2023-11-15");
     const events = await api.events("2023-11-14", "2023-11-15");
+    const upcoming = await api.upcoming(1);
     expect(today.today).toBe("2023-11-14");
     expect(range.days).toEqual([]);
     expect(events.events).toEqual([]);
+    expect(upcoming.events).toEqual([]);
     expect(invalidations).toBe(0);
   });
 });
