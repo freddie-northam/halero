@@ -8,7 +8,10 @@ export interface ViewSwitcherProps {
 }
 
 const isCalendarView = (value: string): value is CalendarView =>
-  value === "month" || value === "week" || value === "agenda";
+  value === "month" ||
+  value === "week" ||
+  value === "agenda" ||
+  value === "list";
 
 /**
  * The month/week/agenda switcher. Radix tabs give the keyboard model
@@ -31,6 +34,7 @@ export const ViewSwitcher = ({
       <TabsTrigger value="month">Month</TabsTrigger>
       <TabsTrigger value="week">Week</TabsTrigger>
       <TabsTrigger value="agenda">Agenda</TabsTrigger>
+      <TabsTrigger value="list">List</TabsTrigger>
     </TabsList>
   </Tabs>
 );

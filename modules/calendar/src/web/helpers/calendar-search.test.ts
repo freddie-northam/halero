@@ -16,6 +16,9 @@ describe("normalizeCalendarSearch", () => {
     expect(normalizeCalendarSearch({ view: "agenda" })).toEqual({
       view: "agenda",
     });
+    expect(normalizeCalendarSearch({ view: "list" })).toEqual({
+      view: "list",
+    });
   });
 
   test("drops unknown views, bad dates, and junk params", () => {
@@ -59,5 +62,11 @@ describe("viewWindow", () => {
       from: "2026-06-29",
       to: "2026-08-10",
     });
+  });
+
+  test("list shares the month view's window", () => {
+    expect(viewWindow("list", "2026-07-15")).toEqual(
+      viewWindow("month", "2026-07-15"),
+    );
   });
 });
