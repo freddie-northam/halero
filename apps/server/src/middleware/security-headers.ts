@@ -2,16 +2,29 @@ import type { ErrorHandler, MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 
 /**
- * Strict allowlist: the built SPA is same-origin only (hashed script and
- * style files, bundled fonts, tRPC calls back to the same host), so
- * nothing beyond 'self' is needed; img-src also allows data: for inline
- * favicons. Verified against the built app (login, setup, settings,
- * calendar) with the console open: no violations, so no relaxations.
+ * Same-origin allowlist for the built SPA (hashed script/style files,
+ * bundled fonts, tRPC calls back to the same host); img-src also allows
+ * data: for inline favicons.
+ *
+ * script-src stays strict 'self', which is the boundary that actually
+ * stops XSS: the app never injects markup (React escapes everything, no
+ * dangerouslySetInnerHTML, search highlights strip control bytes before
+ * rendering), so no attacker-controlled script can run.
+ *
+ * style-src needs 'unsafe-inline' because the component libraries apply
+ * inline styles the browser blocks otherwise: Radix and cmdk set style
+ * attributes for focus-outline management and dialog scroll-lock, and
+ * Radix positioning computes inline styles at runtime that cannot be
+ * hashed or nonced. This was verified against the built app with the
+ * console open: the command palette and Tabs tripped style-src 'self'
+ * with no functional break, so the relaxation is scoped to styles alone.
+ * A style-only relaxation is low risk here precisely because we render
+ * no untrusted markup, so there is no attacker-controlled style surface.
  */
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",
