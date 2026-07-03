@@ -158,8 +158,12 @@ describe("base URL authority", () => {
     const { app, cookie } = await setupWithDomain();
     const saved = await trpcMutation(
       app,
-      "connections.google.saveClient",
-      { clientId: "id-1.apps.googleusercontent.com", clientSecret: "shh" },
+      "connections.saveOauthClient",
+      {
+        connectorId: "google-calendar",
+        clientId: "id-1.apps.googleusercontent.com",
+        clientSecret: "shh",
+      },
       { cookie, origin: "https://halero.example.com" },
     );
     expect(saved.status).toBe(200);
@@ -191,14 +195,14 @@ describe("base URL authority", () => {
 
     // ...and the OAuth redirect URI is built from the same value.
     const start = await app.fetch(
-      new Request("http://localhost/api/oauth/google/start", {
+      new Request("http://localhost/api/oauth/google-calendar/start", {
         headers: { cookie },
       }),
     );
     expect(start.status).toBe(302);
     const location = new URL(start.headers.get("location") ?? "");
     expect(location.searchParams.get("redirect_uri")).toBe(
-      "https://moved.example.com/api/oauth/google/callback",
+      "https://moved.example.com/api/oauth/google-calendar/callback",
     );
   });
 
@@ -208,22 +212,26 @@ describe("base URL authority", () => {
     // The saveClient mutation passes CSRF against the settings origin...
     const saved = await trpcMutation(
       app,
-      "connections.google.saveClient",
-      { clientId: "id-1.apps.googleusercontent.com", clientSecret: "shh" },
+      "connections.saveOauthClient",
+      {
+        connectorId: "google-calendar",
+        clientId: "id-1.apps.googleusercontent.com",
+        clientSecret: "shh",
+      },
       { cookie, origin: "https://halero.example.com" },
     );
     expect(saved.status).toBe(200);
 
     // ...and the start route builds its redirect URI from the same value.
     const start = await app.fetch(
-      new Request("http://localhost/api/oauth/google/start", {
+      new Request("http://localhost/api/oauth/google-calendar/start", {
         headers: { cookie },
       }),
     );
     expect(start.status).toBe(302);
     const location = new URL(start.headers.get("location") ?? "");
     expect(location.searchParams.get("redirect_uri")).toBe(
-      "https://halero.example.com/api/oauth/google/callback",
+      "https://halero.example.com/api/oauth/google-calendar/callback",
     );
   });
 });

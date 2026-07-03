@@ -14,8 +14,8 @@ import {
   syncRuns,
 } from "@halero/db";
 import { createApiToken, mintApiTokenValue } from "./api-tokens";
+import { saveOauthClient } from "./connections/oauth-client";
 import { setSetting } from "./settings";
-import { saveGoogleClient } from "./sync/client-config";
 import { createOauthState } from "./sync/oauth-state";
 import { completeSetup, makeTestApp, type TestApp } from "./test-utils";
 
@@ -33,7 +33,7 @@ const seedFullDatabase = (testApp: TestApp): void => {
   const { database, key, clock } = testApp;
   const db = database.db;
   const { sqlite } = database;
-  saveGoogleClient(db, key, {
+  saveOauthClient(db, key, "google-calendar", {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: CLIENT_SECRET,
   });
@@ -188,7 +188,9 @@ describe("GET /api/export redaction", () => {
           "SELECT value FROM settings WHERE key = ?",
         )
         .get(settingKey)?.value ?? "IMPOSSIBLE";
-    const storedSecretEnc = readSetting("google_oauth_client_secret_enc");
+    const storedSecretEnc = readSetting(
+      "connection.google-calendar.oauthClientSecretEnc",
+    );
     const passwordHash = readSetting("password_hash");
     expect(passwordHash).toStartWith("$argon2id$");
     // Presence guard, mirroring the argon2id check above: if the setting

@@ -2,8 +2,14 @@ import { asRecord, type FetchLike, stringOrNull } from "@halero/connector-sdk";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections, type HaleroDatabase } from "@halero/db";
 import { eq } from "drizzle-orm";
-import { readGoogleClient } from "./client-config";
+import { readOauthClient } from "../connections/oauth-client";
 import type { ConnectionRow, StoredOauthTokens } from "./connection";
+
+// Only google-calendar uses oauth2 today, so the refresh path resolves its
+// client directly. When a second OAuth2 connector lands, thread the
+// connectorId + displayName through OauthTokenContext instead.
+const OAUTH2_CONNECTOR_ID = "google-calendar";
+const OAUTH2_DISPLAY_NAME = "Google Calendar";
 
 type Db = HaleroDatabase["db"];
 
@@ -84,7 +90,12 @@ const requestRefresh = async (
   ctx: OauthTokenContext,
   refreshToken: string,
 ): Promise<Response | null> => {
-  const client = readGoogleClient(ctx.db, ctx.key);
+  const client = readOauthClient(
+    ctx.db,
+    ctx.key,
+    OAUTH2_CONNECTOR_ID,
+    OAUTH2_DISPLAY_NAME,
+  );
   if (client === null) {
     throw new Error(CLIENT_MISSING_MESSAGE);
   }

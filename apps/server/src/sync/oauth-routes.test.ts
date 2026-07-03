@@ -104,7 +104,7 @@ const requestStart = (
 ): Promise<Response> =>
   Promise.resolve(
     app.fetch(
-      new Request("http://localhost/api/oauth/google/start", {
+      new Request("http://localhost/api/oauth/google-calendar/start", {
         headers: cookie === undefined ? {} : { cookie },
       }),
     ),
@@ -117,9 +117,12 @@ const requestCallback = (
 ): Promise<Response> =>
   Promise.resolve(
     app.fetch(
-      new Request(`http://localhost/api/oauth/google/callback?${params}`, {
-        headers: cookie === undefined ? {} : { cookie },
-      }),
+      new Request(
+        `http://localhost/api/oauth/google-calendar/callback?${params}`,
+        {
+          headers: cookie === undefined ? {} : { cookie },
+        },
+      ),
     ),
   );
 
@@ -143,8 +146,8 @@ const readyApp = async (
   const cookie = await completeSetup(testApp.app);
   const saved = await trpcMutation(
     testApp.app,
-    "connections.google.saveClient",
-    clientInput,
+    "connections.saveOauthClient",
+    { connectorId: "google-calendar", ...clientInput },
     { cookie },
   );
   expect(saved.status).toBe(200);
@@ -165,7 +168,7 @@ describe("GET /api/oauth/google/start", () => {
     expect(location.pathname).toBe("/o/oauth2/v2/auth");
     expect(location.searchParams.get("client_id")).toBe(clientInput.clientId);
     expect(location.searchParams.get("redirect_uri")).toBe(
-      "https://halero.example.com/api/oauth/google/callback",
+      "https://halero.example.com/api/oauth/google-calendar/callback",
     );
     expect(location.searchParams.get("response_type")).toBe("code");
     expect(location.searchParams.get("scope")).toBe(
@@ -237,7 +240,9 @@ describe("GET /api/oauth/google/callback", () => {
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/settings?connected=1");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?connected=1",
+    );
 
     const row = onlyConnection(database);
     expect(row.connector_id).toBe("google-calendar");
@@ -281,7 +286,9 @@ describe("GET /api/oauth/google/callback", () => {
     );
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/settings?error=state_invalid");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?error=state_invalid&connector=google-calendar",
+    );
     expect(readConnections(database).length).toBe(0);
     expect(google.calls.length).toBe(0);
   });
@@ -301,7 +308,9 @@ describe("GET /api/oauth/google/callback", () => {
       cookie,
     );
 
-    expect(res.headers.get("location")).toBe("/settings?error=state_invalid");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?error=state_invalid&connector=google-calendar",
+    );
     expect(readConnections(database).length).toBe(0);
   });
 
@@ -320,7 +329,9 @@ describe("GET /api/oauth/google/callback", () => {
       cookie,
     );
 
-    expect(res.headers.get("location")).toBe("/settings?error=state_invalid");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?error=state_invalid&connector=google-calendar",
+    );
     expect(readConnections(database).length).toBe(1);
     expect(google.calls.length).toBe(1);
   });
@@ -346,7 +357,7 @@ describe("GET /api/oauth/google/callback", () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe(
-      "/settings?error=token_exchange_failed",
+      "/settings/integrations?error=token_exchange_failed&connector=google-calendar",
     );
     expect(readConnections(database).length).toBe(0);
   });
@@ -361,7 +372,7 @@ describe("GET /api/oauth/google/callback", () => {
     // Simulate an encryption key change between /start and the callback:
     // the stored client secret blob no longer decrypts.
     database.sqlite.run(
-      "UPDATE settings SET value = ? WHERE key = 'google_oauth_client_secret_enc'",
+      "UPDATE settings SET value = ? WHERE key = 'connection.google-calendar.oauthClientSecretEnc'",
       [Buffer.alloc(64, 7).toString("base64")],
     );
 
@@ -374,7 +385,7 @@ describe("GET /api/oauth/google/callback", () => {
     // A readable settings banner, never a generic 500.
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe(
-      "/settings?error=client_unreadable",
+      "/settings/integrations?error=client_unreadable&connector=google-calendar",
     );
     expect(readConnections(database).length).toBe(0);
     expect(google.calls.length).toBe(0);
@@ -395,7 +406,7 @@ describe("GET /api/oauth/google/callback", () => {
     );
 
     expect(res.headers.get("location")).toBe(
-      "/settings?error=no_refresh_token",
+      "/settings/integrations?error=no_refresh_token&connector=google-calendar",
     );
     expect(readConnections(database).length).toBe(0);
   });
@@ -405,7 +416,9 @@ describe("GET /api/oauth/google/callback", () => {
 
     const res = await requestCallback(app, "error=access_denied", cookie);
 
-    expect(res.headers.get("location")).toBe("/settings?error=google_denied");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?error=provider_denied&connector=google-calendar",
+    );
     expect(readConnections(database).length).toBe(0);
   });
 
@@ -467,7 +480,9 @@ describe("GET /api/oauth/google/callback", () => {
       `code=code-2&state=${stateFromLocation(secondStart)}`,
       cookie,
     );
-    expect(res.headers.get("location")).toBe("/settings?connected=1");
+    expect(res.headers.get("location")).toBe(
+      "/settings/integrations?connected=1",
+    );
 
     const secondRow = onlyConnection(database);
     expect(secondRow.id).toBe(firstRow.id);

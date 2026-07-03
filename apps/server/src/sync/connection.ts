@@ -1,8 +1,9 @@
 import { googleCalendarConnector } from "@halero/connector-google-calendar";
 import { asRecord, stringOrNull } from "@halero/connector-sdk";
 import { encryptCredentials, ulid } from "@halero/core";
-import { connections, type HaleroDatabase } from "@halero/db";
+import { connections, type HaleroDatabase, syncCursors } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { encryptApiKeyCredential } from "./api-key-credential";
 
 type Db = HaleroDatabase["db"];
 
@@ -24,12 +25,34 @@ export interface StoredOauthTokens {
   readonly accessTokenExpiresAt: number;
 }
 
-export const getGoogleConnection = (db: Db): ConnectionRow | null =>
+export const getConnectionByConnectorId = (
+  db: Db,
+  connectorId: string,
+): ConnectionRow | null =>
   db
     .select()
     .from(connections)
-    .where(eq(connections.connectorId, GOOGLE_CONNECTOR_ID))
+    .where(eq(connections.connectorId, connectorId))
     .get() ?? null;
+
+export const getGoogleConnection = (db: Db): ConnectionRow | null =>
+  getConnectionByConnectorId(db, GOOGLE_CONNECTOR_ID);
+
+/**
+ * Removes a connection and the cursors keyed to it, and (because the
+ * credentials live on the row) its stored secret. Already-synced entities
+ * and external_refs stay: external_refs key off connector_id + account_key,
+ * so reconnecting the same account reuses its identity.
+ */
+export const deleteConnection = (db: Db, connectorId: string): boolean => {
+  const existing = getConnectionByConnectorId(db, connectorId);
+  if (existing === null) {
+    return false;
+  }
+  db.delete(syncCursors).where(eq(syncCursors.connectionId, existing.id)).run();
+  db.delete(connections).where(eq(connections.id, existing.id)).run();
+  return true;
+};
 
 export const parseConnectionConfig = (
   row: ConnectionRow,
@@ -60,27 +83,23 @@ export interface UpsertConnectionTarget {
  * account (`accountKey`, e.g. the id_token `sub`), so existing external
  * refs survive.
  */
-export const upsertConnection = (
+/**
+ * Writes (or reconnects, in place) a connection row with a ready-made
+ * config + encrypted credentials blob. A fresh connect wipes the failure
+ * history: the scheduler's status filter never reschedules reauth_required
+ * rows, so this reset (with next_sync_at = now) is what makes the
+ * connection due again. Identity stays keyed to the provider account, so
+ * existing external refs survive a reconnect.
+ */
+const writeConnection = (
   db: Db,
-  key: Uint8Array,
   now: number,
   target: UpsertConnectionTarget,
-  identity: ConnectionIdentity,
-  tokens: StoredOauthTokens,
+  config: string,
+  credentialsEnc: Buffer,
 ): void => {
-  const config = JSON.stringify(identity);
-  const credentialsEnc = Buffer.from(
-    encryptCredentials(key, JSON.stringify(tokens)),
-  );
-  const existing = db
-    .select()
-    .from(connections)
-    .where(eq(connections.connectorId, target.connectorId))
-    .get();
-  if (existing !== undefined) {
-    // A fresh sign-in wipes the failure history: the scheduler's status
-    // filter never reschedules reauth_required rows, so this reset (with
-    // next_sync_at = now) is what makes the connection due again.
+  const existing = getConnectionByConnectorId(db, target.connectorId);
+  if (existing !== null) {
     db.update(connections)
       .set({
         config,
@@ -107,3 +126,41 @@ export const upsertConnection = (
     })
     .run();
 };
+
+/** Connects (or reconnects) an OAuth2 account with refreshable tokens. */
+export const upsertConnection = (
+  db: Db,
+  key: Uint8Array,
+  now: number,
+  target: UpsertConnectionTarget,
+  identity: ConnectionIdentity,
+  tokens: StoredOauthTokens,
+): void =>
+  writeConnection(
+    db,
+    now,
+    target,
+    JSON.stringify(identity),
+    Buffer.from(encryptCredentials(key, JSON.stringify(tokens))),
+  );
+
+/**
+ * Connects (or reconnects) a static-token (apiKey) account. There is no
+ * OIDC identity, so the account label doubles as the account key; that is
+ * enough for a single-connection-per-connector world.
+ */
+export const upsertApiKeyConnection = (
+  db: Db,
+  key: Uint8Array,
+  now: number,
+  target: UpsertConnectionTarget,
+  accountLabel: string,
+  token: string,
+): void =>
+  writeConnection(
+    db,
+    now,
+    target,
+    JSON.stringify({ email: accountLabel, accountKey: accountLabel }),
+    Buffer.from(encryptApiKeyCredential(key, token)),
+  );

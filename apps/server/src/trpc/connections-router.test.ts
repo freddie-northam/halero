@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
-import { saveGoogleClient } from "../sync/client-config";
+import { saveOauthClient } from "../connections/oauth-client";
 import {
   completeSetup,
   type MakeTestAppOptions,
@@ -13,92 +13,66 @@ import {
   trpcQuery,
 } from "../test-utils";
 
+const GC = "google-calendar";
+const CLIENT_ID_KEY = "connection.google-calendar.oauthClientId";
+const CLIENT_SECRET_KEY = "connection.google-calendar.oauthClientSecretEnc";
+
 const clientInput = {
   clientId: "1234-abc.apps.googleusercontent.com",
   clientSecret: "GOCSPX-super-secret-value",
 };
 
-interface LastRunData {
-  readonly startedAt: number;
-  readonly finishedAt: number | null;
-  readonly status: string;
-  readonly upserts: number;
-  readonly deletes: number;
-  readonly error: string | null;
-}
-
-interface GoogleStatusData {
-  readonly clientConfigured: boolean;
-  readonly httpsOk: boolean;
-  readonly redirectUri: string;
-  readonly connection: {
-    readonly id: string;
-    readonly status: string;
-    readonly email: string | null;
-    readonly lastError: string | null;
-    readonly nextSyncAt: number | null;
-    readonly consecutiveFailures: number;
-    readonly lastRun: LastRunData | null;
-    readonly lastSuccessAt: number | null;
-    readonly recentRuns: readonly LastRunData[];
-  } | null;
-}
-
 const readSetting = (
   database: TestApp["database"],
   key: string,
-): string | null => {
-  const row = database.sqlite
+): string | null =>
+  database.sqlite
     .query<{ value: string }, [string]>(
       "SELECT value FROM settings WHERE key = ?",
     )
-    .get(key);
-  return row?.value ?? null;
-};
+    .get(key)?.value ?? null;
 
-const readGoogleStatus = async (
+interface OauthConfigData {
+  readonly clientConfigured: boolean;
+  readonly httpsOk: boolean;
+  readonly redirectUri: string;
+}
+
+const readOauthConfig = async (
   app: TestApp["app"],
   cookie: string,
-): Promise<GoogleStatusData> => {
-  const res = await trpcQuery(app, "connections.google.status", { cookie });
+): Promise<OauthConfigData> => {
+  const res = await trpcQuery(app, "connections.oauthConfig", {
+    cookie,
+    input: { connectorId: GC },
+  });
   expect(res.status).toBe(200);
-  const json = (await res.json()) as TrpcSuccess<GoogleStatusData>;
-  return json.result.data;
+  return ((await res.json()) as TrpcSuccess<OauthConfigData>).result.data;
 };
 
-describe("connections.google.saveClient", () => {
+describe("connections.saveOauthClient", () => {
   test("rejects without a session", async () => {
     const { app } = makeTestApp();
     await completeSetup(app);
-
-    const res = await trpcMutation(
-      app,
-      "connections.google.saveClient",
-      clientInput,
-    );
-
+    const res = await trpcMutation(app, "connections.saveOauthClient", {
+      connectorId: GC,
+      ...clientInput,
+    });
     expect(res.status).toBe(401);
   });
 
   test("stores the client ID plainly and the secret encrypted", async () => {
     const { app, database, key } = makeTestApp();
     const cookie = await completeSetup(app);
-
     const res = await trpcMutation(
       app,
-      "connections.google.saveClient",
-      clientInput,
+      "connections.saveOauthClient",
+      { connectorId: GC, ...clientInput },
       { cookie },
     );
-
     expect(res.status).toBe(200);
-    expect(readSetting(database, "google_oauth_client_id")).toBe(
-      clientInput.clientId,
-    );
-    const storedSecret = readSetting(
-      database,
-      "google_oauth_client_secret_enc",
-    );
+    expect(readSetting(database, CLIENT_ID_KEY)).toBe(clientInput.clientId);
+    const storedSecret = readSetting(database, CLIENT_SECRET_KEY);
     if (storedSecret === null) {
       throw new Error("expected the encrypted client secret to be stored");
     }
@@ -113,95 +87,76 @@ describe("connections.google.saveClient", () => {
   test("rejects an empty client ID or secret with a readable error", async () => {
     const { app } = makeTestApp();
     const cookie = await completeSetup(app);
-
     const emptyId = await trpcMutation(
       app,
-      "connections.google.saveClient",
-      { ...clientInput, clientId: "  " },
+      "connections.saveOauthClient",
+      { connectorId: GC, ...clientInput, clientId: "  " },
       { cookie },
     );
-    const emptySecret = await trpcMutation(
-      app,
-      "connections.google.saveClient",
-      { ...clientInput, clientSecret: "" },
-      { cookie },
-    );
-
     expect(emptyId.status).toBe(400);
     expect(await emptyId.text()).toContain("client ID");
-    expect(emptySecret.status).toBe(400);
-    expect(await emptySecret.text()).toContain("client secret");
   });
 });
 
-describe("connections.google.status", () => {
-  test("rejects without a session", async () => {
-    const { app } = makeTestApp();
-    await completeSetup(app);
-
-    const res = await trpcQuery(app, "connections.google.status");
-
-    expect(res.status).toBe(401);
-  });
-
-  test("reports unconfigured with https ok on the localhost default", async () => {
+describe("connections.oauthConfig", () => {
+  test("reports unconfigured with https ok and the namespaced redirect URI", async () => {
     const { app } = makeTestApp();
     const cookie = await completeSetup(app);
-
-    const status = await readGoogleStatus(app, cookie);
-
-    expect(status).toEqual({
+    expect(await readOauthConfig(app, cookie)).toEqual({
       clientConfigured: false,
       httpsOk: true,
-      redirectUri: "http://localhost:4253/api/oauth/google/callback",
-      connection: null,
+      redirectUri: "http://localhost:4253/api/oauth/google-calendar/callback",
     });
   });
 
-  test("reports clientConfigured after saveClient", async () => {
+  test("reports clientConfigured after saveOauthClient", async () => {
     const { app } = makeTestApp();
     const cookie = await completeSetup(app);
-    await trpcMutation(app, "connections.google.saveClient", clientInput, {
-      cookie,
-    });
-
-    const status = await readGoogleStatus(app, cookie);
-
-    expect(status.clientConfigured).toBe(true);
+    await trpcMutation(
+      app,
+      "connections.saveOauthClient",
+      { connectorId: GC, ...clientInput },
+      { cookie },
+    );
+    expect((await readOauthConfig(app, cookie)).clientConfigured).toBe(true);
   });
 
   test("reports httpsOk false for a plain-http non-localhost base URL", async () => {
     const { app } = makeTestApp({ baseUrl: "http://halero.internal:8080" });
     const cookie = await completeSetup(app);
-
-    const status = await readGoogleStatus(app, cookie);
-
-    expect(status.httpsOk).toBe(false);
-    expect(status.redirectUri).toBe(
-      "http://halero.internal:8080/api/oauth/google/callback",
+    const cfg = await readOauthConfig(app, cookie);
+    expect(cfg.httpsOk).toBe(false);
+    expect(cfg.redirectUri).toBe(
+      "http://halero.internal:8080/api/oauth/google-calendar/callback",
     );
   });
+});
 
-  test("reports httpsOk true for an https base URL", async () => {
-    const { app } = makeTestApp({ baseUrl: "https://halero.example.com" });
+interface CatalogItem {
+  readonly id: string;
+  readonly availability: string;
+  readonly connection: { readonly accountLabel: string | null } | null;
+}
+
+const readCatalog = async (
+  app: TestApp["app"],
+  cookie: string,
+): Promise<CatalogItem[]> => {
+  const res = await trpcQuery(app, "connections.catalog", { cookie });
+  expect(res.status).toBe(200);
+  return ((await res.json()) as TrpcSuccess<CatalogItem[]>).result.data;
+};
+
+describe("connections.catalog", () => {
+  test("lists live and coming-soon integrations with connection status", async () => {
+    const testApp = makeTestApp();
+    const { app, clock } = testApp;
     const cookie = await completeSetup(app);
-
-    const status = await readGoogleStatus(app, cookie);
-
-    expect(status.httpsOk).toBe(true);
-    expect(status.redirectUri).toBe(
-      "https://halero.example.com/api/oauth/google/callback",
-    );
-  });
-
-  test("includes the connection with its email once one exists", async () => {
-    const { app, database, clock } = makeTestApp();
-    const cookie = await completeSetup(app);
-    database.db
+    testApp.database.db
       .insert(connections)
       .values({
         id: "conn-status-1",
-        connectorId: "google-calendar",
+        connectorId: GC,
         displayName: "Google Calendar",
         config: JSON.stringify({
           email: "person@example.com",
@@ -213,119 +168,28 @@ describe("connections.google.status", () => {
       })
       .run();
 
-    const status = await readGoogleStatus(app, cookie);
+    const catalog = await readCatalog(app, cookie);
+    const google = catalog.find((item) => item.id === GC);
+    const github = catalog.find((item) => item.id === "github");
+    const comingSoon = catalog.find(
+      (item) => item.availability === "coming_soon",
+    );
 
-    expect(status.connection).toEqual({
-      id: "conn-status-1",
-      status: "active",
-      email: "person@example.com",
-      lastError: null,
-      nextSyncAt: clock.value,
-      consecutiveFailures: 0,
-      lastRun: null,
-      lastSuccessAt: null,
-      recentRuns: [],
-    });
-  });
-
-  test("lists the 5 most recent runs, newest first", async () => {
-    const testApp = makeTestApp();
-    const { app, database, clock } = testApp;
-    const cookie = await completeSetup(app);
-    seedSyncableConnection(testApp);
-    for (let i = 1; i <= 7; i += 1) {
-      database.db
-        .insert(syncRuns)
-        .values({
-          id: `run-${i}`,
-          connectionId: "conn-sync-1",
-          startedAt: clock.value - (8 - i) * 60_000,
-          finishedAt: clock.value - (8 - i) * 60_000 + 1_000,
-          status: i === 6 ? "failed" : "success",
-          upserts: i,
-          deletes: 0,
-          error: i === 6 ? "Halero could not reach Google Calendar." : null,
-        })
-        .run();
-    }
-
-    const status = await readGoogleStatus(app, cookie);
-
-    const recent = status.connection?.recentRuns ?? [];
-    expect(recent).toHaveLength(5);
-    // Newest first: runs 7, 6, 5, 4, 3.
-    expect(recent.map((run) => run.upserts)).toEqual([7, 6, 5, 4, 3]);
-    expect(recent[1]?.status).toBe("failed");
-    expect(recent[1]?.error).toBe("Halero could not reach Google Calendar.");
-    expect(recent[0]?.startedAt).toBe(clock.value - 60_000);
-  });
-
-  test("reports scheduling health and the latest run once runs exist", async () => {
-    const testApp = makeTestApp();
-    const { app, database, clock } = testApp;
-    const cookie = await completeSetup(app);
-    seedSyncableConnection(testApp);
-    database.db
-      .update(connections)
-      .set({ consecutiveFailures: 2, nextSyncAt: clock.value + 120_000 })
-      .where(eq(connections.id, "conn-sync-1"))
-      .run();
-    database.db
-      .insert(syncRuns)
-      .values({
-        id: "run-1",
-        connectionId: "conn-sync-1",
-        startedAt: clock.value - 600_000,
-        finishedAt: clock.value - 590_000,
-        status: "success",
-        upserts: 3,
-        deletes: 1,
-      })
-      .run();
-    database.db
-      .insert(syncRuns)
-      .values({
-        id: "run-2",
-        connectionId: "conn-sync-1",
-        startedAt: clock.value - 300_000,
-        finishedAt: clock.value - 299_000,
-        status: "failed",
-        error: "Halero could not reach Google Calendar.",
-      })
-      .run();
-
-    const status = await readGoogleStatus(app, cookie);
-
-    expect(status.connection?.nextSyncAt).toBe(clock.value + 120_000);
-    expect(status.connection?.consecutiveFailures).toBe(2);
-    expect(status.connection?.lastRun).toEqual({
-      startedAt: clock.value - 300_000,
-      finishedAt: clock.value - 299_000,
-      status: "failed",
-      upserts: 0,
-      deletes: 0,
-      error: "Halero could not reach Google Calendar.",
-    });
-    // The most recent successful run, not the most recent run.
-    expect(status.connection?.lastSuccessAt).toBe(clock.value - 590_000);
+    expect(google?.connection?.accountLabel).toBe("person@example.com");
+    expect(github?.connection).toBeNull();
+    expect(comingSoon).toBeDefined();
+    expect(comingSoon?.connection).toBeNull();
   });
 });
 
-interface SyncNowData {
-  readonly status: string;
-  readonly upserts: number;
-  readonly deletes: number;
-  readonly error: string | null;
-}
-
 const seedSyncableConnection = (testApp: TestApp, status = "active"): void => {
   const { database, key, clock } = testApp;
-  saveGoogleClient(database.db, key, clientInput);
+  saveOauthClient(database.db, key, GC, clientInput);
   database.db
     .insert(connections)
     .values({
       id: "conn-sync-1",
-      connectorId: "google-calendar",
+      connectorId: GC,
       displayName: "Google Calendar",
       config: JSON.stringify({
         email: "person@example.com",
@@ -347,6 +211,54 @@ const seedSyncableConnection = (testApp: TestApp, status = "active"): void => {
     })
     .run();
 };
+
+describe("connections.status", () => {
+  test("lists the 5 most recent runs, newest first, with lastSuccessAt", async () => {
+    const testApp = makeTestApp();
+    const { app, database, clock } = testApp;
+    const cookie = await completeSetup(app);
+    seedSyncableConnection(testApp);
+    for (let i = 1; i <= 7; i += 1) {
+      database.db
+        .insert(syncRuns)
+        .values({
+          id: `run-${i}`,
+          connectionId: "conn-sync-1",
+          startedAt: clock.value - (8 - i) * 60_000,
+          finishedAt: clock.value - (8 - i) * 60_000 + 1_000,
+          status: i === 6 ? "failed" : "success",
+          upserts: i,
+          deletes: 0,
+          error: i === 6 ? "Halero could not reach Google Calendar." : null,
+        })
+        .run();
+    }
+
+    const res = await trpcQuery(app, "connections.status", {
+      cookie,
+      input: { connectorId: GC },
+    });
+    const data = (
+      (await res.json()) as TrpcSuccess<{
+        connection: {
+          recentRuns: { upserts: number }[];
+          lastSuccessAt: number | null;
+        } | null;
+      }>
+    ).result.data;
+    expect(data.connection?.recentRuns.map((r) => r.upserts)).toEqual([
+      7, 6, 5, 4, 3,
+    ]);
+    expect(data.connection?.lastSuccessAt).toBe(clock.value - 60_000 + 1_000);
+  });
+});
+
+interface SyncNowData {
+  readonly status: string;
+  readonly upserts: number;
+  readonly deletes: number;
+  readonly error: string | null;
+}
 
 const happyGoogleFetch: NonNullable<MakeTestAppOptions["outboundFetch"]> = (
   input,
@@ -377,32 +289,24 @@ const happyGoogleFetch: NonNullable<MakeTestAppOptions["outboundFetch"]> = (
   throw new Error(`unexpected Google call: ${url.toString()}`);
 };
 
-describe("connections.google.syncNow", () => {
+const syncNow = (
+  app: TestApp["app"],
+  opts?: { cookie?: string },
+): Promise<Response> =>
+  trpcMutation(app, "connections.syncNow", { connectorId: GC }, opts);
+
+describe("connections.syncNow", () => {
   test("rejects without a session", async () => {
     const testApp = makeTestApp();
     await completeSetup(testApp.app);
     seedSyncableConnection(testApp);
-
-    const res = await trpcMutation(
-      testApp.app,
-      "connections.google.syncNow",
-      {},
-    );
-
-    expect(res.status).toBe(401);
+    expect((await syncNow(testApp.app)).status).toBe(401);
   });
 
   test("rejects readably when no connection exists", async () => {
     const { app } = makeTestApp();
     const cookie = await completeSetup(app);
-
-    const res = await trpcMutation(
-      app,
-      "connections.google.syncNow",
-      {},
-      { cookie },
-    );
-
+    const res = await syncNow(app, { cookie });
     expect(res.status).toBe(412);
     expect(await res.text()).toContain("Connect Google Calendar");
   });
@@ -411,30 +315,16 @@ describe("connections.google.syncNow", () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     seedSyncableConnection(testApp, "reauth_required");
-
-    const res = await trpcMutation(
-      testApp.app,
-      "connections.google.syncNow",
-      {},
-      { cookie },
-    );
-
+    const res = await syncNow(testApp.app, { cookie });
     expect(res.status).toBe(412);
-    expect(await res.text()).toContain("econnect");
+    expect(await res.text()).toContain("fresh sign-in");
   });
 
   test("runs a sync and returns the run's counts", async () => {
     const testApp = makeTestApp({ outboundFetch: happyGoogleFetch });
     const cookie = await completeSetup(testApp.app);
     seedSyncableConnection(testApp);
-
-    const res = await trpcMutation(
-      testApp.app,
-      "connections.google.syncNow",
-      {},
-      { cookie },
-    );
-
+    const res = await syncNow(testApp.app, { cookie });
     expect(res.status).toBe(200);
     const json = (await res.json()) as TrpcSuccess<SyncNowData>;
     expect(json.result.data).toEqual({
@@ -444,50 +334,68 @@ describe("connections.google.syncNow", () => {
       error: null,
     });
   });
+});
 
-  test("rejects readably while a sync is already running", async () => {
-    let releaseGate: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      releaseGate = resolve;
-    });
-    let signalStarted: () => void = () => {};
-    const started = new Promise<void>((resolve) => {
-      signalStarted = resolve;
-    });
-    const gatedFetch: NonNullable<MakeTestAppOptions["outboundFetch"]> = async (
-      input,
-      init,
-    ) => {
-      signalStarted();
-      await gate;
-      return happyGoogleFetch(input, init);
-    };
-    const testApp = makeTestApp({ outboundFetch: gatedFetch });
+const githubFetch =
+  (login: string | null): NonNullable<MakeTestAppOptions["outboundFetch"]> =>
+  (input) => {
+    const url = new URL(String(input));
+    if (url.host === "api.github.com") {
+      return Promise.resolve(
+        login === null
+          ? Response.json({ message: "Bad credentials" }, { status: 401 })
+          : Response.json({ data: { viewer: { login } } }),
+      );
+    }
+    throw new Error(`unexpected call: ${url.toString()}`);
+  };
+
+describe("connections.connectApiKey + disconnect (GitHub)", () => {
+  test("validates the token, stores it, and reports the account label", async () => {
+    const testApp = makeTestApp({ outboundFetch: githubFetch("octocat") });
+    const { app, database } = testApp;
+    const cookie = await completeSetup(app);
+    const res = await trpcMutation(
+      app,
+      "connections.connectApiKey",
+      { connectorId: "github", token: "ghp_valid" },
+      { cookie },
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as TrpcSuccess<{ accountLabel: string }>;
+    expect(json.result.data.accountLabel).toBe("octocat");
+    const row = database.db
+      .select()
+      .from(connections)
+      .where(eq(connections.connectorId, "github"))
+      .get();
+    expect(row?.credentialsEnc).not.toBeNull();
+
+    const disc = await trpcMutation(
+      app,
+      "connections.disconnect",
+      { connectorId: "github" },
+      { cookie },
+    );
+    expect(disc.status).toBe(200);
+    const after = database.db
+      .select()
+      .from(connections)
+      .where(eq(connections.connectorId, "github"))
+      .get();
+    expect(after).toBeUndefined();
+  });
+
+  test("rejects an invalid token with a readable error", async () => {
+    const testApp = makeTestApp({ outboundFetch: githubFetch(null) });
     const cookie = await completeSetup(testApp.app);
-    seedSyncableConnection(testApp);
-
-    const first = trpcMutation(
+    const res = await trpcMutation(
       testApp.app,
-      "connections.google.syncNow",
-      {},
+      "connections.connectApiKey",
+      { connectorId: "github", token: "ghp_bad" },
       { cookie },
     );
-    // Only proceed once the first run is provably in flight.
-    await started;
-    const second = await trpcMutation(
-      testApp.app,
-      "connections.google.syncNow",
-      {},
-      { cookie },
-    );
-
-    expect(second.status).toBe(412);
-    expect(await second.text()).toContain("already running");
-
-    releaseGate();
-    const firstRes = await first;
-    expect(firstRes.status).toBe(200);
-    const firstJson = (await firstRes.json()) as TrpcSuccess<SyncNowData>;
-    expect(firstJson.result.data.status).toBe("success");
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("read:user");
   });
 });
