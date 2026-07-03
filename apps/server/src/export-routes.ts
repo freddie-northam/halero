@@ -16,8 +16,8 @@ const SIGN_IN_MESSAGE = "You need to sign in before exporting your data.";
 
 /**
  * The portability contract: these tables, one JSON line per row, IDs
- * (ULIDs) untouched. sessions is deliberately absent; live login tokens
- * must never leave the instance.
+ * (ULIDs) untouched. sessions and api_tokens are deliberately absent;
+ * live credentials (and their hashes) must never leave the instance.
  */
 const EXPORTED_TABLES = [
   "entities",

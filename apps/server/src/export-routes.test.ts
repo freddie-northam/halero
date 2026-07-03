@@ -13,6 +13,7 @@ import {
   syncCursors,
   syncRuns,
 } from "@halero/db";
+import { createApiToken, mintApiTokenValue } from "./api-tokens";
 import { setSetting } from "./settings";
 import { saveGoogleClient } from "./sync/client-config";
 import { createOauthState } from "./sync/oauth-state";
@@ -174,6 +175,13 @@ describe("GET /api/export redaction", () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     seedFullDatabase(testApp);
+    const apiTokenValue = mintApiTokenValue();
+    createApiToken(
+      testApp.database.db,
+      "Raycast",
+      apiTokenValue,
+      testApp.clock.value,
+    );
     const readSetting = (settingKey: string): string =>
       testApp.database.sqlite
         .query<{ value: string }, [string]>(
@@ -187,6 +195,11 @@ describe("GET /api/export redaction", () => {
     // ever went missing, the not-contains assertion below would pass
     // vacuously against the "IMPOSSIBLE" fallback.
     expect(storedSecretEnc).toMatch(/^[A-Za-z0-9+/]{30,}={0,2}$/);
+    const apiTokenHash =
+      testApp.database.sqlite
+        .query<{ token_hash: string }, []>("SELECT token_hash FROM api_tokens")
+        .get()?.token_hash ?? "IMPOSSIBLE";
+    expect(apiTokenHash).toMatch(/^[0-9a-f]{64}$/);
 
     const res = await fetchExport(testApp.app, cookie);
     const body = await res.text();
@@ -203,10 +216,14 @@ describe("GET /api/export redaction", () => {
     const sessionToken = cookie.replace("halero_session=", "");
     expect(sessionToken.length).toBeGreaterThan(10);
     expect(body).not.toContain(sessionToken);
+    // API tokens: not the plaintext, not even the stored hash.
+    expect(body).not.toContain(apiTokenValue);
+    expect(body).not.toContain(apiTokenHash);
 
     const lines = parseLines(body);
-    // The sessions table is excluded entirely.
+    // The sessions and api_tokens tables are excluded entirely.
     expect(lines.some((line) => line.table === "sessions")).toBe(false);
+    expect(lines.some((line) => line.table === "api_tokens")).toBe(false);
     // connections rows survive with credentials nulled.
     const connectionRows = lines.filter((line) => line.table === "connections");
     expect(connectionRows).toHaveLength(1);
