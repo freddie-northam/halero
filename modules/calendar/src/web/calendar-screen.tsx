@@ -7,9 +7,11 @@
 import { Alert, AlertDescription, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type { ReactElement } from "react";
-import type { CalendarRange, CalendarToday } from "../contract";
+import { type ReactElement, useState } from "react";
+import type { AgendaEvent, CalendarRange } from "../contract";
+import type { CalendarApi } from "./api";
 import { CalendarHeader } from "./components/calendar-header";
+import { EventModal, type EventModalTarget } from "./components/event-modal";
 import {
   AGENDA_DAYS,
   type CalendarSearch,
@@ -23,12 +25,6 @@ import { readableError } from "./readable-error";
 import { AgendaView } from "./views/agenda-view";
 import { MonthView } from "./views/month-view";
 import { WeekView } from "./views/week-view";
-
-/** What the calendar page needs from the host: its own module queries. */
-export interface CalendarApi {
-  readonly today: () => Promise<CalendarToday>;
-  readonly range: (from: string, to: string) => Promise<CalendarRange>;
-}
 
 const rangeLabel = (view: CalendarView, anchor: string): string => {
   if (view === "month") {
@@ -64,12 +60,16 @@ const CalendarBody = ({
   today,
   range,
   onOpenDay,
+  onCreateOn,
+  onEditEvent,
 }: {
   readonly view: CalendarView;
   readonly anchor: string;
   readonly today: string;
   readonly range: CalendarRange;
   readonly onOpenDay: (date: string) => void;
+  readonly onCreateOn: (date: string) => void;
+  readonly onEditEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   if (view === "agenda") {
     return <AgendaView days={range.days} timeZone={range.homeTimezone} />;
@@ -83,6 +83,8 @@ const CalendarBody = ({
         eventsByDate={eventsByDate}
         timeZone={range.homeTimezone}
         onOpenDay={onOpenDay}
+        onCreateOn={onCreateOn}
+        onEditEvent={onEditEvent}
       />
     ) : (
       <WeekView
@@ -163,6 +165,7 @@ export const createCalendarScreen = (api: CalendarApi) => {
     const { view, date } = normalizeCalendarSearch(rawSearch);
     const navigate = useNavigate() as unknown as CalendarNavigate;
     const { today, anchor, range, error } = useCalendarData(api, view, date);
+    const [target, setTarget] = useState<EventModalTarget | null>(null);
 
     const setSearch = (next: CalendarSearch): void => {
       void navigate({
@@ -170,6 +173,10 @@ export const createCalendarScreen = (api: CalendarApi) => {
         search: { view: next.view, date: next.date },
       });
     };
+    const onCreateOn = (day: string): void =>
+      setTarget({ mode: "create", date: day });
+    const onEditEvent = (event: AgendaEvent): void =>
+      setTarget({ mode: "edit", event });
 
     const body = (): ReactElement => {
       if (error !== null) {
@@ -189,6 +196,8 @@ export const createCalendarScreen = (api: CalendarApi) => {
           today={today}
           range={range}
           onOpenDay={(day) => setSearch({ view: "agenda", date: day })}
+          onCreateOn={onCreateOn}
+          onEditEvent={onEditEvent}
         />
       );
     };
@@ -211,8 +220,29 @@ export const createCalendarScreen = (api: CalendarApi) => {
             }
           }}
           navDisabled={anchor === undefined}
+          onNewEvent={() => {
+            if (anchor !== undefined) {
+              onCreateOn(anchor);
+            }
+          }}
         />
         <div className="mt-4">{body()}</div>
+        {range === undefined ? null : (
+          <EventModal
+            target={target}
+            timeZone={range.homeTimezone}
+            onClose={() => setTarget(null)}
+            onCreate={(input) =>
+              api.createEvent(input).then(() => setTarget(null))
+            }
+            onUpdate={(input) =>
+              api.updateEvent(input).then(() => setTarget(null))
+            }
+            onDelete={(entityId) =>
+              api.deleteEvent(entityId).then(() => setTarget(null))
+            }
+          />
+        )}
       </div>
     );
   };

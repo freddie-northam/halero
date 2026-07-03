@@ -2,7 +2,7 @@
 // dates; which events land on which day comes entirely from the server's
 // home-timezone range grouping.
 
-import { cn } from "@halero/ui";
+import { cn, Plus } from "@halero/ui";
 import type { ReactElement } from "react";
 import type { AgendaEvent } from "../../contract";
 import { EventChip } from "../components/event-chip";
@@ -18,10 +18,46 @@ export interface MonthViewProps {
   readonly timeZone: string;
   /** "+N more" hands off to that day's agenda. */
   readonly onOpenDay: (date: string) => void;
+  /** The per-cell "add event" affordance opens the create modal on that day. */
+  readonly onCreateOn: (date: string) => void;
+  /** A user (editable) event chip opens it in the edit modal. */
+  readonly onEditEvent: (event: AgendaEvent) => void;
 }
 
 /** Up to this many chips per cell before the "+N more" affordance. */
 const MAX_CHIPS = 3;
+
+const DayHeading = ({
+  date,
+  inMonth,
+  isToday,
+  onCreateOn,
+}: {
+  readonly date: string;
+  readonly inMonth: boolean;
+  readonly isToday: boolean;
+  readonly onCreateOn: (date: string) => void;
+}): ReactElement => (
+  <div className="flex items-center justify-between">
+    <span
+      className={cn(
+        "tnum px-1 text-xs",
+        inMonth ? "text-foreground" : "text-muted-foreground",
+        isToday && "font-semibold text-primary",
+      )}
+    >
+      {dayOfMonth(date)}
+    </span>
+    <button
+      type="button"
+      aria-label={`Add event on ${date}`}
+      onClick={() => onCreateOn(date)}
+      className="invisible flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:visible focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none group-hover:visible group-focus-within:visible"
+    >
+      <Plus className="size-3" aria-hidden="true" />
+    </button>
+  </div>
+);
 
 const DayCell = ({
   date,
@@ -30,6 +66,8 @@ const DayCell = ({
   events,
   timeZone,
   onOpenDay,
+  onCreateOn,
+  onEditEvent,
 }: {
   readonly date: string;
   readonly inMonth: boolean;
@@ -37,28 +75,32 @@ const DayCell = ({
   readonly events: readonly AgendaEvent[];
   readonly timeZone: string;
   readonly onOpenDay: (date: string) => void;
+  readonly onCreateOn: (date: string) => void;
+  readonly onEditEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const overflow = events.length - MAX_CHIPS;
   return (
     <div
       aria-current={isToday ? "date" : undefined}
       className={cn(
-        "flex min-h-24 min-w-0 flex-col gap-0.5 bg-background p-1",
+        "group flex min-h-24 min-w-0 flex-col gap-0.5 bg-background p-1",
         !inMonth && "bg-muted/40",
         isToday && "ring-1 ring-ring ring-inset",
       )}
     >
-      <span
-        className={cn(
-          "tnum px-1 text-xs",
-          inMonth ? "text-foreground" : "text-muted-foreground",
-          isToday && "font-semibold text-primary",
-        )}
-      >
-        {dayOfMonth(date)}
-      </span>
+      <DayHeading
+        date={date}
+        inMonth={inMonth}
+        isToday={isToday}
+        onCreateOn={onCreateOn}
+      />
       {events.slice(0, MAX_CHIPS).map((event) => (
-        <EventChip key={event.entityId} event={event} timeZone={timeZone} />
+        <EventChip
+          key={event.entityId}
+          event={event}
+          timeZone={timeZone}
+          onEdit={onEditEvent}
+        />
       ))}
       {overflow > 0 ? (
         <button
@@ -79,6 +121,8 @@ export const MonthView = ({
   eventsByDate,
   timeZone,
   onOpenDay,
+  onCreateOn,
+  onEditEvent,
 }: MonthViewProps): ReactElement => {
   const matrix = monthMatrix(anchor);
   const month = monthOf(anchor);
@@ -105,6 +149,8 @@ export const MonthView = ({
             events={eventsByDate.get(date) ?? []}
             timeZone={timeZone}
             onOpenDay={onOpenDay}
+            onCreateOn={onCreateOn}
+            onEditEvent={onEditEvent}
           />
         ))}
       </div>
