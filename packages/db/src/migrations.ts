@@ -22,6 +22,9 @@ import migration0006TasksBoard from "../migrations/0006_tasks_board.sql" with {
 import migration0007Notes from "../migrations/0007_notes.sql" with {
   type: "text",
 };
+import migration0008Activity from "../migrations/0008_activity.sql" with {
+  type: "text",
+};
 
 export interface Migration {
   readonly name: string;
@@ -39,4 +42,5 @@ export const coreMigrations: readonly Migration[] = [
   { name: "0005_api_tokens", sql: migration0005ApiTokens },
   { name: "0006_tasks_board", sql: migration0006TasksBoard },
   { name: "0007_notes", sql: migration0007Notes },
+  { name: "0008_activity", sql: migration0008Activity },
 ];
