@@ -11,8 +11,10 @@ import { createAppRouter } from "./router";
 
 const client = createTrpcClient();
 const api = createHaleroApi(client);
+// Created before the registry runs: the registry hands it to module api
+// wrappers so their mutations can invalidate module queries.
 const queryClient = new QueryClient();
-const router = createAppRouter(api, buildWebModules(client, api));
+const router = createAppRouter(api, buildWebModules(client, api, queryClient));
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

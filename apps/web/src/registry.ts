@@ -14,9 +14,16 @@ import type {
   WebModule,
 } from "@halero/module-sdk/web";
 import {
+  createTasksTodaySection,
+  createTasksWebModule,
+  type TasksApi,
+  withTasksInvalidation,
+} from "@halero/module-tasks/web";
+import {
   createTodayWebModule,
   type TodaySection,
 } from "@halero/module-today/web";
+import type { QueryClient } from "@tanstack/react-query";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 
@@ -34,23 +41,52 @@ const coreNav: readonly NavContribution[] = [
  */
 export const buildTodaySections = (
   calendarApi: CalendarApi,
+  tasksApi: TasksApi,
 ): readonly TodaySection[] => [
   {
     id: "calendar.agenda",
     order: 10,
     component: createTodayAgendaSection(calendarApi),
   },
+  {
+    id: "tasks.dueToday",
+    order: 20,
+    component: createTasksTodaySection(tasksApi),
+  },
 ];
+
+/**
+ * The tasks seam: the module's procedures off the tRPC client, wrapped
+ * with the module's own invalidation helper so every mutation refreshes
+ * the tasks queries through the host-held QueryClient. The query keys
+ * stay inside the module; core only holds the client.
+ */
+export const buildTasksApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): TasksApi =>
+  withTasksInvalidation(
+    {
+      list: (filter) => client.modules.tasks.list.query({ filter }),
+      today: () => client.modules.tasks.today.query(),
+      create: (input) => client.modules.tasks.create.mutate(input),
+      toggle: (entityId) => client.modules.tasks.toggle.mutate({ entityId }),
+      delete: (entityId) => client.modules.tasks.delete.mutate({ entityId }),
+    },
+    queryClient,
+  );
 
 /** The web modules this build ships with, wired to the server clients. */
 export const buildWebModules = (
   client: TrpcClient,
   api: HaleroApi,
+  queryClient: QueryClient,
 ): readonly WebModule[] => {
   const calendarApi: CalendarApi = {
     today: () => client.modules.calendar.today.query(),
     range: (from, to) => client.modules.calendar.range.query({ from, to }),
   };
+  const tasksApi = buildTasksApi(client, queryClient);
   return [
     createTodayWebModule({
       api: {
@@ -61,9 +97,10 @@ export const buildWebModules = (
         googleConnectionStatus: async () =>
           (await api.googleStatus()).connection?.status ?? null,
       },
-      sections: buildTodaySections(calendarApi),
+      sections: buildTodaySections(calendarApi, tasksApi),
     }),
     createCalendarWebModule(calendarApi),
+    createTasksWebModule(tasksApi),
   ];
 };
 

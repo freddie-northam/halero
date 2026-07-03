@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import type { CalendarApi } from "@halero/module-calendar/web";
+import type { Task, TasksApi } from "@halero/module-tasks/web";
 import {
   createTodayWebModule,
   type TodayApi,
@@ -13,6 +14,7 @@ import {
   render,
   within,
 } from "@testing-library/react";
+import { act } from "react";
 import type { GoogleStatus, HaleroApi } from "./lib/api";
 import { ApiProvider } from "./lib/api-context";
 import type { TrpcClient } from "./lib/trpc";
@@ -43,8 +45,18 @@ const standup = {
   recurring: false,
 };
 
+const dueTask: Task = {
+  entityId: "t-1",
+  title: "Pay invoices",
+  status: "open",
+  dueDate: TODAY,
+  notes: null,
+  completedAt: null,
+};
+
 // The module registry wires its seams straight from the tRPC client, so
-// the wiring test stubs the two calendar procedures the page reaches.
+// the wiring test stubs the calendar and tasks procedures the home
+// page's sections reach.
 const stubClient = {
   modules: {
     calendar: {
@@ -58,6 +70,20 @@ const stubClient = {
             days: from === TODAY ? [{ date: TODAY, events: [standup] }] : [],
           }),
       },
+    },
+    tasks: {
+      list: { query: () => Promise.resolve({ tasks: [dueTask] }) },
+      today: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: HOME_TZ,
+            today: TODAY,
+            tasks: [dueTask],
+          }),
+      },
+      create: { mutate: () => Promise.reject(new Error("not under test")) },
+      toggle: { mutate: () => Promise.reject(new Error("not under test")) },
+      delete: { mutate: () => Promise.reject(new Error("not under test")) },
     },
   },
 } as unknown as TrpcClient;
@@ -90,19 +116,28 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
 
 const renderApp = async (path: string): Promise<RenderResult> => {
   const api = stubApi();
+  // The same QueryClient goes to the registry (for invalidation wiring)
+  // and the provider, exactly as main.tsx wires the real app.
+  const queryClient = new QueryClient();
   const router = createAppRouter(
     api,
-    buildWebModules(stubClient, api),
+    buildWebModules(stubClient, api, queryClient),
     createMemoryHistory({ initialEntries: [path] }),
   );
   await router.load();
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
+  const view = render(
+    <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
         <RouterProvider router={router} />
       </ApiProvider>
     </QueryClientProvider>,
   );
+  // Settle the sections' stubbed query chains inside act, so late
+  // mounts (the due-today checkboxes) never land between act windows.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  return view;
 };
 
 test("the index route serves the Today page with the agenda from the stub", async () => {
@@ -112,8 +147,10 @@ test("the index route serves the Today page with the agenda from the stub", asyn
     await view.findByText(/Good (morning|afternoon|evening)/),
   ).toBeTruthy();
   expect(await view.findByText("Wednesday, 2 July 2025")).toBeTruthy();
-  // The calendar section's rows come through the registry-wired seam.
+  // The calendar and tasks sections' rows come through the
+  // registry-wired seams.
   expect(await view.findByText("Standup")).toBeTruthy();
+  expect(await view.findByText("Pay invoices")).toBeTruthy();
   expect(view.queryByText("Nothing here yet.")).toBeNull();
 });
 
@@ -139,7 +176,16 @@ test("Today goes inactive on /calendar: '/' must exact-match, not prefix-match",
   expect(calendar.getAttribute("aria-current")).toBe("page");
 });
 
-test("a second registry section renders after the agenda in order", async () => {
+test("the registry renders the agenda (10) before Due today (20)", async () => {
+  const view = await renderApp("/");
+
+  const agendaRow = await view.findByText("Standup");
+  const dueRow = await view.findByText("Pay invoices");
+  // DOCUMENT_POSITION_FOLLOWING: order 10 (agenda) precedes order 20.
+  expect(agendaRow.compareDocumentPosition(dueRow) & 4).toBe(4);
+});
+
+test("an interleaved registry section renders strictly by order", async () => {
   const calendarApi: CalendarApi = {
     today: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
     range: () =>
@@ -148,13 +194,25 @@ test("a second registry section renders after the agenda in order", async () => 
         days: [{ date: TODAY, events: [standup] }],
       }),
   };
+  const tasksApi: TasksApi = {
+    list: () => Promise.resolve({ tasks: [] }),
+    today: () =>
+      Promise.resolve({
+        homeTimezone: HOME_TZ,
+        today: TODAY,
+        tasks: [dueTask],
+      }),
+    create: () => Promise.reject(new Error("not under test")),
+    toggle: () => Promise.reject(new Error("not under test")),
+    delete: () => Promise.reject(new Error("not under test")),
+  };
   const todayApi: TodayApi = {
     home: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
     googleConnectionStatus: () => Promise.resolve("active"),
   };
   const fakeSection: TodaySection = {
     id: "fake.section",
-    order: 20,
+    order: 15,
     component: () => <p>Fake section body</p>,
   };
   const api = stubApi();
@@ -163,7 +221,7 @@ test("a second registry section renders after the agenda in order", async () => 
     [
       createTodayWebModule({
         api: todayApi,
-        sections: [fakeSection, ...buildTodaySections(calendarApi)],
+        sections: [fakeSection, ...buildTodaySections(calendarApi, tasksApi)],
       }),
     ],
     createMemoryHistory({ initialEntries: ["/"] }),
@@ -179,6 +237,8 @@ test("a second registry section renders after the agenda in order", async () => 
 
   const agendaRow = await view.findByText("Standup");
   const fake = await view.findByText("Fake section body");
-  // DOCUMENT_POSITION_FOLLOWING: order 10 (agenda) precedes order 20.
+  const dueRow = await view.findByText("Pay invoices");
+  // DOCUMENT_POSITION_FOLLOWING: 10 (agenda) < 15 (fake) < 20 (tasks).
   expect(agendaRow.compareDocumentPosition(fake) & 4).toBe(4);
+  expect(fake.compareDocumentPosition(dueRow) & 4).toBe(4);
 });

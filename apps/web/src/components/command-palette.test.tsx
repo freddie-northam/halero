@@ -37,8 +37,9 @@ afterAll(async () => {
 const HOME_TZ = "Europe/London";
 const TODAY = "2025-07-02";
 
-// The shell mounts the Today page on "/", so the wiring stubs the two
-// calendar procedures it reaches (home-route test pattern).
+// The shell mounts the Today page on "/", so the wiring stubs the
+// calendar and tasks procedures its sections reach (home-route test
+// pattern).
 const stubClient = {
   modules: {
     calendar: {
@@ -48,6 +49,16 @@ const stubClient = {
       range: {
         query: () => Promise.resolve({ homeTimezone: HOME_TZ, days: [] }),
       },
+    },
+    tasks: {
+      list: { query: () => Promise.resolve({ tasks: [] }) },
+      today: {
+        query: () =>
+          Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY, tasks: [] }),
+      },
+      create: { mutate: () => Promise.reject(new Error("not under test")) },
+      toggle: { mutate: () => Promise.reject(new Error("not under test")) },
+      delete: { mutate: () => Promise.reject(new Error("not under test")) },
     },
   },
 } as unknown as TrpcClient;
@@ -102,14 +113,15 @@ const renderApp = async (
         : Promise.resolve(results);
     },
   });
+  const queryClient = new QueryClient();
   const router = createAppRouter(
     api,
-    buildWebModules(stubClient, api),
+    buildWebModules(stubClient, api, queryClient),
     createMemoryHistory({ initialEntries: ["/"] }),
   );
   await router.load();
   const view = render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
         <RouterProvider router={router} />
       </ApiProvider>

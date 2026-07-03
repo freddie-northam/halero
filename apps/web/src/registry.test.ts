@@ -1,16 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarApi } from "@halero/module-calendar/web";
 import type { EntityLinkContribution, WebModule } from "@halero/module-sdk/web";
+import type { TasksApi } from "@halero/module-tasks/web";
+import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 import {
   buildEntityLinks,
   buildNav,
+  buildTasksApi,
   buildTodaySections,
   buildWebModules,
 } from "./registry";
 import { createAppRouter } from "./router";
+
+const stubTask = {
+  entityId: "t-1",
+  title: "Buy milk",
+  status: "open",
+  dueDate: null,
+  notes: null,
+  completedAt: null,
+};
 
 const stubClient = {
   modules: {
@@ -22,6 +34,20 @@ const stubClient = {
       range: {
         query: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
       },
+    },
+    tasks: {
+      list: { query: () => Promise.resolve({ tasks: [stubTask] }) },
+      today: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: "UTC",
+            today: "2023-11-14",
+            tasks: [],
+          }),
+      },
+      create: { mutate: () => Promise.resolve(stubTask) },
+      toggle: { mutate: () => Promise.resolve(stubTask) },
+      delete: { mutate: () => Promise.resolve({ entityId: "t-1" }) },
     },
   },
 } as unknown as TrpcClient;
@@ -41,10 +67,23 @@ const stubCalendarApi: CalendarApi = {
   range: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
 };
 
+const stubTasksApi: TasksApi = {
+  list: () => Promise.resolve({ tasks: [] }),
+  today: () =>
+    Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14", tasks: [] }),
+  create: () => Promise.reject(new Error("not under test")),
+  toggle: () => Promise.reject(new Error("not under test")),
+  delete: () => Promise.reject(new Error("not under test")),
+};
+
+const modulesUnderTest = () =>
+  buildWebModules(stubClient, stubApi, new QueryClient());
+
 describe("the shipped web module registry", () => {
   test("provides the calendar page and nav entry from the module", () => {
-    const modules = buildWebModules(stubClient, stubApi);
-    const calendar = modules.find((module) => module.id === "calendar");
+    const calendar = modulesUnderTest().find(
+      (module) => module.id === "calendar",
+    );
 
     expect(calendar?.nav).toEqual([
       { label: "Calendar", path: "/calendar", order: 20 },
@@ -53,34 +92,79 @@ describe("the shipped web module registry", () => {
   });
 
   test("provides the home page and Today nav entry from the today module", () => {
-    const modules = buildWebModules(stubClient, stubApi);
-    const today = modules.find((module) => module.id === "today");
+    const today = modulesUnderTest().find((module) => module.id === "today");
 
     expect(today?.nav).toEqual([{ label: "Today", path: "/", order: 10 }]);
     expect(today?.pages?.map((page) => page.path)).toEqual(["/"]);
   });
 
-  test("hardcodes the calendar agenda as the first Today section", () => {
-    const sections = buildTodaySections(stubCalendarApi);
+  test("provides the tasks page and nav entry from the module", () => {
+    const tasks = modulesUnderTest().find((module) => module.id === "tasks");
+
+    expect(tasks?.nav).toEqual([{ label: "Tasks", path: "/tasks", order: 30 }]);
+    expect(tasks?.pages?.map((page) => page.path)).toEqual(["/tasks"]);
+  });
+
+  test("hardcodes the Today sections: agenda at 10, due tasks at 20", () => {
+    const sections = buildTodaySections(stubCalendarApi, stubTasksApi);
 
     expect(sections.map(({ id, order }) => ({ id, order }))).toEqual([
       { id: "calendar.agenda", order: 10 },
+      { id: "tasks.dueToday", order: 20 },
     ]);
+  });
+});
+
+describe("buildTasksApi", () => {
+  test("invalidates through the registry-held QueryClient after each mutation", async () => {
+    const queryClient = new QueryClient();
+    let invalidations = 0;
+    const original = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = ((...args: []) => {
+      invalidations += 1;
+      return original(...args);
+    }) as QueryClient["invalidateQueries"];
+    const api = buildTasksApi(stubClient, queryClient);
+
+    await api.create({ title: "Buy milk" });
+    expect(invalidations).toBe(1);
+    await api.toggle("t-1");
+    expect(invalidations).toBe(2);
+    await api.delete("t-1");
+    expect(invalidations).toBe(3);
+  });
+
+  test("reads pass straight through without invalidating", async () => {
+    const queryClient = new QueryClient();
+    let invalidations = 0;
+    queryClient.invalidateQueries = (() => {
+      invalidations += 1;
+      return Promise.resolve();
+    }) as QueryClient["invalidateQueries"];
+    const api = buildTasksApi(stubClient, queryClient);
+
+    const list = await api.list("open");
+    const today = await api.today();
+    expect(list.tasks.map((task) => task.title)).toEqual(["Buy milk"]);
+    expect(today.today).toBe("2023-11-14");
+    expect(invalidations).toBe(0);
   });
 });
 
 describe("buildNav", () => {
   test("keeps Settings in core and sorts everything by order", () => {
-    const nav = buildNav(buildWebModules(stubClient, stubApi));
+    const nav = buildNav(modulesUnderTest());
 
     expect(nav.map((entry) => entry.label)).toEqual([
       "Today",
       "Calendar",
+      "Tasks",
       "Settings",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
       "/calendar",
+      "/tasks",
       "/settings",
     ]);
   });
@@ -102,7 +186,7 @@ describe("buildNav", () => {
 
 describe("buildEntityLinks", () => {
   test("maps the calendar event kind from the shipped modules", () => {
-    const links = buildEntityLinks(buildWebModules(stubClient, stubApi));
+    const links = buildEntityLinks(modulesUnderTest());
 
     const link = links.get("calendar.event");
     expect(link?.label).toBe("Event");
@@ -114,8 +198,18 @@ describe("buildEntityLinks", () => {
     });
   });
 
+  test("maps the task item kind to the tasks page", () => {
+    const links = buildEntityLinks(modulesUnderTest());
+
+    const link = links.get("task.item");
+    expect(link?.label).toBe("Task");
+    expect(link?.buildLink({ entityId: "t-1", occurredDate: null })).toEqual({
+      path: "/tasks",
+    });
+  });
+
   test("leaves kinds no module links absent", () => {
-    const links = buildEntityLinks(buildWebModules(stubClient, stubApi));
+    const links = buildEntityLinks(modulesUnderTest());
 
     expect(links.get("note")).toBeUndefined();
   });
