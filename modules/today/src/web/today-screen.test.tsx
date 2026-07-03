@@ -73,7 +73,9 @@ test("greets by the home-timezone hour and shows the full date line", async () =
   // 23:00 UTC is 08:00 in Tokyo: morning at home even though the clock
   // instant is evening in UTC (and whatever the test runner's tz is).
   expect(await view.findByText("Good morning")).toBeTruthy();
-  expect(view.getByText("Thursday, 2 July 2026")).toBeTruthy();
+  // The weekday comma in en-GB long dates is ICU-version-dependent, so
+  // match it optionally rather than pinning one runtime's ICU output.
+  expect(view.getByText(/^Thursday,? 2 July 2026$/)).toBeTruthy();
 });
 
 test("renders the sections sorted by order, not array position", async () => {

@@ -150,7 +150,10 @@ test("the index route serves the Today page with the agenda from the stub", asyn
   expect(
     await view.findByText(/Good (morning|afternoon|evening)/),
   ).toBeTruthy();
-  expect(await view.findByText("Wednesday, 2 July 2025")).toBeTruthy();
+  // The comma after the weekday is ICU-version-dependent in en-GB long
+  // dates (present on some runtimes, absent on others), so match it
+  // optionally rather than pinning one runtime's ICU output.
+  expect(await view.findByText(/^Wednesday,? 2 July 2025$/)).toBeTruthy();
   // The calendar and tasks sections' rows come through the
   // registry-wired seams.
   expect(await view.findByText("Standup")).toBeTruthy();
