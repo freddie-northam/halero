@@ -4,7 +4,26 @@
 // output, which this suite never exact-matches).
 
 import { describe, expect, test } from "bun:test";
-import { formatDateInZone } from "./format";
+import { formatDateInZone, minutesOfDayInZone } from "./format";
+
+describe("minutesOfDayInZone", () => {
+  test("returns an exact integer minute count for a known instant", () => {
+    // 09:30 in Europe/London (BST, UTC+1) in July is 08:30 UTC.
+    const epochMs = Date.UTC(2025, 6, 2, 8, 30, 0);
+    expect(minutesOfDayInZone(epochMs, "Europe/London")).toBe(9 * 60 + 30);
+  });
+
+  test("crosses midnight correctly in a zone west of UTC", () => {
+    // 22:00 UTC on the 1st is 18:00 in New York (EDT, UTC-4) the same day.
+    const epochMs = Date.UTC(2025, 6, 1, 22, 0, 0);
+    expect(minutesOfDayInZone(epochMs, "America/New_York")).toBe(18 * 60);
+  });
+
+  test("returns 0 at local midnight", () => {
+    const epochMs = Date.UTC(2025, 0, 5, 0, 0, 0);
+    expect(minutesOfDayInZone(epochMs, "UTC")).toBe(0);
+  });
+});
 
 describe("formatDateInZone", () => {
   test("returns the local calendar date in a zone west of UTC", () => {

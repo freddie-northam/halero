@@ -22,6 +22,20 @@ export const formatTime = (epochMs: number, timeZone: string): string =>
   }).format(epochMs);
 
 /**
+ * Minutes since local midnight for an instant in a given zone, parsed
+ * from formatTime's "HH:MM" rather than any offset arithmetic on the
+ * epoch (the week grid's only source of wall-clock minutes). Used to
+ * position timed events in the hour-axis grid.
+ */
+export const minutesOfDayInZone = (
+  epochMs: number,
+  timeZone: string,
+): number => {
+  const [hoursText, minutesText] = formatTime(epochMs, timeZone).split(":");
+  return Number(hoursText) * 60 + Number(minutesText);
+};
+
+/**
  * "YYYY-MM-DD" for that instant in that zone, assembled from the
  * formatter's own labeled parts rather than a locale date string (ICU's
  * string format differs across builds; the part types do not). Mirrors
