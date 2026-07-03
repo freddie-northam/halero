@@ -233,6 +233,12 @@ been silent for more than five minutes. The HTTP status is 200 either way;
 alerting should look at the body. For push alerts, set a notification URL
 (ntfy works) in Settings.
 
+## External access
+
+Non-browser clients, like the Raycast extension or a script, authenticate
+with an API token instead of the browser session; see
+[docs/api-tokens.md](api-tokens.md).
+
 ## Future options
 
 A single-binary build (`bun build --compile`) is a candidate for later
