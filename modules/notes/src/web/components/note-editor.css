@@ -1,0 +1,19 @@
+/* Map BlockNote's editor-surface variables onto the Halero palette so the
+   writing area matches the rest of the app. The shadcn menus and toolbar
+   the variant renders already read the shared shadcn tokens (--background,
+   --primary, --radius), so only the content surface needs mapping here. */
+.halero-note-editor {
+  --bn-colors-editor-background: var(--background);
+  --bn-colors-editor-text: var(--foreground);
+  --bn-colors-side-menu: var(--muted-foreground);
+  --bn-colors-hovered-background: var(--accent);
+  --bn-colors-selected-background: var(--accent);
+  --bn-font-family: var(--font-sans);
+  --bn-border-radius-small: var(--radius);
+}
+
+.halero-note-editor .bn-editor {
+  /* The editor draws its own left padding; drop the extra so the body
+     aligns with the title field above it. */
+  padding-inline: 0;
+}

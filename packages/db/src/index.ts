@@ -15,6 +15,7 @@ export {
   entityAliases,
   externalRefs,
   links,
+  notes,
   sessions,
   settings,
   syncCursors,

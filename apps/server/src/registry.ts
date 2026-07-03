@@ -6,6 +6,7 @@
 
 import type { EntityStore } from "@halero/core";
 import { calendarServerModule } from "@halero/module-calendar/server";
+import { notesServerModule } from "@halero/module-notes/server";
 import {
   buildKindRegistry,
   type KindRegistry,
@@ -21,6 +22,7 @@ import { router } from "./trpc/init";
 export const serverModules: readonly ServerModule[] = [
   calendarServerModule,
   tasksServerModule,
+  notesServerModule,
 ];
 
 /**
@@ -38,6 +40,7 @@ export const kindRegistry: KindRegistry = buildKindRegistry(serverModules);
 export const modulesRouter = router({
   calendar: calendarServerModule.router,
   tasks: tasksServerModule.router,
+  notes: notesServerModule.router,
 });
 
 /**

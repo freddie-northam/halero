@@ -16,6 +16,7 @@
     "@halero/core": "workspace:*",
     "@halero/db": "workspace:*",
     "@halero/module-calendar": "workspace:*",
+    "@halero/module-notes": "workspace:*",
     "@halero/module-sdk": "workspace:*",
     "@halero/module-tasks": "workspace:*",
     "@halero/schemas": "workspace:*",
