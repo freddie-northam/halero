@@ -442,7 +442,6 @@ const usePaletteState = ({
   onOpenLink,
 }: Omit<CommandPaletteProps, "commands">) => {
   const [query, setQuery] = useState("");
-  useCmdKToggle(open, onOpenChange);
   const search = usePaletteSearch(open, query);
   const selection = usePaletteSelection(search.hits, entityLinks);
 
@@ -463,6 +462,12 @@ const usePaletteState = ({
     }
     onOpenChange(nextOpen);
   };
+
+  // Cmd+K closes through the same cleanup as Escape and overlay clicks
+  // (Radix only routes its own interactions through onOpenChange), so
+  // an in-flight command is abandoned on every close path. Opening
+  // takes the cleanup-free branch: it just forwards onOpenChange(true).
+  useCmdKToggle(open, handleOpenChange);
 
   const openHit = (link: EntityLinkContribution, hit: SearchResult): void => {
     onOpenLink(

@@ -460,6 +460,60 @@ test("a hanging command shows the pending row and keeps the palette open", async
   expect((input as HTMLInputElement).value).toBe("slow task");
 });
 
+test("Cmd+K close mid-run abandons the command: no late navigation", async () => {
+  let resolveCreate = (): void => undefined;
+  const { view, router } = await renderApp([], {
+    createTask: (input) =>
+      new Promise((resolve) => {
+        resolveCreate = () => resolve(createdTask(input.title));
+      }),
+  });
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "slow task");
+  await view.findByText("New task: slow task");
+  await settleDebounce();
+  await pressEnter(input);
+  await view.findByLabelText("Running...");
+
+  // Cmd+K closes the palette while the create is still in flight.
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  await waitFor(() =>
+    expect(view.queryByPlaceholderText(PLACEHOLDER)).toBeNull(),
+  );
+
+  // The abandoned command settles late; it must not navigate.
+  await act(async () => {
+    resolveCreate();
+  });
+  await settleDebounce();
+  expect(router.state.location.pathname).toBe("/");
+
+  // Reopen: the runner reset, so no spinner, and the input is fresh.
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const reopened = await view.findByPlaceholderText(PLACEHOLDER);
+  expect((reopened as HTMLInputElement).value).toBe("");
+  expect(view.queryByLabelText("Running...")).toBeNull();
+});
+
+test("Cmd+K close clears the query for the next open", async () => {
+  const { view } = await renderApp([]);
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "stale query");
+  await view.findByText("New task: stale query");
+  await settleDebounce();
+
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  await waitFor(() =>
+    expect(view.queryByPlaceholderText(PLACEHOLDER)).toBeNull(),
+  );
+
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const reopened = await view.findByPlaceholderText(PLACEHOLDER);
+  expect((reopened as HTMLInputElement).value).toBe("");
+});
+
 test("a rejected command keeps the palette open with the error and input", async () => {
   const created: string[] = [];
   const { view, router } = await renderApp([], {
