@@ -55,7 +55,17 @@ const stubClient = {
             tasks: [],
           }),
       },
+      board: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: "UTC",
+            today: "2023-11-14",
+            columns: { todo: [stubTask], doing: [], done: [] },
+          }),
+      },
       create: { mutate: () => Promise.resolve(stubTask) },
+      update: { mutate: () => Promise.resolve(stubTask) },
+      move: { mutate: () => Promise.resolve(stubTask) },
       toggle: { mutate: () => Promise.resolve(stubTask) },
       delete: { mutate: () => Promise.resolve({ entityId: "t-1" }) },
     },
@@ -81,7 +91,15 @@ const stubTasksApi: TasksApi = {
   list: () => Promise.resolve({ tasks: [] }),
   today: () =>
     Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14", tasks: [] }),
+  board: () =>
+    Promise.resolve({
+      homeTimezone: "UTC",
+      today: "2023-11-14",
+      columns: { todo: [], doing: [], done: [] },
+    }),
   create: () => Promise.reject(new Error("not under test")),
+  update: () => Promise.reject(new Error("not under test")),
+  move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
 };

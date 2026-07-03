@@ -86,7 +86,17 @@ const stubClient = {
             tasks: [dueTask],
           }),
       },
+      board: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: HOME_TZ,
+            today: TODAY,
+            columns: { todo: [dueTask], doing: [], done: [] },
+          }),
+      },
       create: { mutate: () => Promise.reject(new Error("not under test")) },
+      update: { mutate: () => Promise.reject(new Error("not under test")) },
+      move: { mutate: () => Promise.reject(new Error("not under test")) },
       toggle: { mutate: () => Promise.reject(new Error("not under test")) },
       delete: { mutate: () => Promise.reject(new Error("not under test")) },
     },
@@ -214,7 +224,15 @@ test("an interleaved registry section renders strictly by order", async () => {
         today: TODAY,
         tasks: [dueTask],
       }),
+    board: () =>
+      Promise.resolve({
+        homeTimezone: HOME_TZ,
+        today: TODAY,
+        columns: { todo: [], doing: [], done: [] },
+      }),
     create: () => Promise.reject(new Error("not under test")),
+    update: () => Promise.reject(new Error("not under test")),
+    move: () => Promise.reject(new Error("not under test")),
     toggle: () => Promise.reject(new Error("not under test")),
     delete: () => Promise.reject(new Error("not under test")),
   };
