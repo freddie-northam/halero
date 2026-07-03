@@ -96,7 +96,7 @@ const writeConnection = (
   now: number,
   target: UpsertConnectionTarget,
   config: string,
-  credentialsEnc: Buffer,
+  credentialsEnc: Buffer | null,
 ): void => {
   const existing = getConnectionByConnectorId(db, target.connectorId);
   if (existing !== null) {
@@ -163,4 +163,22 @@ export const upsertApiKeyConnection = (
     target,
     JSON.stringify({ email: accountLabel, accountKey: accountLabel }),
     Buffer.from(encryptApiKeyCredential(key, token)),
+  );
+
+/**
+ * Connects a local, credential-free source (a log or database Halero reads
+ * from disk). There is nothing to store but the row itself, which is what
+ * marks the source connected.
+ */
+export const upsertLocalConnection = (
+  db: Db,
+  now: number,
+  target: UpsertConnectionTarget,
+): void =>
+  writeConnection(
+    db,
+    now,
+    target,
+    JSON.stringify({ email: null, accountKey: target.connectorId }),
+    null,
   );

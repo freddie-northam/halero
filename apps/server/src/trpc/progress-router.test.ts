@@ -26,9 +26,10 @@ const connectGithub = (testApp: TestApp): void => {
   );
 };
 
-interface StatusData {
+interface SourceStatus {
+  readonly id: string;
+  readonly displayName: string;
   readonly connected: boolean;
-  readonly login: string | null;
   readonly lastSyncedAt: number | null;
   readonly lastError: string | null;
 }
@@ -36,27 +37,25 @@ interface StatusData {
 const readStatus = async (
   app: TestApp["app"],
   cookie: string,
-): Promise<StatusData> => {
+): Promise<SourceStatus[]> => {
   const res = await trpcQuery(app, "progress.status", { cookie });
   expect(res.status).toBe(200);
-  return ((await res.json()) as TrpcSuccess<StatusData>).result.data;
+  return ((await res.json()) as TrpcSuccess<{ sources: SourceStatus[] }>).result
+    .data.sources;
 };
 
 describe("progress.status", () => {
-  test("reports not connected before GitHub is connected", async () => {
+  test("lists every activity source, GitHub disconnected until connected", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
-    expect(await readStatus(testApp.app, cookie)).toEqual({
-      connected: false,
-      login: null,
-      lastSyncedAt: null,
-      lastError: null,
-    });
-  });
+    const before = await readStatus(testApp.app, cookie);
+    const github = before.find((s) => s.id === "github");
+    expect(github?.connected).toBe(false);
+    // The local sources are registered too.
+    expect(before.map((s) => s.id)).toEqual(
+      expect.arrayContaining(["github", "claude-code", "codex", "wispr-flow"]),
+    );
 
-  test("reports the login and last-synced once connected and refreshed", async () => {
-    const testApp = makeTestApp();
-    const cookie = await completeSetup(testApp.app);
     connectGithub(testApp);
     upsertDailyCounts(
       testApp.database.db,
@@ -64,17 +63,17 @@ describe("progress.status", () => {
       [{ date: todayOf(testApp), count: 3 }],
       testApp.clock.value,
     );
-    const status = await readStatus(testApp.app, cookie);
-    expect(status.connected).toBe(true);
-    expect(status.login).toBe("octocat");
-    expect(status.lastSyncedAt).toBe(testApp.clock.value);
+    const after = await readStatus(testApp.app, cookie);
+    const g = after.find((s) => s.id === "github");
+    expect(g?.connected).toBe(true);
+    expect(g?.displayName).toBe("GitHub");
+    expect(g?.lastSyncedAt).toBe(testApp.clock.value);
   });
 });
 
 interface HeatmapData {
-  readonly from: string;
+  readonly source: string;
   readonly to: string;
-  readonly today: string;
   readonly days: { date: string; count: number }[];
   readonly total: number;
   readonly currentStreak: number;
@@ -82,10 +81,11 @@ interface HeatmapData {
 }
 
 describe("progress.heatmap", () => {
-  test("densifies the range and computes totals from stored counts", async () => {
+  test("merges connected sources and densifies the range", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     const today = todayOf(testApp);
+    connectGithub(testApp);
     upsertDailyCounts(
       testApp.database.db,
       "github",
@@ -98,23 +98,35 @@ describe("progress.heatmap", () => {
       input: { range: "month" },
     });
     const data = ((await res.json()) as TrpcSuccess<HeatmapData>).result.data;
-
-    expect(data.to).toBe(today);
-    expect(data.days).toHaveLength(31); // 30 days back, inclusive
+    expect(data.source).toBe("all");
+    expect(data.days).toHaveLength(31);
     expect(data.days.at(-1)).toEqual({ date: today, count: 5 });
-    expect(data.days[0]?.count).toBe(0); // densified zero
     expect(data.total).toBe(5);
-    expect(data.currentStreak).toBe(1);
-    expect(data.longestStreak).toBe(1);
+  });
+
+  test("reads a single source directly without requiring a connection", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const today = todayOf(testApp);
+    upsertDailyCounts(
+      testApp.database.db,
+      "claude-code",
+      [{ date: today, count: 8 }],
+      testApp.clock.value,
+    );
+    const res = await trpcQuery(testApp.app, "progress.heatmap", {
+      cookie,
+      input: { range: "month", source: "claude-code" },
+    });
+    const data = ((await res.json()) as TrpcSuccess<HeatmapData>).result.data;
+    expect(data.source).toBe("claude-code");
+    expect(data.total).toBe(8);
   });
 });
 
 const githubContribFetch =
-  (
-    count: number,
-    login = "octocat",
-  ): NonNullable<MakeTestAppOptions["outboundFetch"]> =>
-  (input, _init) => {
+  (count: number): NonNullable<MakeTestAppOptions["outboundFetch"]> =>
+  (input) => {
     const url = new URL(String(input));
     if (url.host !== "api.github.com") {
       throw new Error(`unexpected call: ${url.toString()}`);
@@ -123,7 +135,7 @@ const githubContribFetch =
       Response.json({
         data: {
           viewer: {
-            login,
+            login: "octocat",
             contributionsCollection: {
               contributionCalendar: {
                 totalContributions: count,
@@ -142,8 +154,18 @@ const githubContribFetch =
     );
   };
 
+interface RefreshData {
+  readonly lastSyncedAt: number;
+  readonly sources: {
+    id: string;
+    syncedDays: number;
+    total: number;
+    error: string | null;
+  }[];
+}
+
 describe("progress.refresh", () => {
-  test("rejects readably when GitHub is not connected", async () => {
+  test("rejects readably when no source is connected", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     const res = await trpcMutation(
@@ -155,14 +177,13 @@ describe("progress.refresh", () => {
       },
     );
     expect(res.status).toBe(412);
-    expect(await res.text()).toContain("Connect GitHub");
+    expect(await res.text()).toContain("Connect a source");
   });
 
-  test("fetches contributions, fills the store, and reports counts", async () => {
+  test("refreshes the connected GitHub source and skips the rest", async () => {
     const testApp = makeTestApp({ outboundFetch: githubContribFetch(7) });
     const cookie = await completeSetup(testApp.app);
     connectGithub(testApp);
-
     const res = await trpcMutation(
       testApp.app,
       "progress.refresh",
@@ -172,15 +193,15 @@ describe("progress.refresh", () => {
       },
     );
     expect(res.status).toBe(200);
-    const data = (
-      (await res.json()) as TrpcSuccess<{
-        syncedDays: number;
-        total: number;
-        lastSyncedAt: number;
-      }>
-    ).result.data;
-    expect(data.syncedDays).toBe(1);
-    expect(data.total).toBe(7);
-    expect(data.lastSyncedAt).toBe(testApp.clock.value);
+    const data = ((await res.json()) as TrpcSuccess<RefreshData>).result.data;
+    const github = data.sources.find((s) => s.id === "github");
+    expect(github).toEqual({
+      id: "github",
+      syncedDays: 1,
+      total: 7,
+      error: null,
+    });
+    // Only connected sources appear.
+    expect(data.sources.map((s) => s.id)).toEqual(["github"]);
   });
 });

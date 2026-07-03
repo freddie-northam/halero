@@ -21,6 +21,7 @@ import {
   getConnectionByConnectorId,
   parseConnectionConfig,
   upsertApiKeyConnection,
+  upsertLocalConnection,
 } from "../sync/connection";
 import { readLastSuccessAt, readRecentRuns } from "../sync/run-queries";
 import type { TrpcContext } from "./context";
@@ -186,6 +187,21 @@ export const connectionsRouter = router({
         input.token,
       );
       return { connected: true as const, accountLabel };
+    }),
+
+  /** Connects a local, credential-free source (a log Halero reads on disk). */
+  connectLocal: protectedProcedure
+    .input(z.object({ connectorId: z.string().min(1) }))
+    .mutation(({ ctx, input }) => {
+      const entry = catalogEntryOrThrow(input.connectorId);
+      if (entry.authKind !== "none") {
+        throw badRequest("That integration needs credentials to connect.");
+      }
+      upsertLocalConnection(ctx.db, ctx.now(), {
+        connectorId: entry.id,
+        displayName: entry.displayName,
+      });
+      return { connected: true as const };
     }),
 
   /** Removes a connection (keeps already-synced data). */

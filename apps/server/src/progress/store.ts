@@ -3,7 +3,7 @@
 // ascending. Dates are 'YYYY-MM-DD', so string comparison orders them.
 
 import { activityDaily, type HaleroDatabase } from "@halero/db";
-import { and, asc, eq, gte, lte, max } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, max, sql } from "drizzle-orm";
 
 type Db = HaleroDatabase["db"];
 
@@ -65,3 +65,35 @@ export const lastUpdatedAt = (db: Db, source: string): number | null =>
     .from(activityDaily)
     .where(eq(activityDaily.source, source))
     .get()?.value ?? null;
+
+/**
+ * Merged counts across several sources: the summed daily total, ascending
+ * by date, within [from, to]. Backs the "All sources" heatmap. An empty
+ * source list yields no rows.
+ */
+export const readMergedRange = (
+  db: Db,
+  sources: readonly string[],
+  from: string,
+  to: string,
+): DailyCount[] => {
+  if (sources.length === 0) {
+    return [];
+  }
+  return db
+    .select({
+      date: activityDaily.date,
+      count: sql<number>`sum(${activityDaily.count})`.mapWith(Number),
+    })
+    .from(activityDaily)
+    .where(
+      and(
+        inArray(activityDaily.source, [...sources]),
+        gte(activityDaily.date, from),
+        lte(activityDaily.date, to),
+      ),
+    )
+    .groupBy(activityDaily.date)
+    .orderBy(asc(activityDaily.date))
+    .all();
+};

@@ -399,3 +399,42 @@ describe("connections.connectApiKey + disconnect (GitHub)", () => {
     expect(await res.text()).toContain("read:user");
   });
 });
+
+describe("connections.connectLocal (local sources)", () => {
+  test("connects a credential-free local source and shows it in the catalog", async () => {
+    const testApp = makeTestApp();
+    const { app } = testApp;
+    const cookie = await completeSetup(app);
+    const res = await trpcMutation(
+      app,
+      "connections.connectLocal",
+      { connectorId: "claude-code" },
+      { cookie },
+    );
+    expect(res.status).toBe(200);
+    const row = testApp.database.db
+      .select()
+      .from(connections)
+      .where(eq(connections.connectorId, "claude-code"))
+      .get();
+    expect(row?.credentialsEnc ?? null).toBeNull();
+
+    const catalog = await readCatalog(app, cookie);
+    expect(
+      catalog.find((c) => c.id === "claude-code")?.connection,
+    ).not.toBeNull();
+  });
+
+  test("rejects an integration that needs credentials", async () => {
+    const { app } = makeTestApp();
+    const cookie = await completeSetup(app);
+    const res = await trpcMutation(
+      app,
+      "connections.connectLocal",
+      { connectorId: "github" },
+      { cookie },
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("needs credentials");
+  });
+});
