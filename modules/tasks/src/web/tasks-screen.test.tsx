@@ -783,6 +783,98 @@ test("an empty title is a no-op on submit", async () => {
   expect(doneColumn.queryByLabelText("Task title")).toBeNull();
 });
 
+test("a failed create keeps the inline row open and shows a readable error", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const failing: TasksApi = {
+    ...api,
+    create: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderTasks(failing);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Doomed" } });
+  await act(async () => {
+    fireEvent.submit(titleInput);
+  });
+
+  expect(
+    await todoColumn.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  // The row stays open so the error is visible, not silently swallowed.
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+});
+
+test("blurring the field mid-save does not collapse the row before the error surfaces", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  let rejectCreate: ((error: Error) => void) | null = null;
+  const failing: TasksApi = {
+    ...api,
+    // Stays pending until the test rejects it, so blur fires while the
+    // create is still in flight (the exact race the gated blur guards).
+    create: () =>
+      new Promise<never>((_, reject) => {
+        rejectCreate = reject;
+      }),
+  };
+  const { view } = await renderTasks(failing);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Doomed" } });
+  fireEvent.submit(titleInput);
+
+  // Click away while the create is still pending: the row must not close,
+  // or the pending rejection would set the error on a hidden input.
+  fireEvent.blur(titleInput);
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+
+  await act(async () => {
+    rejectCreate?.(new Error("You need to sign in before doing that."));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(
+    await todoColumn.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+});
+
+test("a column creates a second task after the first succeeds", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const firstInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(firstInput, { target: { value: "First" } });
+  await act(async () => {
+    fireEvent.submit(firstInput);
+  });
+  await view.findByText("First");
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const secondInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(secondInput, { target: { value: "Second" } });
+  await act(async () => {
+    fireEvent.submit(secondInput);
+  });
+
+  // The saving flag reset after the first create, so the second is not
+  // swallowed by the in-flight guard.
+  expect(await view.findByText("Second")).toBeTruthy();
+  expect(calls.create).toEqual([
+    { title: "First", status: "todo" },
+    { title: "Second", status: "todo" },
+  ]);
+});
+
 test("toggling in the list view moves a task from Open to Done", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api, "/tasks?view=list");

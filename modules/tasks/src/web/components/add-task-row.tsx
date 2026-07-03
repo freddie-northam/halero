@@ -18,6 +18,57 @@ export interface AddTaskRowProps {
   readonly onCreate: (title: string) => Promise<void>;
 }
 
+/** Closed state: the subtle "+ Add task" trigger. */
+const AddTaskTrigger = ({
+  onOpen,
+}: {
+  readonly onOpen: () => void;
+}): ReactElement => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="sm"
+    className="w-full justify-start gap-1.5 text-muted-foreground"
+    onClick={onOpen}
+  >
+    <Plus className="size-4" aria-hidden="true" />
+    Add task
+  </Button>
+);
+
+/** Open state: the one-line title input and any inline error. */
+const AddTaskInput = ({
+  onSubmit,
+  onCancel,
+  error,
+}: {
+  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  readonly onCancel: () => void;
+  readonly error: string | null;
+}): ReactElement => {
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === "Escape") {
+      onCancel();
+    }
+  };
+  return (
+    <form onSubmit={onSubmit}>
+      <Input
+        name="title"
+        autoFocus
+        autoComplete="off"
+        placeholder="Task title"
+        aria-label="Task title"
+        onBlur={onCancel}
+        onKeyDown={onKeyDown}
+      />
+      {error === null ? null : (
+        <p className="mt-1.5 text-sm text-destructive">{error}</p>
+      )}
+    </form>
+  );
+};
+
 export const AddTaskRow = ({ onCreate }: AddTaskRowProps): ReactElement => {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,13 +79,23 @@ export const AddTaskRow = ({ onCreate }: AddTaskRowProps): ReactElement => {
     setError(null);
   };
 
+  // Blur and Escape cancel the row, but never mid-save: a pending create
+  // can still reject, and closing here would clear the error before it
+  // ever renders. The submit path closes the row itself once it resolves.
+  const cancel = (): void => {
+    if (!saving) {
+      close();
+    }
+  };
+
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     if (saving) {
       return;
     }
-    const form = event.currentTarget;
-    const title = String(new FormData(form).get("title") ?? "").trim();
+    const title = String(
+      new FormData(event.currentTarget).get("title") ?? "",
+    ).trim();
     if (title === "") {
       close();
       return;
@@ -46,45 +107,22 @@ export const AddTaskRow = ({ onCreate }: AddTaskRowProps): ReactElement => {
       close();
     } catch (thrown) {
       setError(readableError(thrown));
+    } finally {
+      // Reset in finally so a successful create leaves the row ready for
+      // the next add; otherwise saving stays true and the submit guard
+      // above would swallow every later create in this column.
       setSaving(false);
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === "Escape") {
-      close();
-    }
-  };
-
   if (!open) {
-    return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="w-full justify-start gap-1.5 text-muted-foreground"
-        onClick={() => setOpen(true)}
-      >
-        <Plus className="size-4" aria-hidden="true" />
-        Add task
-      </Button>
-    );
+    return <AddTaskTrigger onOpen={() => setOpen(true)} />;
   }
-
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <Input
-        name="title"
-        autoFocus
-        autoComplete="off"
-        placeholder="Task title"
-        aria-label="Task title"
-        onBlur={close}
-        onKeyDown={onKeyDown}
-      />
-      {error === null ? null : (
-        <p className="mt-1.5 text-sm text-destructive">{error}</p>
-      )}
-    </form>
+    <AddTaskInput
+      onSubmit={(event) => void submit(event)}
+      onCancel={cancel}
+      error={error}
+    />
   );
 };
