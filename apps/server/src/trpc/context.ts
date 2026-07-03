@@ -1,4 +1,5 @@
 import type { FetchLike } from "@halero/connector-sdk";
+import type { EntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
 import type { LoginRateLimiter, SessionRecord } from "../auth";
 import type { HaleroConfig } from "../config";
@@ -8,6 +9,8 @@ import type { SyncRunner } from "../sync/runner";
 export interface TrpcContext {
   readonly db: HaleroDatabase["db"];
   readonly sqlite: HaleroDatabase["sqlite"];
+  /** Entity write path; serves the module SDK's UserEntityStore. */
+  readonly entities: EntityStore;
   readonly config: HaleroConfig;
   readonly key: Uint8Array;
   readonly session: SessionRecord | null;
