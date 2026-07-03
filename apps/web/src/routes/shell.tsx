@@ -1,7 +1,17 @@
+import type {
+  EntityLink,
+  EntityLinkContribution,
+} from "@halero/module-sdk/web";
 import { SidebarInset, SidebarProvider } from "@halero/ui";
 import { useMutation } from "@tanstack/react-query";
-import type { CSSProperties, ReactElement, ReactNode } from "react";
+import {
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  useState,
+} from "react";
 import { CommandBarSlot } from "../components/command-bar-slot";
+import { CommandPalette } from "../components/command-palette";
 import { AppSidebar, type SidebarNavItem } from "../components/sidebar";
 import { useApi } from "../lib/api-context";
 
@@ -11,6 +21,10 @@ export interface ShellScreenProps {
   readonly nav: readonly SidebarNavItem[];
   readonly activePath: string;
   readonly onNavigate: (path: string) => void;
+  /** The entity-link registry built at boot, for the command palette. */
+  readonly entityLinks: ReadonlyMap<string, EntityLinkContribution>;
+  /** Navigates to a search hit's link (path plus search params). */
+  readonly onOpenLink: (link: EntityLink) => void;
   /** The routed page; every route brings its own (Today owns "/"). */
   readonly children: ReactNode;
 }
@@ -23,9 +37,12 @@ export const ShellScreen = ({
   nav,
   activePath,
   onNavigate,
+  entityLinks,
+  onOpenLink,
   children,
 }: ShellScreenProps): ReactElement => {
   const api = useApi();
+  const [searchOpen, setSearchOpen] = useState(false);
   const logout = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: onLoggedOut,
@@ -41,9 +58,15 @@ export const ShellScreen = ({
         logoutPending={logout.isPending}
       />
       <SidebarInset className="min-w-0">
-        <CommandBarSlot />
+        <CommandBarSlot onSearchClick={() => setSearchOpen(true)} />
         <div className="flex-1 overflow-auto">{children}</div>
       </SidebarInset>
+      <CommandPalette
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        entityLinks={entityLinks}
+        onOpenLink={onOpenLink}
+      />
     </SidebarProvider>
   );
 };

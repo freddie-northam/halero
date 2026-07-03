@@ -78,8 +78,9 @@ const duplicateEntityLinkMessage = (
 
 /**
  * Entity link index by kind, validated like the server's kind registry:
- * two modules claiming the same kind is a build mistake and fails loudly
- * at boot, before any search surface can route a hit ambiguously.
+ * two modules claiming the same kind is a build mistake and fails
+ * loudly at boot (createAppRouter builds this map at startup), before
+ * the command palette can route a hit ambiguously.
  */
 export const buildEntityLinks = (
   modules: readonly WebModule[],

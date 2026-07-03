@@ -1,4 +1,6 @@
 import type {
+  EntityLink,
+  EntityLinkContribution,
   NavContribution,
   PageContribution,
   WebModule,
@@ -16,7 +18,7 @@ import type { ReactElement } from "react";
 import type { HaleroApi } from "./lib/api";
 import { readableError } from "./lib/errors";
 import { guardAuthenticated, guardEntry } from "./lib/guards";
-import { buildNav } from "./registry";
+import { buildEntityLinks, buildNav } from "./registry";
 import { LoginScreen } from "./routes/login";
 import { SettingsScreen } from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
@@ -26,6 +28,8 @@ export interface RouterContext {
   readonly api: HaleroApi;
   /** Nav entries from the registry; the shell reads them per route. */
   readonly nav: readonly NavContribution[];
+  /** Entity links from the registry, for the shell's command palette. */
+  readonly entityLinks: ReadonlyMap<string, EntityLinkContribution>;
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({
@@ -60,8 +64,13 @@ const useShellProps = (activePath: string) => {
   return {
     activePath,
     nav: router.options.context.nav,
+    entityLinks: router.options.context.entityLinks,
     onNavigate: (path: string) => {
       void router.navigate({ to: path });
+    },
+    // Search hits carry module-built links: a path plus search params.
+    onOpenLink: (link: EntityLink) => {
+      void router.navigate({ to: link.path, search: link.search ?? {} });
     },
     onLoggedOut: () => {
       void router.navigate({ to: "/login" });
@@ -186,7 +195,13 @@ export const createAppRouter = (
   return createRouter({
     routeTree,
     ...(history === undefined ? {} : { history }),
-    context: { api, nav: buildNav(webModules) },
+    context: {
+      api,
+      nav: buildNav(webModules),
+      // Built here so a duplicate entity-link kind fails at startup,
+      // not when the palette first routes a hit.
+      entityLinks: buildEntityLinks(webModules),
+    },
     defaultPendingComponent: PendingScreen,
     defaultErrorComponent: ErrorScreen,
   });

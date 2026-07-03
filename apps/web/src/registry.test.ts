@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarApi } from "@halero/module-calendar/web";
 import type { EntityLinkContribution, WebModule } from "@halero/module-sdk/web";
+import { createMemoryHistory } from "@tanstack/react-router";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 import {
@@ -9,6 +10,7 @@ import {
   buildTodaySections,
   buildWebModules,
 } from "./registry";
+import { createAppRouter } from "./router";
 
 const stubClient = {
   modules: {
@@ -134,5 +136,28 @@ describe("buildEntityLinks", () => {
         "module already links it. Each entity kind can be linked by " +
         "exactly one module.",
     );
+  });
+
+  test("a duplicate kind fails at the boot path, not on first use", () => {
+    // createAppRouter builds the entity-link map in its context, so the
+    // same mistake that buildEntityLinks rejects above brings the app
+    // down at startup instead of misrouting a palette hit later.
+    const link: EntityLinkContribution = {
+      kind: "note",
+      label: "Note",
+      buildLink: () => ({ path: "/notes" }),
+    };
+    const modules: readonly WebModule[] = [
+      { id: "first", entityLinks: [link] },
+      { id: "second", entityLinks: [link] },
+    ];
+
+    expect(() =>
+      createAppRouter(
+        stubApi,
+        modules,
+        createMemoryHistory({ initialEntries: ["/"] }),
+      ),
+    ).toThrow(/already links it/);
   });
 });
