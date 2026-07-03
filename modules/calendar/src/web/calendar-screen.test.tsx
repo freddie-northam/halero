@@ -250,6 +250,28 @@ test("shows a readable error when the range cannot load", async () => {
   ).toBeTruthy();
 });
 
+test("a failed range does not strand the list view behind a stale error", async () => {
+  const failingRangeApi: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderCalendar(
+    failingRangeApi,
+    "/calendar?view=month",
+  );
+  await view.findByText("You need to sign in before doing that.");
+
+  const listTab = view.getByRole("tab", { name: "List" });
+  fireEvent.mouseDown(listTab, { button: 0 });
+  fireEvent.click(listTab);
+
+  // The list feed loads fine; the disabled range query's frozen error
+  // must not keep blocking the view it no longer drives.
+  expect(await view.findByRole("table")).toBeTruthy();
+  expect(view.queryByText("You need to sign in before doing that.")).toBeNull();
+});
+
 test("the New event button opens the create modal at the anchor and closes on success", async () => {
   const calls: CalendarEventInput[] = [];
   const api: CalendarApi = {

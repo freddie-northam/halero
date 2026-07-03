@@ -175,12 +175,17 @@ const useCalendarData = (
     },
     enabled: view === "list" && dateWindow !== undefined,
   });
+  // Only the ACTIVE feed's error counts: a disabled query keeps its last
+  // (possibly errored) state frozen, so surfacing the inactive feed's
+  // error would strand a freshly loaded view behind a stale alert after a
+  // switch, with no in-app recovery.
+  const feedError = view === "list" ? eventsQuery.error : rangeQuery.error;
   return {
     today,
     anchor,
     range: rangeQuery.data,
     events: eventsQuery.data,
-    error: todayQuery.error ?? rangeQuery.error ?? eventsQuery.error,
+    error: todayQuery.error ?? feedError,
   };
 };
 

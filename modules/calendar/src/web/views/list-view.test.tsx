@@ -97,8 +97,10 @@ test("a Google (non-editable) event's title is plain text with no accent dot", (
   );
 
   expect(view.queryByRole("button", { name: /Dentist/ })).toBeNull();
-  const title = view.getByText("Dentist").closest("span");
-  expect(title?.querySelector("span.rounded-full")).toBeNull();
+  // Assert at the whole cell, not the text span (the dot is a sibling of
+  // the text, so a span-scoped query would miss a mistakenly added dot).
+  const cell = view.getByText("Dentist").closest("td");
+  expect(cell?.querySelector("span.rounded-full")).toBeNull();
 });
 
 test("clicking a sortable header reorders rows and toggles aria-sort", () => {
