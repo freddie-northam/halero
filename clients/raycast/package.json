@@ -1,0 +1,49 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "halero",
+  "title": "Halero",
+  "description": "Control your Halero personal AI hub from Raycast.",
+  "icon": "icon.png",
+  "author": "halero",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "open-halero",
+      "title": "Open Halero",
+      "description": "Open the Halero web app in your browser.",
+      "mode": "no-view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "baseUrl",
+      "type": "textfield",
+      "required": false,
+      "title": "Base URL",
+      "description": "Address of your Halero instance.",
+      "default": "http://localhost:4253",
+      "placeholder": "http://localhost:4253"
+    },
+    {
+      "name": "apiToken",
+      "type": "password",
+      "required": false,
+      "title": "API Token",
+      "description": "Halero API token. Needed for API commands, not for Open Halero."
+    }
+  ],
+  "scripts": {
+    "dev": "ray develop",
+    "build": "ray build -e dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@halero/server": "workspace:*",
+    "@raycast/api": "^1.104.21",
+    "@raycast/utils": "^2.2.7",
+    "@trpc/client": "^11.18.0",
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7",
+    "typescript": "^6.0.3"
+  }
+}
