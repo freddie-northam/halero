@@ -16,6 +16,8 @@ describe("calendarEventSatelliteSchema", () => {
     status: "confirmed",
     recurringEventId: null,
     originalStartTime: null,
+    notes: null,
+    url: null,
   };
 
   test("parses a valid satellite payload", () => {
@@ -46,6 +48,30 @@ describe("calendarEventSatelliteSchema", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  test("parses populated notes and url", () => {
+    const withDetails: CalendarEventSatellite = {
+      ...satellite,
+      notes: "Bring the slide deck",
+      url: "https://meet.example.com/room",
+    };
+
+    expect(calendarEventSatelliteSchema.parse(withDetails)).toEqual(
+      withDetails,
+    );
+  });
+
+  test("rejects a payload missing notes or url", () => {
+    const { notes: _droppedNotes, ...withoutNotes } = satellite;
+    const { url: _droppedUrl, ...withoutUrl } = satellite;
+
+    expect(calendarEventSatelliteSchema.safeParse(withoutNotes).success).toBe(
+      false,
+    );
+    expect(calendarEventSatelliteSchema.safeParse(withoutUrl).success).toBe(
+      false,
+    );
   });
 });
 

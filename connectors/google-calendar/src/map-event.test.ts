@@ -50,6 +50,64 @@ describe("mapGoogleEvent", () => {
     expect(mapped.raw).toMatchObject({ id: "evt-timed-1" });
   });
 
+  test("maps the full description to notes, separately from the truncated snippet", () => {
+    const mapped = expectUpsert(
+      mapGoogleEvent(
+        timedEvent({ description: "x".repeat(500) }),
+        "primary",
+        HOME_TZ,
+      ),
+    );
+
+    expect(mapped.satellite?.notes).toBe("x".repeat(500));
+    expect(mapped.spine.snippet).toBe("x".repeat(280));
+  });
+
+  test("stores null notes when there is no description", () => {
+    const mapped = expectUpsert(
+      mapGoogleEvent(
+        timedEvent({ description: undefined }),
+        "primary",
+        HOME_TZ,
+      ),
+    );
+
+    expect(mapped.satellite?.notes).toBeNull();
+  });
+
+  test("prefers the hangout link over the event's own page for url", () => {
+    const mapped = expectUpsert(
+      mapGoogleEvent(
+        timedEvent({
+          hangoutLink: "https://meet.google.com/abc-defg-hij",
+          htmlLink: "https://calendar.google.com/event?eid=abc",
+        }),
+        "primary",
+        HOME_TZ,
+      ),
+    );
+
+    expect(mapped.satellite?.url).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  test("falls back to the event's own page when there is no hangout link", () => {
+    const mapped = expectUpsert(
+      mapGoogleEvent(
+        timedEvent({ htmlLink: "https://calendar.google.com/event?eid=abc" }),
+        "primary",
+        HOME_TZ,
+      ),
+    );
+
+    expect(mapped.satellite?.url).toBe("https://calendar.google.com/event?eid=abc");
+  });
+
+  test("stores null url when there is neither a hangout link nor a page", () => {
+    const mapped = expectUpsert(mapGoogleEvent(timedEvent(), "primary", HOME_TZ));
+
+    expect(mapped.satellite?.url).toBeNull();
+  });
+
   test("maps an all-day event, preserving Google's exclusive end date", () => {
     const mapped = expectUpsert(
       mapGoogleEvent(
