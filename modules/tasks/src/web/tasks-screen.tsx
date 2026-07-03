@@ -1,165 +1,113 @@
-// The tasks page: quick capture at the top, Open/Done/All filter tabs,
-// and a dense row list. Data arrives through the narrow TasksApi seam
-// the host registry wires (and wraps with cache invalidation); the
-// overdue tint compares against the server-computed today, so the
-// client does no timezone math anywhere.
+// The tasks page: a Board/List switcher (URL-driven, board default) over
+// either the Kanban board or the due-date triage list, plus a detail
+// sheet for editing a card. Data arrives through the narrow TasksApi
+// seam the host registry wires (and wraps with cache invalidation); the
+// overdue tint and the board's "today" always compare against the
+// server-computed date, so the client does no timezone math anywhere.
 
-import {
-  Alert,
-  AlertDescription,
-  Loader2,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@halero/ui";
+import { Alert, AlertDescription, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
-import type { Task, TaskFilter } from "../contract";
+import type { Task } from "../contract";
 import type { TasksApi } from "./api";
-import { QuickAddForm } from "./components/quick-add-form";
-import { TaskRow } from "./components/task-row";
-import { tasksListKey, tasksTodayKey } from "./queries";
+import { TaskDetailSheet } from "./components/task-detail-sheet";
+import { TasksViewSwitcher } from "./components/view-switcher";
+import {
+  normalizeTasksSearch,
+  type TasksSearch,
+  type TasksView,
+} from "./helpers/board-search";
+import { tasksBoardKey } from "./queries";
 import { readableError } from "./readable-error";
+import { BoardView } from "./views/board-view";
+import { ListView } from "./views/list-view";
 
-const EMPTY_LINES: Record<TaskFilter, string> = {
-  todo: "No open tasks.",
-  done: "No completed tasks.",
-  all: "No tasks yet.",
-};
+/**
+ * Module pages mount into the host's route tree dynamically, so the
+ * host's literal route types cannot know /tasks at compile time; the
+ * narrow structural signature keeps navigation typed on the module side
+ * (the calendar screen's pattern).
+ */
+type TasksNavigate = (options: {
+  readonly to: "/tasks";
+  readonly search: TasksSearch;
+}) => Promise<void>;
 
-const isTaskFilter = (value: string): value is TaskFilter =>
-  value === "todo" || value === "done" || value === "all";
-
-const FilterTabs = ({
-  filter,
-  onFilterChange,
+const BoardBody = ({
+  api,
+  onOpenTask,
 }: {
-  readonly filter: TaskFilter;
-  readonly onFilterChange: (filter: TaskFilter) => void;
-}): ReactElement => (
-  <Tabs
-    value={filter}
-    onValueChange={(value) => {
-      if (isTaskFilter(value)) {
-        onFilterChange(value);
-      }
-    }}
-  >
-    <TabsList aria-label="Task filter">
-      <TabsTrigger value="todo">Open</TabsTrigger>
-      <TabsTrigger value="done">Done</TabsTrigger>
-      <TabsTrigger value="all">All</TabsTrigger>
-    </TabsList>
-  </Tabs>
-);
-
-const TaskListBody = ({
-  tasks,
-  filter,
-  today,
-  onToggle,
-  onDelete,
-}: {
-  readonly tasks: readonly Task[];
-  readonly filter: TaskFilter;
-  readonly today: string;
-  readonly onToggle: (entityId: string) => void;
-  readonly onDelete: (entityId: string) => void;
+  readonly api: TasksApi;
+  readonly onOpenTask: (task: Task) => void;
 }): ReactElement => {
-  if (tasks.length === 0) {
+  const boardQuery = useQuery({
+    queryKey: tasksBoardKey,
+    queryFn: () => api.board(),
+  });
+  if (boardQuery.error !== null) {
     return (
-      <p className="mt-4 text-sm text-muted-foreground">
-        {EMPTY_LINES[filter]}
-      </p>
+      <Alert variant="destructive" className="mt-4">
+        <AlertDescription>{readableError(boardQuery.error)}</AlertDescription>
+      </Alert>
+    );
+  }
+  const board = boardQuery.data;
+  if (board === undefined) {
+    return (
+      <Loader2
+        aria-hidden="true"
+        className="mt-4 size-4 animate-spin text-muted-foreground"
+      />
     );
   }
   return (
-    <ul className="mt-3 flex flex-col gap-0.5">
-      {tasks.map((task) => (
-        <TaskRow
-          key={task.entityId}
-          task={task}
-          today={today}
-          onToggle={onToggle}
-          onDelete={onDelete}
-        />
-      ))}
-    </ul>
+    <BoardView
+      board={board}
+      onMove={(move) => void api.move(move)}
+      onCreate={async (input) => void (await api.create(input))}
+      onOpenTask={onOpenTask}
+    />
   );
 };
 
 /** Builds the page component around the host-wired tasks queries. */
 export const createTasksScreen = (api: TasksApi) => {
   const TasksScreen = (): ReactElement => {
-    const [filter, setFilter] = useState<TaskFilter>("todo");
-    const [actionError, setActionError] = useState<string | null>(null);
-    // The today anchor is the module's own cheap procedure; its `today`
-    // value is the only date the overdue comparison ever uses.
-    const todayQuery = useQuery({
-      queryKey: tasksTodayKey,
-      queryFn: () => api.today(),
-    });
-    const listQuery = useQuery({
-      queryKey: tasksListKey(filter),
-      queryFn: () => api.list(filter),
-    });
+    const rawSearch: unknown = useSearch({ strict: false });
+    const { view } = normalizeTasksSearch(rawSearch);
+    const navigate = useNavigate() as unknown as TasksNavigate;
+    const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-    const run = async (action: () => Promise<unknown>): Promise<void> => {
-      setActionError(null);
-      try {
-        await action();
-      } catch (error) {
-        setActionError(readableError(error));
-      }
-    };
-
-    const body = (): ReactElement => {
-      const error = todayQuery.error ?? listQuery.error;
-      if (error !== null) {
-        return (
-          <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{readableError(error)}</AlertDescription>
-          </Alert>
-        );
-      }
-      const today = todayQuery.data?.today;
-      const list = listQuery.data;
-      if (today === undefined || list === undefined) {
-        return (
-          <Loader2
-            aria-hidden="true"
-            className="mt-4 size-4 animate-spin text-muted-foreground"
-          />
-        );
-      }
-      return (
-        <TaskListBody
-          tasks={list.tasks}
-          filter={filter}
-          today={today}
-          onToggle={(entityId) => void run(() => api.toggle(entityId))}
-          onDelete={(entityId) => void run(() => api.delete(entityId))}
-        />
-      );
+    const setView = (next: TasksView): void => {
+      void navigate({ to: "/tasks", search: { view: next } });
     };
 
     return (
-      <div className="mx-auto w-full max-w-2xl px-6 py-6">
-        <h1 className="text-lg font-semibold tracking-tight">Tasks</h1>
-        <div className="mt-4">
-          <QuickAddForm
-            onCreate={async (input) => void (await api.create(input))}
-          />
+      <div className="mx-auto w-full max-w-5xl px-6 py-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-lg font-semibold tracking-tight">Tasks</h1>
+          <TasksViewSwitcher view={view} onViewChange={setView} />
         </div>
         <div className="mt-4">
-          <FilterTabs filter={filter} onFilterChange={setFilter} />
+          {view === "list" ? (
+            <ListView api={api} />
+          ) : (
+            <BoardBody api={api} onOpenTask={setSelectedTask} />
+          )}
         </div>
-        {actionError === null ? null : (
-          <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{actionError}</AlertDescription>
-          </Alert>
-        )}
-        {body()}
+        <TaskDetailSheet
+          task={selectedTask}
+          onClose={() => setSelectedTask(null)}
+          onSave={async (input) => {
+            await api.update(input);
+            setSelectedTask(null);
+          }}
+          onDelete={async (entityId) => {
+            await api.delete(entityId);
+            setSelectedTask(null);
+          }}
+        />
       </div>
     );
   };

@@ -21,7 +21,10 @@ const createdTask = (title: string): Task => ({
 const apiWithCreate = (create: TasksApi["create"]): TasksApi => ({
   list: () => Promise.reject(new Error("not under test")),
   today: () => Promise.reject(new Error("not under test")),
+  board: () => Promise.reject(new Error("not under test")),
   create,
+  update: () => Promise.reject(new Error("not under test")),
+  move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
 });

@@ -33,8 +33,24 @@ const makeStub = () => {
         tasks: [],
       });
     },
+    board: () => {
+      calls.push("board");
+      return Promise.resolve({
+        homeTimezone: "UTC",
+        today: "2025-07-02",
+        columns: { todo: [task], doing: [], done: [] },
+      });
+    },
     create: () => {
       calls.push("create");
+      return Promise.resolve(task);
+    },
+    update: () => {
+      calls.push("update");
+      return Promise.resolve(task);
+    },
+    move: () => {
+      calls.push("move");
       return Promise.resolve(task);
     },
     toggle: () => {
@@ -68,10 +84,14 @@ describe("withTasksInvalidation", () => {
 
     await wrapped.create({ title: "Buy milk" });
     expect(invalidated()).toBe(1);
-    await wrapped.toggle("t-1");
+    await wrapped.update({ entityId: "t-1", title: "Buy oat milk" });
     expect(invalidated()).toBe(2);
-    await wrapped.delete("t-1");
+    await wrapped.move({ entityId: "t-1", status: "doing", sortOrder: 1.5 });
     expect(invalidated()).toBe(3);
+    await wrapped.toggle("t-1");
+    expect(invalidated()).toBe(4);
+    await wrapped.delete("t-1");
+    expect(invalidated()).toBe(5);
   });
 
   test("passes reads through without touching the cache", async () => {
@@ -81,7 +101,8 @@ describe("withTasksInvalidation", () => {
 
     await wrapped.list("todo");
     await wrapped.today();
-    expect(calls).toEqual(["list", "today"]);
+    await wrapped.board();
+    expect(calls).toEqual(["list", "today", "board"]);
     expect(invalidated()).toBe(0);
   });
 

@@ -14,11 +14,14 @@ export const tasksListKey = (filter: TaskFilter) =>
 
 export const tasksTodayKey = [...tasksRootKey, "today"] as const;
 
+export const tasksBoardKey = [...tasksRootKey, "board"] as const;
+
 /**
  * Wraps a TasksApi so every successful mutation invalidates the module's
- * queries (list under every filter plus the today view) and resolves
- * only after active ones refetched. No optimistic updates in v0.2:
- * invalidate-and-refetch keeps every surface consistent.
+ * queries (list under every filter, the board, and the today view) and
+ * resolves only after active ones refetched. No optimistic updates:
+ * invalidate-and-refetch keeps every surface consistent, including the
+ * board after a drag.
  */
 export const withTasksInvalidation = (
   api: TasksApi,
@@ -30,8 +33,19 @@ export const withTasksInvalidation = (
   return {
     list: api.list,
     today: api.today,
+    board: api.board,
     create: async (input) => {
       const task = await api.create(input);
+      await invalidate();
+      return task;
+    },
+    update: async (input) => {
+      const task = await api.update(input);
+      await invalidate();
+      return task;
+    },
+    move: async (input) => {
+      const task = await api.move(input);
       await invalidate();
       return task;
     },

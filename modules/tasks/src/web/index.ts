@@ -7,11 +7,20 @@
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { TASK_ITEM_KIND } from "@halero/schemas";
 import type { TasksApi } from "./api";
+import { normalizeTasksSearch } from "./helpers/board-search";
 import { createNewTaskCommand } from "./new-task-command";
 import { createTasksScreen } from "./tasks-screen";
 
-export type { Task, TaskFilter, TaskList, TasksToday } from "../contract";
-export type { TasksApi } from "./api";
+export type {
+  Task,
+  TaskBoard,
+  TaskFilter,
+  TaskList,
+  TaskPriority,
+  TaskStatus,
+  TasksToday,
+} from "../contract";
+export type { TaskMoveInput, TasksApi, TaskUpdateInput } from "./api";
 export { withTasksInvalidation } from "./queries";
 export { createTasksTodaySection } from "./today-due-section";
 
@@ -19,7 +28,13 @@ export const createTasksWebModule = (api: TasksApi): WebModule =>
   defineWebModule({
     id: "tasks",
     nav: [{ label: "Tasks", path: "/tasks", order: 30 }],
-    pages: [{ path: "/tasks", component: createTasksScreen(api) }],
+    pages: [
+      {
+        path: "/tasks",
+        component: createTasksScreen(api),
+        validateSearch: normalizeTasksSearch,
+      },
+    ],
     entityLinks: [
       {
         kind: TASK_ITEM_KIND,

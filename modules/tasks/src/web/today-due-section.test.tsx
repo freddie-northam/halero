@@ -54,7 +54,10 @@ const makeStubApi = (initial: readonly Task[]) => {
         today: TODAY,
         tasks: tasks.filter((item) => item.status !== "done"),
       }),
+    board: () => Promise.reject(new Error("not under test")),
     create: () => Promise.reject(new Error("not under test")),
+    update: () => Promise.reject(new Error("not under test")),
+    move: () => Promise.reject(new Error("not under test")),
     toggle: (entityId) => {
       calls.push(entityId);
       tasks = tasks.map((item) =>
