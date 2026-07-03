@@ -84,11 +84,8 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
     (setup.error === null ? null : readableError(setup.error));
 
   return (
-    <AuthLayout
-      title="Welcome to Halero"
-      subtitle="Claim this instance by choosing a password."
-    >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+    <AuthLayout subtitle="Create a password to claim this instance.">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <PasswordInput
           id="password"
           label="Password"
@@ -154,7 +151,7 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
         <Button
           type="submit"
           disabled={setup.isPending}
-          className="mt-1 h-11 w-full rounded-xl text-[15px]"
+          className="mt-2 h-11 w-full rounded-lg bg-foreground text-[15px] text-background hover:bg-foreground/90"
         >
           {setup.isPending ? (
             <Loader2 aria-hidden="true" className="animate-spin" />

@@ -27,11 +27,8 @@ export const LoginScreen = ({ onSuccess }: LoginScreenProps): ReactElement => {
   };
 
   return (
-    <AuthLayout
-      title="Welcome back"
-      subtitle="Enter your password to continue."
-    >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+    <AuthLayout subtitle="Sign in to continue.">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <PasswordInput
           id="password"
           label="Password"
@@ -47,7 +44,7 @@ export const LoginScreen = ({ onSuccess }: LoginScreenProps): ReactElement => {
         <Button
           type="submit"
           disabled={login.isPending}
-          className="mt-1 h-11 w-full rounded-xl text-[15px]"
+          className="mt-2 h-11 w-full rounded-lg bg-foreground text-[15px] text-background hover:bg-foreground/90"
         >
           {login.isPending ? (
             <Loader2 aria-hidden="true" className="animate-spin" />
