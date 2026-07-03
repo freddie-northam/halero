@@ -15,7 +15,7 @@ import {
   within,
 } from "@testing-library/react";
 import { act } from "react";
-import type { GoogleStatus, HaleroApi } from "./lib/api";
+import type { HaleroApi } from "./lib/api";
 import { ApiProvider } from "./lib/api-context";
 import type { TrpcClient } from "./lib/trpc";
 import { buildTodaySections, buildWebModules } from "./registry";
@@ -104,22 +104,25 @@ const stubClient = {
   },
 } as unknown as TrpcClient;
 
-const googleStatus: GoogleStatus = {
-  clientConfigured: true,
-  httpsOk: true,
-  redirectUri: "https://halero.example.com/api/oauth/google/callback",
-  connection: null,
-};
-
 const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   systemStatus: () =>
     Promise.resolve({ needsSetup: false, authenticated: true }),
   setup: () => Promise.resolve(),
   login: () => Promise.resolve(),
   logout: () => Promise.resolve(),
-  googleStatus: () => Promise.resolve(googleStatus),
-  saveGoogleClient: () => Promise.resolve(),
-  syncGoogleNow: () =>
+  connectionsCatalog: () => Promise.resolve([]),
+  connectionStatus: () => Promise.resolve({ connection: null }),
+  connectionOauthConfig: () =>
+    Promise.resolve({
+      clientConfigured: false,
+      httpsOk: true,
+      redirectUri: "",
+    }),
+  saveOauthClient: () => Promise.resolve(),
+  connectApiKey: () =>
+    Promise.resolve({ connected: true as const, accountLabel: "" }),
+  disconnectConnection: () => Promise.resolve(),
+  syncConnection: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
   notificationSettings: () => Promise.resolve({ url: null }),
   saveNotifyUrl: () => Promise.resolve(),

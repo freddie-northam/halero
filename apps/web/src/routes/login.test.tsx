@@ -25,15 +25,19 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   setup: () => Promise.resolve(),
   login: () => Promise.resolve(),
   logout: () => Promise.resolve(),
-  googleStatus: () =>
+  connectionsCatalog: () => Promise.resolve([]),
+  connectionStatus: () => Promise.resolve({ connection: null }),
+  connectionOauthConfig: () =>
     Promise.resolve({
       clientConfigured: false,
       httpsOk: true,
-      redirectUri: "http://localhost:4253/api/oauth/google/callback",
-      connection: null,
+      redirectUri: "",
     }),
-  saveGoogleClient: () => Promise.resolve(),
-  syncGoogleNow: () =>
+  saveOauthClient: () => Promise.resolve(),
+  connectApiKey: () =>
+    Promise.resolve({ connected: true as const, accountLabel: "" }),
+  disconnectConnection: () => Promise.resolve(),
+  syncConnection: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),
   notificationSettings: () => Promise.resolve({ url: null }),
   saveNotifyUrl: () => Promise.resolve(),

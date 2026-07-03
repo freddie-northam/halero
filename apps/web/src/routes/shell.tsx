@@ -62,7 +62,10 @@ export const ShellScreen = ({
         logoutPending={logout.isPending}
       />
       <SidebarInset className="min-w-0">
-        <CommandBarSlot onSearchClick={() => setSearchOpen(true)} />
+        <CommandBarSlot
+          onSearchClick={() => setSearchOpen(true)}
+          onSettingsClick={() => onNavigate("/settings")}
+        />
         <div className="flex-1 overflow-auto">{children}</div>
       </SidebarInset>
       <CommandPalette

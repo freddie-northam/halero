@@ -21,7 +21,11 @@ import { readableError } from "./lib/errors";
 import { guardAuthenticated, guardEntry } from "./lib/guards";
 import { buildCommands, buildEntityLinks, buildNav } from "./registry";
 import { LoginScreen } from "./routes/login";
-import { SettingsScreen } from "./routes/settings";
+import {
+  isSettingsSection,
+  SettingsScreen,
+  type SettingsSection,
+} from "./routes/settings";
 import { SetupScreen } from "./routes/setup";
 import { ShellScreen } from "./routes/shell";
 
@@ -82,15 +86,34 @@ const useShellProps = (activePath: string) => {
   };
 };
 
-const SettingsRoute = (): ReactElement => {
-  const search = settingsRoute.useSearch();
+const SettingsBody = ({
+  section,
+  search,
+}: {
+  readonly section: SettingsSection;
+  readonly search: SettingsSearch;
+}): ReactElement => (
+  <ShellScreen {...useShellProps("/settings")}>
+    <SettingsScreen
+      section={section}
+      connected={search.connected ?? false}
+      errorCode={search.error ?? null}
+      errorConnector={search.connector ?? null}
+    />
+  </ShellScreen>
+);
+
+const SettingsIndexRoute = (): ReactElement => (
+  <SettingsBody section="profile" search={settingsRoute.useSearch()} />
+);
+
+const SettingsSectionRoute = (): ReactElement => {
+  const { section } = settingsSectionRoute.useParams();
   return (
-    <ShellScreen {...useShellProps("/settings")}>
-      <SettingsScreen
-        connected={search.connected ?? false}
-        errorCode={search.error ?? null}
-      />
-    </ShellScreen>
+    <SettingsBody
+      section={isSettingsSection(section) ? section : "profile"}
+      search={settingsSectionRoute.useSearch()}
+    />
   );
 };
 
@@ -134,10 +157,12 @@ interface SettingsSearch {
   /** Optional so plain links to /settings need no query string. */
   readonly connected?: boolean;
   readonly error?: string;
+  /** Which connector an OAuth callback error belongs to. */
+  readonly connector?: string;
 }
 
-// The OAuth callback lands here with ?connected=1 or ?error=<code>; anything
-// unexpected in the query string is dropped.
+// The OAuth callback lands on /settings/integrations with ?connected=1 or
+// ?error=<code>&connector=<id>; anything unexpected is dropped.
 const validateSettingsSearch = (
   search: Record<string, unknown>,
 ): SettingsSearch => ({
@@ -147,6 +172,9 @@ const validateSettingsSearch = (
   ...(typeof search.error === "string" && search.error !== ""
     ? { error: search.error }
     : {}),
+  ...(typeof search.connector === "string" && search.connector !== ""
+    ? { connector: search.connector }
+    : {}),
 });
 
 const settingsRoute = createRoute({
@@ -154,7 +182,15 @@ const settingsRoute = createRoute({
   path: "/settings",
   validateSearch: validateSettingsSearch,
   beforeLoad: ({ context }) => guardAuthenticated(context.api),
-  component: SettingsRoute,
+  component: SettingsIndexRoute,
+});
+
+const settingsSectionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/$section",
+  validateSearch: validateSettingsSearch,
+  beforeLoad: ({ context }) => guardAuthenticated(context.api),
+  component: SettingsSectionRoute,
 });
 
 /** Wraps a module page in the signed-in shell with its path active. */
@@ -194,6 +230,7 @@ export const createAppRouter = (
     loginRoute,
     setupRoute,
     settingsRoute,
+    settingsSectionRoute,
     ...moduleRoutes,
   ]);
   return createRouter({
