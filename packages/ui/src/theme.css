@@ -15,14 +15,14 @@
 @import "tw-animate-css";
 
 :root {
-  /* Warm-gray light palette with a single indigo accent. */
+  /* Warm-gray light palette with a single Halero coral accent (#FF5A5F). */
   --background: #fafaf9;
   --foreground: #1c1917;
   --card: #ffffff;
   --card-foreground: #1c1917;
   --popover: #ffffff;
   --popover-foreground: #1c1917;
-  --primary: #4f46e5;
+  --primary: #ff5a5f;
   --primary-foreground: #ffffff;
   --secondary: #f5f5f4;
   --secondary-foreground: #1c1917;
@@ -34,17 +34,17 @@
   --destructive-foreground: #ffffff;
   --border: #e7e5e4;
   --input: #e7e5e4;
-  --ring: #4f46e5;
+  --ring: #ff5a5f;
   /* 6px for controls, 10px for panels (rounded-md / rounded-xl). */
   --radius: 6px;
   --sidebar: #ffffff;
   --sidebar-foreground: #1c1917;
-  --sidebar-primary: #4f46e5;
+  --sidebar-primary: #ff5a5f;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f5f5f4;
   --sidebar-accent-foreground: #1c1917;
   --sidebar-border: #e7e5e4;
-  --sidebar-ring: #4f46e5;
+  --sidebar-ring: #ff5a5f;
 }
 
 @theme inline {
