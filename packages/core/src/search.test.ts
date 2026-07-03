@@ -10,6 +10,7 @@ import {
   searchEntities,
   toFtsQuery,
 } from "./search";
+import { HOSTILE_SEARCH_INPUTS } from "./testing";
 
 const openMigrated = (): Database => {
   const dir = mkdtempSync(join(tmpdir(), "halero-search-"));
@@ -35,30 +36,6 @@ const insertEntity = (
     [id, kind, title, snippet, occurredStart],
   );
 };
-
-const HOSTILE_INPUTS = [
-  '"foo" OR "bar',
-  "NEAR(a b)",
-  "title:secret",
-  "a AND b",
-  "-neg",
-  "(paren",
-  "star*mid",
-  '"',
-  '""""',
-  "🚀",
-  "AND",
-  "NOT NOT",
-  "^caret",
-  "col: (x OR y) NEAR/2 z",
-  "foo\u0000bar",
-  "\u0000",
-  "a \u0000 b",
-  "plan\u0000",
-  "\u0001spoof\u0002",
-  "   ",
-  "",
-];
 
 describe("toFtsQuery", () => {
   test("quotes plain words with a prefix star, joined by spaces", () => {
@@ -274,7 +251,7 @@ describe("searchEntities", () => {
     const sqlite = openMigrated();
     insertEntity(sqlite, "e1", "Planning session", "budget review");
 
-    for (const raw of HOSTILE_INPUTS) {
+    for (const raw of HOSTILE_SEARCH_INPUTS) {
       expect(() => searchEntities(sqlite, { query: raw })).not.toThrow();
     }
     sqlite.close();

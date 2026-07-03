@@ -1,3 +1,5 @@
+import { dateStringInZone } from "@halero/connector-sdk";
+import { searchEntities } from "@halero/core";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createSession, hashPassword } from "../auth";
@@ -33,6 +35,23 @@ const setupInput = z.object({
 
 const setBaseUrlInput = z.object({
   baseUrl: z.string().trim().refine(isHttpUrl, BASE_URL_MESSAGE),
+});
+
+const SEARCH_LIMIT_MESSAGE =
+  "Search can return between 1 and 50 results at a time.";
+
+const searchInput = z.object({
+  query: z
+    .string()
+    .trim()
+    .max(200, "Search terms are limited to 200 characters."),
+  kind: z.string().optional(),
+  limit: z
+    .number()
+    .int(SEARCH_LIMIT_MESSAGE)
+    .min(1, SEARCH_LIMIT_MESSAGE)
+    .max(50, SEARCH_LIMIT_MESSAGE)
+    .optional(),
 });
 
 const setupAlreadyCompleted = (): TRPCError =>
@@ -76,6 +95,22 @@ export const systemRouter = router({
   baseUrl: protectedProcedure.query(({ ctx }) => ({
     url: resolveBaseUrl(ctx.db, ctx.config).toString(),
   })),
+
+  search: protectedProcedure.input(searchInput).query(({ ctx, input }) => {
+    // Dates are derived here in the home timezone so the client never
+    // does timezone math; a hit with no occurred time has a null date.
+    const homeTimezone = getSetting(ctx.db, "home_timezone") ?? "UTC";
+    const hits = searchEntities(ctx.sqlite, input);
+    return {
+      results: hits.map((hit) => ({
+        ...hit,
+        occurredDate:
+          hit.occurredStart === null
+            ? null
+            : dateStringInZone(hit.occurredStart, homeTimezone),
+      })),
+    };
+  }),
 
   setBaseUrl: protectedProcedure
     .input(setBaseUrlInput)
