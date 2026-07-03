@@ -6,7 +6,7 @@
 
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
 // indicator; the chevrons drive prev/next navigation; Pencil is the
-// edit affordance (opens the task detail sheet); Repeat marks recurring
+// edit affordance (opens the task detail dialog); Repeat marks recurring
 // calendar items; StickyNote marks tasks carrying notes; X is the inline
 // delete/dismiss affordance.
 export {

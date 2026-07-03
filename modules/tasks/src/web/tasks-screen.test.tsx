@@ -407,7 +407,7 @@ test("a garbage ?view= falls back to the board", async () => {
   expect(await view.findByText("Chase invoice")).toBeTruthy();
 });
 
-test("clicking a card opens the detail sheet without dragging", async () => {
+test("clicking a card opens the detail dialog without dragging", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const title = await view.findByText("Water plants");
@@ -422,7 +422,7 @@ test("clicking a card opens the detail sheet without dragging", async () => {
   );
 });
 
-test("the card's Edit button opens the detail sheet (keyboard/SR path)", async () => {
+test("the card's Edit button opens the detail dialog (keyboard/SR path)", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   await view.findByText("Water plants");
@@ -430,14 +430,14 @@ test("the card's Edit button opens the detail sheet (keyboard/SR path)", async (
   // The card's own Space/Enter drive the dnd keyboard sensor, so this
   // explicit button is how keyboard and screen-reader users reach the
   // editor. Activating it (what Enter/Space on the focused button do)
-  // opens the sheet.
+  // opens the dialog.
   fireEvent.click(view.getByRole("button", { name: "Edit Water plants" }));
 
   expect(await view.findByText("Edit task")).toBeTruthy();
   expect(view.getByLabelText("Title")).toHaveProperty("value", "Water plants");
 });
 
-test("the list row's Edit button opens the detail sheet", async () => {
+test("the list row's Edit button opens the detail dialog", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api, "/tasks?view=list");
   await view.findByText("Chase invoice");
@@ -470,7 +470,7 @@ test("saving a priority change calls update with the task's priority", async () 
   expect(view.queryByText("Edit task")).toBeNull();
 });
 
-test("adding a tag in the sheet saves it in the tags list", async () => {
+test("adding a tag in the dialog saves it in the tags list", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -493,7 +493,7 @@ test("adding a tag in the sheet saves it in the tags list", async () => {
   });
 });
 
-test("setting the estimate in the sheet saves it as whole minutes", async () => {
+test("setting the estimate in the dialog saves it as whole minutes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -515,7 +515,7 @@ test("setting the estimate in the sheet saves it as whole minutes", async () => 
   });
 });
 
-test("the sheet shows the running logged total and a log-time control adds to it", async () => {
+test("the dialog shows the running logged total and a log-time control adds to it", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -537,7 +537,7 @@ test("the sheet shows the running logged total and a log-time control adds to it
 
   expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 50 }]);
   expect(await dialog.findByText("Logged 50m")).toBeTruthy();
-  // Unlike Save/Delete, logging time keeps the sheet open.
+  // Unlike Save/Delete, logging time keeps the dialog open.
   expect(view.getByText("Edit task")).toBeTruthy();
 });
 
@@ -581,7 +581,7 @@ test("logging zero minutes is rejected readably without calling the api", async 
   ).toBeTruthy();
 });
 
-test("a failed log-time surfaces a readable error and keeps the sheet open", async () => {
+test("a failed log-time surfaces a readable error and keeps the dialog open", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const failing: TasksApi = {
     ...api,
@@ -608,7 +608,7 @@ test("a failed log-time surfaces a readable error and keeps the sheet open", asy
   expect(view.getByText("Edit task")).toBeTruthy();
 });
 
-test("picking a due date in the sheet saves it", async () => {
+test("picking a due date in the dialog saves it", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Chase invoice");
@@ -617,7 +617,7 @@ test("picking a due date in the sheet saves it", async () => {
   });
   await view.findByText("Edit task");
   // The board's own To do quick-add also has a "Due date" picker behind
-  // the sheet, so the query is scoped to the dialog to disambiguate.
+  // the dialog, so the query is scoped to the dialog to disambiguate.
   const dialog = within(view.getByRole("dialog"));
 
   await act(async () => {
@@ -639,7 +639,7 @@ test("picking a due date in the sheet saves it", async () => {
   });
 });
 
-test("deleting from the sheet calls delete and closes", async () => {
+test("deleting from the dialog calls delete and closes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -678,7 +678,7 @@ test("a failed delete surfaces a readable error instead of closing", async () =>
     fireEvent.click(view.getByRole("button", { name: "Delete" }));
   });
 
-  // The sheet stays open with the server's readable message.
+  // The dialog stays open with the server's readable message.
   expect(
     await view.findByText("You need to sign in before doing that."),
   ).toBeTruthy();
