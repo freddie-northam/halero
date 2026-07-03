@@ -10,7 +10,9 @@ mock.module("@raycast/api", () => ({
   }),
 }));
 
-const { authHeaders, createHaleroClient, getPrefs } = await import("./api");
+const { authHeaders, createHaleroClient, getPrefs, hasApiToken } = await import(
+  "./api"
+);
 
 describe("authHeaders", () => {
   test("includes the bearer header only when a token is set", () => {
@@ -34,6 +36,16 @@ describe("createHaleroClient", () => {
       apiToken: "secret-token",
     });
     expect(client).toBeDefined();
+  });
+});
+
+describe("hasApiToken", () => {
+  test("is true only for a non-blank token", () => {
+    const baseUrl = "http://localhost:4253";
+    expect(hasApiToken({ baseUrl, apiToken: "secret-token" })).toBe(true);
+    expect(hasApiToken({ baseUrl })).toBe(false);
+    expect(hasApiToken({ baseUrl, apiToken: "" })).toBe(false);
+    expect(hasApiToken({ baseUrl, apiToken: "   " })).toBe(false);
   });
 });
 

@@ -14,6 +14,11 @@ export type HaleroPrefs = {
 
 export const getPrefs = (): HaleroPrefs => getPreferenceValues<HaleroPrefs>();
 
+/** The API commands need a token; Open Halero works without one. A
+ * whitespace-only token counts as missing, matching the server's trim. */
+export const hasApiToken = (prefs: HaleroPrefs): boolean =>
+  prefs.apiToken !== undefined && prefs.apiToken.trim() !== "";
+
 export const authHeaders = (apiToken?: string): Record<string, string> =>
   apiToken ? { Authorization: `Bearer ${apiToken}` } : {};
 
