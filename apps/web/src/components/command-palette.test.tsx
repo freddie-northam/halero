@@ -1,4 +1,5 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
+import type { WebModule } from "@halero/module-sdk/web";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
@@ -37,31 +38,46 @@ afterAll(async () => {
 const HOME_TZ = "Europe/London";
 const TODAY = "2025-07-02";
 
+type CreateTaskStub = (input: {
+  readonly title: string;
+  readonly dueDate?: string;
+}) => Promise<unknown>;
+
+const createdTask = (title: string) => ({
+  entityId: "t-new",
+  title,
+  status: "open",
+  dueDate: null,
+  notes: null,
+  completedAt: null,
+});
+
 // The shell mounts the Today page on "/", so the wiring stubs the
 // calendar and tasks procedures its sections reach (home-route test
-// pattern).
-const stubClient = {
-  modules: {
-    calendar: {
-      today: {
-        query: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
+// pattern). Quick-capture tests hand in their own create stub.
+const buildStubClient = (createTask: CreateTaskStub): TrpcClient =>
+  ({
+    modules: {
+      calendar: {
+        today: {
+          query: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
+        },
+        range: {
+          query: () => Promise.resolve({ homeTimezone: HOME_TZ, days: [] }),
+        },
       },
-      range: {
-        query: () => Promise.resolve({ homeTimezone: HOME_TZ, days: [] }),
+      tasks: {
+        list: { query: () => Promise.resolve({ tasks: [] }) },
+        today: {
+          query: () =>
+            Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY, tasks: [] }),
+        },
+        create: { mutate: createTask },
+        toggle: { mutate: () => Promise.reject(new Error("not under test")) },
+        delete: { mutate: () => Promise.reject(new Error("not under test")) },
       },
     },
-    tasks: {
-      list: { query: () => Promise.resolve({ tasks: [] }) },
-      today: {
-        query: () =>
-          Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY, tasks: [] }),
-      },
-      create: { mutate: () => Promise.reject(new Error("not under test")) },
-      toggle: { mutate: () => Promise.reject(new Error("not under test")) },
-      delete: { mutate: () => Promise.reject(new Error("not under test")) },
-    },
-  },
-} as unknown as TrpcClient;
+  }) as unknown as TrpcClient;
 
 const googleStatus: GoogleStatus = {
   clientConfigured: true,
@@ -100,9 +116,17 @@ const eventHit = (overrides: Partial<SearchResult> = {}): SearchResult => ({
   ...overrides,
 });
 
+interface RenderAppOptions {
+  /** Backs the tasks create procedure for quick-capture tests. */
+  readonly createTask?: CreateTaskStub;
+  /** Extra modules appended after the shipped ones (probe commands). */
+  readonly extraModules?: readonly WebModule[];
+}
+
 /** Renders the whole app so the palette runs on its real boot wiring. */
 const renderApp = async (
   results: readonly SearchResult[] | (() => Promise<readonly SearchResult[]>),
+  options: RenderAppOptions = {},
 ) => {
   const calls: string[] = [];
   const api = stubApi({
@@ -113,10 +137,16 @@ const renderApp = async (
         : Promise.resolve(results);
     },
   });
+  const stubClient = buildStubClient(
+    options.createTask ?? (() => Promise.reject(new Error("not under test"))),
+  );
   const queryClient = new QueryClient();
   const router = createAppRouter(
     api,
-    buildWebModules(stubClient, api, queryClient),
+    [
+      ...buildWebModules(stubClient, api, queryClient),
+      ...(options.extraModules ?? []),
+    ],
     createMemoryHistory({ initialEntries: ["/"] }),
   );
   await router.load();
@@ -276,7 +306,8 @@ test("a kind without a registered link renders non-interactive", async () => {
   const row = title.closest("[cmdk-item]");
   expect(row?.getAttribute("aria-disabled")).toBe("true");
 
-  // Enter has nothing selectable: no navigation, palette stays open.
+  // Enter cannot select the disabled hit; it falls through to the
+  // quick-capture command row, so the hit never navigates anywhere.
   await pressEnter(input);
   await settleDebounce();
   expect(router.state.location.pathname).toBe("/");
@@ -316,4 +347,146 @@ test("a search with no hits shows the no-matches line", async () => {
   typeQuery(input, "nothing");
 
   expect(await view.findByText("No matches.")).toBeTruthy();
+});
+
+test("the idle palette offers quick capture alongside the hint", async () => {
+  const { view } = await renderApp([]);
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  await view.findByPlaceholderText(PLACEHOLDER);
+
+  expect(await view.findByText("New task...")).toBeTruthy();
+  expect(view.getByText("Commands")).toBeTruthy();
+  expect(view.getByText("Type to search")).toBeTruthy();
+  // Only the tasks module contributes a command: exactly one row, so
+  // today and calendar (command-less modules) contribute nothing.
+  expect(view.baseElement.querySelectorAll("[cmdk-item]").length).toBe(1);
+});
+
+test("typing relabels quick capture with the trimmed pending title", async () => {
+  const { view } = await renderApp([]);
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "  buy milk ");
+
+  expect(await view.findByText("New task: buy milk")).toBeTruthy();
+  expect(view.queryByText("New task...")).toBeNull();
+});
+
+test("Enter on quick capture creates the task, closes, and lands on /tasks", async () => {
+  const created: Array<{ title: string; dueDate?: string }> = [];
+  const { view, router } = await renderApp([], {
+    createTask: (input) => {
+      created.push(input);
+      return Promise.resolve(createdTask(input.title));
+    },
+  });
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "  buy milk ");
+  await view.findByText("New task: buy milk");
+
+  await pressEnter(input);
+
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe("/tasks");
+  });
+  // The contribution trimmed the palette's raw input before creating.
+  expect(created).toEqual([{ title: "buy milk" }]);
+  await waitFor(() =>
+    expect(view.queryByPlaceholderText(PLACEHOLDER)).toBeNull(),
+  );
+});
+
+test("a command receives the palette's raw input untrimmed", async () => {
+  const received: string[] = [];
+  const probe: WebModule = {
+    id: "probe",
+    commands: [
+      {
+        id: "probe.echo",
+        describe: () => "Echo input",
+        run: (input) => {
+          received.push(input);
+          return Promise.resolve({ message: "Echoed." });
+        },
+      },
+    ],
+  };
+  const { view, router } = await renderApp([], { extraModules: [probe] });
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "  keep spaces  ");
+  await view.findByText("Echo input");
+  // Settle the debounced search inside act before driving selection.
+  await settleDebounce();
+
+  // Quick capture sits first; ArrowDown moves onto the probe row.
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyUp(input, { key: "ArrowDown" });
+  await pressEnter(input);
+
+  await waitFor(() => expect(received).toEqual(["  keep spaces  "]));
+  // Success without navigateTo: the palette closes and stays put.
+  await waitFor(() =>
+    expect(view.queryByPlaceholderText(PLACEHOLDER)).toBeNull(),
+  );
+  expect(router.state.location.pathname).toBe("/");
+});
+
+test("a hanging command shows the pending row and keeps the palette open", async () => {
+  const { view } = await renderApp([], {
+    // Never settles: the palette must sit in the pending state.
+    createTask: () => new Promise(() => undefined),
+  });
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+  typeQuery(input, "slow task");
+  await view.findByText("New task: slow task");
+  // Let the debounced search settle so the hanging create is the only
+  // thing outstanding once Enter runs the command.
+  await settleDebounce();
+
+  await pressEnter(input);
+
+  expect(await view.findByLabelText("Running...")).toBeTruthy();
+  await settleDebounce();
+  // Still pending after time passes: open, spinner up, input intact.
+  expect(view.getByLabelText("Running...")).toBeTruthy();
+  expect(view.getByPlaceholderText(PLACEHOLDER)).toBeTruthy();
+  expect((input as HTMLInputElement).value).toBe("slow task");
+});
+
+test("a rejected command keeps the palette open with the error and input", async () => {
+  const created: string[] = [];
+  const { view, router } = await renderApp([], {
+    createTask: (input) => {
+      created.push(input.title);
+      return Promise.resolve(createdTask(input.title));
+    },
+  });
+  fireEvent.keyDown(window, { key: "k", metaKey: true });
+  const input = await view.findByPlaceholderText(PLACEHOLDER);
+
+  // Whitespace-only input is still idle; quick capture reads bare.
+  typeQuery(input, "   ");
+  await view.findByText("New task...");
+  // Settle the (never-dispatched) debounce inside act before Enter.
+  await settleDebounce();
+  await pressEnter(input);
+
+  expect(await view.findByText("A task needs a title.")).toBeTruthy();
+  expect(view.getByPlaceholderText(PLACEHOLDER)).toBeTruthy();
+  expect((input as HTMLInputElement).value).toBe("   ");
+  expect(created).toEqual([]);
+  expect(router.state.location.pathname).toBe("/");
+
+  // The preserved input lets the user fix the title and retry.
+  typeQuery(input, "  buy milk ");
+  await view.findByText("New task: buy milk");
+  await pressEnter(input);
+
+  await waitFor(() => {
+    expect(router.state.location.pathname).toBe("/tasks");
+  });
+  expect(created).toEqual(["buy milk"]);
 });

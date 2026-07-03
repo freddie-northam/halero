@@ -9,6 +9,7 @@ import {
   createTodayAgendaSection,
 } from "@halero/module-calendar/web";
 import type {
+  CommandContribution,
   EntityLinkContribution,
   NavContribution,
   WebModule,
@@ -137,6 +138,39 @@ export const buildEntityLinks = (
     }
   }
   return links;
+};
+
+const duplicateCommandMessage = (
+  id: string,
+  owner: string,
+  claimant: string,
+): string =>
+  `The "${claimant}" module contributes the command "${id}", but the ` +
+  `"${owner}" module already contributes it. Each command id can ` +
+  "belong to exactly one module.";
+
+/**
+ * Palette commands in module order, validated like entity links: two
+ * modules claiming one command id is a build mistake and fails loudly
+ * at boot (createAppRouter builds this list at startup), before the
+ * palette can run an ambiguous command.
+ */
+export const buildCommands = (
+  modules: readonly WebModule[],
+): readonly CommandContribution[] => {
+  const owners = new Map<string, string>();
+  const commands: CommandContribution[] = [];
+  for (const module of modules) {
+    for (const command of module.commands ?? []) {
+      const owner = owners.get(command.id);
+      if (owner !== undefined) {
+        throw new Error(duplicateCommandMessage(command.id, owner, module.id));
+      }
+      owners.set(command.id, module.id);
+      commands.push(command);
+    }
+  }
+  return commands;
 };
 
 /** Full nav (core plus module contributions), sorted by order. */

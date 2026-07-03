@@ -1,4 +1,5 @@
 import type {
+  CommandContribution,
   EntityLink,
   EntityLinkContribution,
 } from "@halero/module-sdk/web";
@@ -23,7 +24,9 @@ export interface ShellScreenProps {
   readonly onNavigate: (path: string) => void;
   /** The entity-link registry built at boot, for the command palette. */
   readonly entityLinks: ReadonlyMap<string, EntityLinkContribution>;
-  /** Navigates to a search hit's link (path plus search params). */
+  /** Module commands built at boot, for the palette's Commands group. */
+  readonly commands: readonly CommandContribution[];
+  /** Navigates to a search hit's or command result's link. */
   readonly onOpenLink: (link: EntityLink) => void;
   /** The routed page; every route brings its own (Today owns "/"). */
   readonly children: ReactNode;
@@ -38,6 +41,7 @@ export const ShellScreen = ({
   activePath,
   onNavigate,
   entityLinks,
+  commands,
   onOpenLink,
   children,
 }: ShellScreenProps): ReactElement => {
@@ -65,6 +69,7 @@ export const ShellScreen = ({
         open={searchOpen}
         onOpenChange={setSearchOpen}
         entityLinks={entityLinks}
+        commands={commands}
         onOpenLink={onOpenLink}
       />
     </SidebarProvider>

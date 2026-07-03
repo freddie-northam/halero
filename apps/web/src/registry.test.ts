@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarApi } from "@halero/module-calendar/web";
-import type { EntityLinkContribution, WebModule } from "@halero/module-sdk/web";
+import type {
+  CommandContribution,
+  EntityLinkContribution,
+  WebModule,
+} from "@halero/module-sdk/web";
 import type { TasksApi } from "@halero/module-tasks/web";
 import { QueryClient } from "@tanstack/react-query";
 import { createMemoryHistory } from "@tanstack/react-router";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 import {
+  buildCommands,
   buildEntityLinks,
   buildNav,
   buildTasksApi,
@@ -181,6 +186,56 @@ describe("buildNav", () => {
     ]);
 
     expect(nav.map((entry) => entry.label)).toEqual(["Settings", "Late"]);
+  });
+});
+
+describe("buildCommands", () => {
+  const command = (id: string): CommandContribution => ({
+    id,
+    describe: () => "Do the thing",
+    run: () => Promise.resolve({ message: "Done." }),
+  });
+
+  test("collects only the tasks quick-capture command from the shipped modules", () => {
+    // Today and calendar contribute no commands; nothing of theirs leaks in.
+    const commands = buildCommands(modulesUnderTest());
+
+    expect(commands.map((entry) => entry.id)).toEqual(["tasks.new"]);
+  });
+
+  test("a module without commands contributes nothing", () => {
+    expect(buildCommands([{ id: "quiet" }])).toEqual([]);
+  });
+
+  test("rejects two modules contributing the same command id with a readable error", () => {
+    const modules: readonly WebModule[] = [
+      { id: "first", commands: [command("dup.run")] },
+      { id: "second", commands: [command("dup.run")] },
+    ];
+
+    expect(() => buildCommands(modules)).toThrow(
+      'The "second" module contributes the command "dup.run", but the ' +
+        '"first" module already contributes it. Each command id can ' +
+        "belong to exactly one module.",
+    );
+  });
+
+  test("a duplicate command id fails at the boot path, not on first use", () => {
+    // createAppRouter builds the command list in its context, so the
+    // same mistake buildCommands rejects above brings the app down at
+    // startup instead of running an ambiguous command later.
+    const modules: readonly WebModule[] = [
+      { id: "first", commands: [command("dup.run")] },
+      { id: "second", commands: [command("dup.run")] },
+    ];
+
+    expect(() =>
+      createAppRouter(
+        stubApi,
+        modules,
+        createMemoryHistory({ initialEntries: ["/"] }),
+      ),
+    ).toThrow(/already contributes it/);
   });
 });
 

@@ -36,6 +36,8 @@ function CommandDialog({
   className,
   showCloseButton = true,
   shouldFilter = true,
+  value,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
@@ -48,6 +50,14 @@ function CommandDialog({
    * off client-side filtering of the already-filtered results.
    */
   shouldFilter?: boolean;
+  /**
+   * Halero addition: cmdk's controlled selection, forwarded so a
+   * palette can re-aim the selection when async results land below
+   * rows that are already mounted (cmdk itself re-selects only when
+   * the search text changes).
+   */
+  value?: string;
+  onValueChange?: (value: string) => void;
 }) {
   return (
     <Dialog {...props}>
@@ -61,6 +71,8 @@ function CommandDialog({
       >
         <Command
           shouldFilter={shouldFilter}
+          value={value}
+          onValueChange={onValueChange}
           // Halero density: 32px input row, 16px icons and 6px item
           // padding on the 13px scale (h-12 input, size-5 icons and
           // py-3 items upstream), matching CommandInput/CommandItem.
