@@ -103,6 +103,25 @@ describe("computeDragMove", () => {
   test("returns null when the drop target resolves to no column", () => {
     expect(computeDragMove(columns, "t-1", "missing")).toBeNull();
   });
+
+  test("returns null when a card is dropped back onto itself", () => {
+    // dnd-kit reports over.id === active.id when the pointer never leaves
+    // the card's own slot; that must be a no-op, not an end-of-column move.
+    expect(computeDragMove(columns, "t-2", "t-2")).toBeNull();
+  });
+
+  test("returns null when a card is dropped in its current position", () => {
+    // t-2 sits immediately before t-3, so dropping it onto t-3 lands it
+    // exactly where it already is: no positional change, no move.
+    expect(computeDragMove(columns, "t-2", "t-3")).toBeNull();
+  });
+
+  test("returns null when the last card is dropped on its own column's empty area", () => {
+    // t-3 is already last in todo, so appending it to todo is a no-op.
+    expect(
+      computeDragMove(columns, "t-3", columnDroppableId("todo")),
+    ).toBeNull();
+  });
 });
 
 describe("createDragEndHandler", () => {
@@ -138,6 +157,18 @@ describe("createDragEndHandler", () => {
     );
 
     handler({ active: { id: "t-1" }, over: null });
+
+    expect(moves).toEqual([]);
+  });
+
+  test("does nothing when a card is dropped onto itself", () => {
+    const moves: ComputedMove[] = [];
+    const handler = createDragEndHandler(
+      () => columns,
+      (move) => moves.push(move),
+    );
+
+    handler({ active: { id: "t-1" }, over: { id: "t-1" } });
 
     expect(moves).toEqual([]);
   });

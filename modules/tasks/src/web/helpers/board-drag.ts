@@ -35,6 +35,13 @@ const statusFromDroppableId = (id: string): TaskStatus | null => {
  * at the end, or 1 to start an empty column. Every case stays strictly
  * between its neighbors, so repeated drops to the same spot never
  * collide with an existing row.
+ *
+ * Known limitation: repeatedly bisecting the same gap halves the
+ * available float precision each time, so after ~50 drops into one spot
+ * two neighbors could round to the same double. Server-side sort_order
+ * renormalization would fix that permanently and is out of scope here;
+ * in practice a column is never reordered that many times between the
+ * periodic re-seeds the board already does on create/move.
  */
 export const sortOrderBetween = (
   before: number | null,
@@ -76,12 +83,24 @@ export interface ComputedMove {
  * another card inserts just before it. The dragged card is excluded
  * from its own neighbor search, so reordering within a column works the
  * same way as crossing into another one.
+ *
+ * Returns null (a no-op, no api.move) when the drop does not actually
+ * change anything: dropped back onto its own card (dnd-kit's classic
+ * over.id === active.id when the pointer never left the slot), or landed
+ * in the same column at the same position it started in.
  */
 export const computeDragMove = (
   columns: BoardColumns,
   activeId: string,
   overId: string,
 ): ComputedMove | null => {
+  // Self-drop guard: over.id === active.id means the card never moved.
+  // It has to be caught here explicitly, not by the position check below,
+  // because filtering the active card out of its own siblings makes the
+  // over card unfindable and the drop falls through to an append.
+  if (activeId === overId) {
+    return null;
+  }
   const active = findTask(columns, activeId);
   if (active === null) {
     return null;
@@ -100,6 +119,17 @@ export const computeDragMove = (
       ? -1
       : siblings.findIndex((item) => item.entityId === overTask.entityId);
   const index = overIndex === -1 ? siblings.length : overIndex;
+  // Same-position guard: inserting the card at siblings-index `index`
+  // puts it at full-column position `index`; if that equals where it
+  // already sits in its own column, nothing changed, so skip the move.
+  if (targetStatus === active.status) {
+    const originalIndex = columns[active.status].findIndex(
+      (item) => item.entityId === activeId,
+    );
+    if (index === originalIndex) {
+      return null;
+    }
+  }
   const before = index > 0 ? (siblings[index - 1]?.sortOrder ?? null) : null;
   const after =
     index < siblings.length ? (siblings[index]?.sortOrder ?? null) : null;
