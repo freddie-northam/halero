@@ -196,7 +196,9 @@ describe("tokens.revoke", () => {
     );
 
     expect(res.status).toBe(404);
-    expect(await res.text()).toContain("token");
+    // Pin the readable message itself: a bare "token" match would also
+    // pass on an unknown-procedure 404, whose path contains "tokens".
+    expect(await res.text()).toContain("That API token could not be found.");
   });
 });
 

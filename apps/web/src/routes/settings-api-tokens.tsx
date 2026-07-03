@@ -53,6 +53,9 @@ const MintForm = ({
   const create = useMutation({
     mutationFn: (name: string) => api.createApiToken(name),
     onSuccess: onCreated,
+    // Drop the create response (the plaintext token) from the mutation
+    // cache the moment this form unmounts; show-once means show once.
+    gcTime: 0,
   });
   // Uncontrolled on purpose: the name only matters at submit.
   const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
