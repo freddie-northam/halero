@@ -22,6 +22,7 @@ const SIGN_IN_MESSAGE = "You need to sign in before exporting your data.";
 const EXPORTED_TABLES = [
   "entities",
   "calendar_events",
+  "tasks",
   "links",
   "entity_aliases",
   "connections",

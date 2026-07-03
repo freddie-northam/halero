@@ -31,6 +31,7 @@ interface ExportLine {
 const seedFullDatabase = (testApp: TestApp): void => {
   const { database, key, clock } = testApp;
   const db = database.db;
+  const { sqlite } = database;
   saveGoogleClient(db, key, {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: CLIENT_SECRET,
@@ -63,6 +64,16 @@ const seedFullDatabase = (testApp: TestApp): void => {
   db.insert(calendarEvents)
     .values({ entityId: "ent-1", calendarId: "primary" })
     .run();
+  // Raw insert: the Tasks module doesn't exist yet, this is storage
+  // only, so seed its satellite table directly through SQL.
+  sqlite.run(
+    `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+     VALUES ('ent-3', 'task', 1, 'user', ?, ?)`,
+    [clock.value, clock.value],
+  );
+  sqlite.run(
+    "INSERT INTO tasks (entity_id, status, due_date, notes) VALUES ('ent-3', 'open', '2026-07-10', 'Renew passport')",
+  );
   db.insert(links)
     .values({
       id: "link-1",
@@ -225,6 +236,7 @@ describe("GET /api/export redaction", () => {
       new Set([
         "entities",
         "calendar_events",
+        "tasks",
         "links",
         "entity_aliases",
         "connections",
