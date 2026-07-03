@@ -34,11 +34,40 @@ export interface PageContribution {
   readonly validateSearch?: SearchValidator;
 }
 
+/**
+ * The slice of a search hit a module needs to build a link: the entity's
+ * identity plus the home-timezone date the server already derived. The
+ * web app never does timezone math to route a hit.
+ */
+export interface EntityLinkHit {
+  readonly entityId: string;
+  readonly occurredDate: string | null;
+}
+
+/** An in-app destination: a route path plus optional search params. */
+export interface EntityLink {
+  readonly path: string;
+  readonly search?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Declares where entities of one kind live in the web app, so core
+ * surfaces like the search palette can navigate to a hit without core
+ * ever hardcoding module kinds.
+ */
+export interface EntityLinkContribution {
+  readonly kind: string;
+  /** Group heading for hits of this kind, e.g. "Event". */
+  readonly label: string;
+  readonly buildLink: (hit: EntityLinkHit) => EntityLink;
+}
+
 export interface WebModule {
   /** Must match the server module id, e.g. "calendar". */
   readonly id: string;
   readonly nav?: readonly NavContribution[];
   readonly pages?: readonly PageContribution[];
+  readonly entityLinks?: readonly EntityLinkContribution[];
 }
 
 /**

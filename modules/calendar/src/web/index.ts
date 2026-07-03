@@ -4,6 +4,7 @@
 // everything else is self-contained module code composing @halero/ui.
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
+import { CALENDAR_EVENT_KIND } from "@halero/schemas";
 import { type CalendarApi, createCalendarScreen } from "./calendar-screen";
 import { normalizeCalendarSearch } from "./helpers/calendar-search";
 
@@ -26,6 +27,21 @@ export const createCalendarWebModule = (api: CalendarApi): WebModule =>
         path: "/calendar",
         component: createCalendarScreen(api),
         validateSearch: normalizeCalendarSearch,
+      },
+    ],
+    entityLinks: [
+      {
+        kind: CALENDAR_EVENT_KIND,
+        label: "Event",
+        // A dated hit lands on the agenda anchored at its home-timezone
+        // date; an undated one falls back to today's agenda.
+        buildLink: (hit) => {
+          const search: Readonly<Record<string, string>> =
+            hit.occurredDate === null
+              ? { view: "agenda" }
+              : { view: "agenda", date: hit.occurredDate };
+          return { path: "/calendar", search };
+        },
       },
     ],
   });
