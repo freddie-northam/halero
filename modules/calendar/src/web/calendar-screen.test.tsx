@@ -14,7 +14,12 @@ import {
   render,
   within,
 } from "@testing-library/react";
-import type { AgendaDay, AgendaEvent, CalendarRange } from "../contract";
+import type {
+  AgendaDay,
+  AgendaEvent,
+  CalendarEventList,
+  CalendarRange,
+} from "../contract";
 import type { CalendarApi, CalendarEventInput } from "./api";
 import { createCalendarScreen } from "./calendar-screen";
 import { normalizeCalendarSearch } from "./helpers/calendar-search";
@@ -91,6 +96,11 @@ const fixtureDays: readonly AgendaDay[] = [
   },
 ];
 
+/** The flat, deduplicated feed the list view fetches instead of `range`. */
+const fixtureEvents: readonly AgendaEvent[] = fixtureDays.flatMap(
+  (day) => day.events,
+);
+
 /** Serves any requested window from the fixture, like the server would. */
 const fixtureApi: CalendarApi = {
   today: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
@@ -99,7 +109,11 @@ const fixtureApi: CalendarApi = {
       homeTimezone: HOME_TZ,
       days: fixtureDays.filter((day) => day.date >= from && day.date < to),
     }),
-  events: () => Promise.reject(new Error("not under test")),
+  events: () =>
+    Promise.resolve<CalendarEventList>({
+      homeTimezone: HOME_TZ,
+      events: fixtureEvents,
+    }),
   createEvent: () => Promise.reject(new Error("not under test")),
   updateEvent: () => Promise.reject(new Error("not under test")),
   deleteEvent: () => Promise.reject(new Error("not under test")),
@@ -371,6 +385,106 @@ test("deleting from a user event's edit modal calls deleteEvent and closes it", 
   });
 
   expect(deletes).toEqual(["ev-user"]);
+  // Flushes the dialog's exit-animation state update (Radix Presence),
+  // which lands a tick after the click's own act() settles.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByRole("dialog")).toBeNull();
+});
+
+test("the list view fetches via api.events and renders the table; range is not fetched", async () => {
+  let rangeCalls = 0;
+  let eventsCalls = 0;
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: (from, to) => {
+      rangeCalls += 1;
+      return fixtureApi.range(from, to);
+    },
+    events: (from, to) => {
+      eventsCalls += 1;
+      return fixtureApi.events(from, to);
+    },
+  };
+  const { view, router } = await renderCalendar(
+    api,
+    "/calendar?view=list&date=2025-07-02",
+  );
+
+  expect(await view.findByRole("table")).toBeTruthy();
+  expect(view.getByText("Standup")).toBeTruthy();
+  expect(searchOf(router)).toEqual({ view: "list", date: "2025-07-02" });
+  const listTab = view.getByRole("tab", { name: "List" });
+  expect(listTab.getAttribute("aria-selected")).toBe("true");
+  expect(rangeCalls).toBe(0);
+  expect(eventsCalls).toBeGreaterThan(0);
+});
+
+test("the other views never fetch the flat events feed", async () => {
+  let eventsCalls = 0;
+  const api: CalendarApi = {
+    ...fixtureApi,
+    events: (from, to) => {
+      eventsCalls += 1;
+      return fixtureApi.events(from, to);
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  expect(eventsCalls).toBe(0);
+});
+
+test("the list view's empty state renders when the feed has no events", async () => {
+  const emptyApi: CalendarApi = {
+    ...fixtureApi,
+    events: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
+  };
+  const { view } = await renderCalendar(emptyApi, "/calendar?view=list");
+
+  expect(await view.findByText("No events this month.")).toBeTruthy();
+});
+
+test("editing a user event from the list view opens the edit modal and saves", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    start: Date.UTC(2025, 6, 2, 8, 0, 0),
+    end: Date.UTC(2025, 6, 2, 9, 0, 0),
+  });
+  const calls: unknown[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    events: () =>
+      Promise.resolve<CalendarEventList>({
+        homeTimezone: HOME_TZ,
+        events: [{ ...editableEvent, editable: true }],
+      }),
+    updateEvent: (input) => {
+      calls.push(input);
+      return Promise.resolve({ ...editableEvent, editable: true });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=list&date=2025-07-02",
+  );
+
+  await act(async () => {
+    fireEvent.click(await view.findByRole("button", { name: /1:1 with Sam/ }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toHaveLength(1);
   // Flushes the dialog's exit-animation state update (Radix Presence),
   // which lands a tick after the click's own act() settles.
   await act(async () => {

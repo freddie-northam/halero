@@ -8,7 +8,11 @@ import { Alert, AlertDescription, Loader2 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
-import type { AgendaEvent, CalendarRange } from "../contract";
+import type {
+  AgendaEvent,
+  CalendarEventList,
+  CalendarRange,
+} from "../contract";
 import type { CalendarApi } from "./api";
 import { CalendarHeader } from "./components/calendar-header";
 import { EventModal, type EventModalTarget } from "./components/event-modal";
@@ -23,11 +27,12 @@ import { addDays, addMonths, mondayOf } from "./helpers/date-matrix";
 import { formatDayRangeLabel, formatMonthLabel } from "./helpers/format";
 import { readableError } from "./readable-error";
 import { AgendaView } from "./views/agenda-view";
+import { ListView } from "./views/list-view";
 import { MonthView } from "./views/month-view";
 import { WeekView } from "./views/week-view";
 
 const rangeLabel = (view: CalendarView, anchor: string): string => {
-  if (view === "month") {
+  if (view === "month" || view === "list") {
     return formatMonthLabel(anchor);
   }
   if (view === "week") {
@@ -37,13 +42,13 @@ const rangeLabel = (view: CalendarView, anchor: string): string => {
   return formatDayRangeLabel(anchor, addDays(anchor, AGENDA_DAYS - 1));
 };
 
-/** The anchor one step back or forward: a month or a week. */
+/** The anchor one step back or forward: a month/list steps by month, everything else by a week. */
 const steppedAnchor = (
   view: CalendarView,
   anchor: string,
   direction: 1 | -1,
 ): string =>
-  view === "month"
+  view === "month" || view === "list"
     ? addMonths(anchor, direction)
     : addDays(anchor, direction * 7);
 
@@ -124,9 +129,17 @@ interface CalendarData {
   /** The anchor date the views are built around. */
   readonly anchor: string | undefined;
   readonly range: CalendarRange | undefined;
+  /** The flat events feed, fetched only for the list view. */
+  readonly events: CalendarEventList | undefined;
   readonly error: Error | null;
 }
 
+/**
+ * The range (day-grouped) and events (flat) queries are mutually
+ * exclusive: every other view needs `range`, the list view needs
+ * `events`, and no view needs both, so gating each on `view` avoids
+ * fetching data nothing renders.
+ */
 const useCalendarData = (
   api: CalendarApi,
   view: CalendarView,
@@ -150,13 +163,24 @@ const useCalendarData = (
       }
       return api.range(dateWindow.from, dateWindow.to);
     },
-    enabled: dateWindow !== undefined,
+    enabled: view !== "list" && dateWindow !== undefined,
+  });
+  const eventsQuery = useQuery({
+    queryKey: ["calendar", "events", dateWindow?.from, dateWindow?.to],
+    queryFn: () => {
+      if (dateWindow === undefined) {
+        throw new Error("The calendar window is not ready yet.");
+      }
+      return api.events(dateWindow.from, dateWindow.to);
+    },
+    enabled: view === "list" && dateWindow !== undefined,
   });
   return {
     today,
     anchor,
     range: rangeQuery.data,
-    error: todayQuery.error ?? rangeQuery.error,
+    events: eventsQuery.data,
+    error: todayQuery.error ?? rangeQuery.error ?? eventsQuery.error,
   };
 };
 
@@ -166,7 +190,15 @@ export const createCalendarScreen = (api: CalendarApi) => {
     const rawSearch: unknown = useSearch({ strict: false });
     const { view, date } = normalizeCalendarSearch(rawSearch);
     const navigate = useNavigate() as unknown as CalendarNavigate;
-    const { today, anchor, range, error } = useCalendarData(api, view, date);
+    const { today, anchor, range, events, error } = useCalendarData(
+      api,
+      view,
+      date,
+    );
+    // The list view fetches `events` instead of `range`, so the modal's
+    // timezone comes from whichever feed the current view actually
+    // loaded (never both, per useCalendarData's mutually exclusive gate).
+    const homeTimezone = range?.homeTimezone ?? events?.homeTimezone;
     const [target, setTarget] = useState<EventModalTarget | null>(null);
 
     const setSearch = (next: CalendarSearch): void => {
@@ -188,7 +220,24 @@ export const createCalendarScreen = (api: CalendarApi) => {
           </Alert>
         );
       }
-      if (anchor === undefined || today === undefined || range === undefined) {
+      if (anchor === undefined || today === undefined) {
+        return <LoadingState />;
+      }
+      // List renders off the flat events feed, not the day-grouped range,
+      // so it gets its own ready-gate ahead of the range-dependent views.
+      if (view === "list") {
+        if (events === undefined) {
+          return <LoadingState />;
+        }
+        return (
+          <ListView
+            events={events.events}
+            timeZone={events.homeTimezone}
+            onEditEvent={onEditEvent}
+          />
+        );
+      }
+      if (range === undefined) {
         return <LoadingState />;
       }
       return (
@@ -229,10 +278,10 @@ export const createCalendarScreen = (api: CalendarApi) => {
           }}
         />
         <div className="mt-4">{body()}</div>
-        {range === undefined ? null : (
+        {homeTimezone === undefined ? null : (
           <EventModal
             target={target}
-            timeZone={range.homeTimezone}
+            timeZone={homeTimezone}
             onClose={() => setTarget(null)}
             onCreate={(input) =>
               api.createEvent(input).then(() => setTarget(null))
