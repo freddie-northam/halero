@@ -4,7 +4,7 @@
 // output, which this suite never exact-matches).
 
 import { describe, expect, test } from "bun:test";
-import { formatDateInZone, minutesOfDayInZone } from "./format";
+import { formatDateInZone, formatDuration, minutesOfDayInZone } from "./format";
 
 describe("minutesOfDayInZone", () => {
   test("returns an exact integer minute count for a known instant", () => {
@@ -40,5 +40,33 @@ describe("formatDateInZone", () => {
   test("zero-pads single-digit months and days", () => {
     const epochMs = Date.UTC(2025, 0, 5, 12, 0, 0);
     expect(formatDateInZone(epochMs, "UTC")).toBe("2025-01-05");
+  });
+});
+
+describe("formatDuration", () => {
+  test("renders whole hours with no leftover minutes", () => {
+    expect(formatDuration(0, 2 * 60 * 60 * 1000)).toBe("2h");
+  });
+
+  test("renders whole minutes under an hour", () => {
+    expect(formatDuration(0, 45 * 60 * 1000)).toBe("45m");
+  });
+
+  test("renders a mixed hours-and-minutes duration", () => {
+    expect(formatDuration(0, 90 * 60 * 1000)).toBe("1h 30m");
+  });
+
+  test("returns an empty string for a zero-length span", () => {
+    expect(formatDuration(1_000, 1_000)).toBe("");
+  });
+
+  test("returns an empty string for a negative span", () => {
+    expect(formatDuration(2_000, 1_000)).toBe("");
+  });
+
+  test("is pure epoch-ms arithmetic, independent of timezone", () => {
+    const start = Date.UTC(2025, 6, 2, 23, 0, 0);
+    const end = Date.UTC(2025, 6, 3, 0, 30, 0);
+    expect(formatDuration(start, end)).toBe("1h 30m");
   });
 });

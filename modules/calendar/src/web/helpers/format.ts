@@ -95,3 +95,24 @@ export const formatWeekdayShort = (date: string): string =>
 
 /** The day-of-month number for grid cells. */
 export const dayOfMonth = (date: string): number => Number(date.slice(8, 10));
+
+/**
+ * "1h 30m" / "45m" / "2h" for a timed event's [start, end) span: plain
+ * epoch-ms arithmetic, never timezone math. Zero or negative spans (and
+ * all-day events, which the caller never passes here) return "".
+ */
+export const formatDuration = (startMs: number, endMs: number): string => {
+  const totalMinutes = Math.floor((endMs - startMs) / 60_000);
+  if (totalMinutes <= 0) {
+    return "";
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${minutes}m`;
+};
