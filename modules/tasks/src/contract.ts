@@ -14,6 +14,9 @@ export interface Task {
   readonly completedAt: number | null;
 }
 
+/** The list procedure's filter values; "open" is the page default. */
+export type TaskFilter = "open" | "done" | "all";
+
 export interface TaskList {
   readonly tasks: readonly Task[];
 }
