@@ -39,7 +39,11 @@ describe("system.status", () => {
 
     const status = await readStatus(app);
 
-    expect(status).toEqual({ needsSetup: true, authenticated: false });
+    expect(status).toEqual({
+      needsSetup: true,
+      authenticated: false,
+      displayName: null,
+    });
   });
 
   test("reports configured and authenticated after setup", async () => {
@@ -49,7 +53,25 @@ describe("system.status", () => {
     const cookie = sessionCookieFrom(res);
     const status = await readStatus(app, cookie);
 
-    expect(status).toEqual({ needsSetup: false, authenticated: true });
+    expect(status).toEqual({
+      needsSetup: false,
+      authenticated: true,
+      displayName: null,
+    });
+  });
+
+  test("returns the trimmed name once signed in, and hides it otherwise", async () => {
+    const { app } = makeTestApp();
+
+    const res = await trpcMutation(app, "system.setup", {
+      ...setupInput,
+      name: "  Fred  ",
+    });
+    const cookie = sessionCookieFrom(res);
+
+    expect((await readStatus(app, cookie)).displayName).toBe("Fred");
+    // The owner's name is not exposed to an unauthenticated visitor.
+    expect((await readStatus(app)).displayName).toBeNull();
   });
 });
 
@@ -281,6 +303,7 @@ describe("protected procedures", () => {
     expect(await readStatus(app, cookie)).toEqual({
       needsSetup: false,
       authenticated: false,
+      displayName: null,
     });
   });
 
