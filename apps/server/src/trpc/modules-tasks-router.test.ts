@@ -548,6 +548,29 @@ describe("modules.tasks.create", () => {
       '"2026-02-31" is not a calendar date; expected YYYY-MM-DD.',
     );
   });
+
+  test("rejects a non-finite estimate readably instead of a raw zod array", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    // NaN/Infinity have no JSON literal, so JSON.stringify(input) would
+    // collapse them to null before this ever reaches validation; 1e400
+    // is valid JSON text that overflows to Infinity once parsed, so the
+    // raw body is built by hand instead of going through JSON.stringify.
+    const res = await testApp.app.fetch(
+      new Request("http://localhost/api/trpc/modules.tasks.create", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: `{"title":"Overflow me","estimateMinutes":1e400}`,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as TrpcErrorBody;
+    expect(json.error.message).toBe(
+      "The estimate must be a whole number of minutes, zero or more.",
+    );
+  });
 });
 
 describe("modules.tasks.list", () => {
@@ -993,6 +1016,28 @@ describe("modules.tasks.logTime", () => {
     );
   });
 
+  test("rejects a non-finite minute count readably instead of a raw zod array", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Draft" });
+
+    // See the sortOrder overflow test above for why this body is built
+    // by hand rather than through JSON.stringify.
+    const res = await testApp.app.fetch(
+      new Request("http://localhost/api/trpc/modules.tasks.logTime", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: `{"entityId":"${task.entityId}","minutes":1e400}`,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as TrpcErrorBody;
+    expect(json.error.message).toBe(
+      "Logged time must be a non-zero whole number of minutes.",
+    );
+  });
+
   test("bumps the spine updated_at", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
@@ -1256,6 +1301,28 @@ describe("modules.tasks.update", () => {
     );
 
     expect(message).toBe("Task titles are limited to 200 characters.");
+  });
+
+  test("rejects a non-finite estimate readably instead of a raw zod array", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Valid" });
+
+    // See the move test above for why this body is built by hand rather
+    // than through JSON.stringify.
+    const res = await testApp.app.fetch(
+      new Request("http://localhost/api/trpc/modules.tasks.update", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: `{"entityId":"${task.entityId}","estimateMinutes":1e400}`,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as TrpcErrorBody;
+    expect(json.error.message).toBe(
+      "The estimate must be a whole number of minutes, zero or more.",
+    );
   });
 
   test("rejects update and toggle on a tombstoned task as not found", async () => {

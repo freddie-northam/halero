@@ -43,13 +43,15 @@ const listInput = z
   })
   .optional();
 
+// Not z.number(): zod 4 rejects NaN/Infinity at the schema layer with a
+// raw issue dump, but the validated* helpers below need a chance to
+// reject them with a readable message instead.
+const numberInput = z.custom<number>((value) => typeof value === "number");
+
 const moveInput = z.object({
   entityId: z.string(),
   status: z.string(),
-  // Not z.number(): zod 4 rejects NaN/Infinity at the schema layer with
-  // a raw issue dump, but validatedSortOrder below needs a chance to
-  // reject them with a readable message instead.
-  sortOrder: z.custom<number>((value) => typeof value === "number"),
+  sortOrder: numberInput,
 });
 
 // Shape only; the handlers validate values themselves so rejections
@@ -60,7 +62,7 @@ const createInput = z.object({
   notes: z.string().optional(),
   priority: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  estimateMinutes: z.number().optional(),
+  estimateMinutes: numberInput.optional(),
 });
 
 const updateInput = z.object({
@@ -72,14 +74,14 @@ const updateInput = z.object({
   // No null variant: an empty array clears, mirroring the [] the read
   // side returns for an untagged task.
   tags: z.array(z.string()).optional(),
-  estimateMinutes: z.number().nullable().optional(),
+  estimateMinutes: numberInput.nullable().optional(),
 });
 
 const entityIdInput = z.object({ entityId: z.string() });
 
 const logTimeInput = z.object({
   entityId: z.string(),
-  minutes: z.number(),
+  minutes: numberInput,
 });
 
 const badRequest = (message: string): TRPCError =>
