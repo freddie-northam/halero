@@ -92,6 +92,8 @@ const CalendarBody = ({
         today={today}
         eventsByDate={eventsByDate}
         timeZone={range.homeTimezone}
+        onCreateOn={onCreateOn}
+        onEditEvent={onEditEvent}
       />
     );
   return (
