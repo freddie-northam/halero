@@ -48,7 +48,7 @@ const standup = {
 const dueTask: Task = {
   entityId: "t-1",
   title: "Pay invoices",
-  status: "open",
+  status: "todo",
   dueDate: TODAY,
   notes: null,
   completedAt: null,

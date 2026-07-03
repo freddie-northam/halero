@@ -11,7 +11,7 @@ import type {
 } from "@halero/module-sdk/server";
 import { TASK_ITEM_KIND } from "@halero/schemas";
 import { TRPCError } from "@trpc/server";
-import { and, asc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Task, TaskList, TasksToday } from "../contract";
 import { moduleRouter, protectedProcedure } from "./trpc";
@@ -23,7 +23,7 @@ const TITLE_MAX_LENGTH = 200;
 const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const listInput = z
-  .object({ filter: z.enum(["open", "done", "all"]).optional() })
+  .object({ filter: z.enum(["todo", "done", "all"]).optional() })
   .optional();
 
 // Shape only; the handlers validate values themselves so rejections
@@ -93,7 +93,7 @@ const taskColumns = {
 interface TaskRow {
   readonly entityId: string;
   readonly title: string | null;
-  readonly status: "open" | "done";
+  readonly status: "todo" | "doing" | "done";
   readonly dueDate: string | null;
   readonly notes: string | null;
   readonly completedAt: number | null;
@@ -172,14 +172,14 @@ const requireTaskSatellite = (
   return row;
 };
 
-const statusFilter = (filter: "open" | "done" | "all") =>
+const statusFilter = (filter: "todo" | "done" | "all") =>
   filter === "all" ? undefined : eq(tasks.status, filter);
 
 /** Live tasks, due-dated first (soonest first), then dateless; ties by
  * creation time. */
 const liveTasks = (
   db: ModuleDb,
-  filter: "open" | "done" | "all",
+  filter: "todo" | "done" | "all",
 ): readonly Task[] =>
   db
     .select(taskColumns)
@@ -200,7 +200,7 @@ const liveTasks = (
     .all()
     .map(toTask);
 
-/** Live open tasks due on or before the given date: overdue included. */
+/** Live non-done tasks due on or before the given date: overdue included. */
 const dueTasks = (db: ModuleDb, today: string): readonly Task[] =>
   db
     .select(taskColumns)
@@ -210,7 +210,7 @@ const dueTasks = (db: ModuleDb, today: string): readonly Task[] =>
       and(
         eq(entities.kind, TASK_ITEM_KIND),
         isNull(entities.deletedAt),
-        eq(tasks.status, "open"),
+        ne(tasks.status, "done"),
         isNotNull(tasks.dueDate),
         lte(tasks.dueDate, today),
       ),
@@ -245,7 +245,7 @@ const satellitePatch = (input: {
 export const tasksRouter = moduleRouter({
   list: protectedProcedure.input(listInput).query(({ ctx, input }) => {
     const list: TaskList = {
-      tasks: liveTasks(ctx.db, input?.filter ?? "open"),
+      tasks: liveTasks(ctx.db, input?.filter ?? "todo"),
     };
     return list;
   }),
@@ -269,7 +269,7 @@ export const tasksRouter = moduleRouter({
         .insert(tasks)
         .values({
           entityId,
-          status: "open",
+          status: "todo",
           dueDate: input.dueDate ?? null,
           completedAt: null,
           notes: input.notes ?? null,
@@ -308,14 +308,14 @@ export const tasksRouter = moduleRouter({
 
   toggle: protectedProcedure.input(entityIdInput).mutation(({ ctx, input }) => {
     const row = requireTaskSatellite(ctx.db, input.entityId);
-    const completing = row.status === "open";
+    const completing = row.status !== "done";
     return ctx.entities.withTransaction(() => {
       // Bumps updated_at and enforces the store's guards.
       ctx.entities.updateUserEntity(input.entityId, {});
       ctx.db
         .update(tasks)
         .set({
-          status: completing ? "done" : "open",
+          status: completing ? "done" : "todo",
           completedAt: completing ? ctx.now() : null,
         })
         .where(eq(tasks.entityId, input.entityId))

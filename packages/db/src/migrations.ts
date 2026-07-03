@@ -16,6 +16,9 @@ import migration0004Tasks from "../migrations/0004_tasks.sql" with {
 import migration0005ApiTokens from "../migrations/0005_api_tokens.sql" with {
   type: "text",
 };
+import migration0006TasksBoard from "../migrations/0006_tasks_board.sql" with {
+  type: "text",
+};
 
 export interface Migration {
   readonly name: string;
@@ -31,4 +34,5 @@ export const coreMigrations: readonly Migration[] = [
   { name: "0003_external_ref_streams", sql: migration0003ExternalRefStreams },
   { name: "0004_tasks", sql: migration0004Tasks },
   { name: "0005_api_tokens", sql: migration0005ApiTokens },
+  { name: "0006_tasks_board", sql: migration0006TasksBoard },
 ];

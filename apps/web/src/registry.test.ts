@@ -23,7 +23,7 @@ import { createAppRouter } from "./router";
 const stubTask = {
   entityId: "t-1",
   title: "Buy milk",
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,
@@ -148,7 +148,7 @@ describe("buildTasksApi", () => {
     }) as QueryClient["invalidateQueries"];
     const api = buildTasksApi(stubClient, queryClient);
 
-    const list = await api.list("open");
+    const list = await api.list("todo");
     const today = await api.today();
     expect(list.tasks.map((task) => task.title)).toEqual(["Buy milk"]);
     expect(today.today).toBe("2023-11-14");

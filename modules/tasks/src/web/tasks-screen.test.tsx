@@ -22,7 +22,7 @@ const TODAY = "2025-07-02";
 
 const task = (seed: Partial<Task> & { entityId: string }): Task => ({
   title: "Untitled",
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,
@@ -76,7 +76,7 @@ const makeStubApi = (initial: readonly Task[]) => {
         today: TODAY,
         tasks: tasks.filter(
           (item) =>
-            item.status === "open" &&
+            item.status !== "done" &&
             item.dueDate !== null &&
             item.dueDate <= TODAY,
         ),
@@ -97,7 +97,7 @@ const makeStubApi = (initial: readonly Task[]) => {
         item.entityId === entityId
           ? task({
               ...item,
-              status: item.status === "open" ? "done" : "open",
+              status: item.status === "done" ? "todo" : "done",
             })
           : item,
       );

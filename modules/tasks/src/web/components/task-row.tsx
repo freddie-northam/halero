@@ -33,7 +33,7 @@ const DueDate = ({
     return null;
   }
   const slipping =
-    task.status === "open" && isDueOrOverdue(task.dueDate, today);
+    task.status !== "done" && isDueOrOverdue(task.dueDate, today);
   return (
     <span
       className={cn(

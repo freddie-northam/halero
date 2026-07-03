@@ -22,13 +22,13 @@ import { tasksListKey, tasksTodayKey } from "./queries";
 import { readableError } from "./readable-error";
 
 const EMPTY_LINES: Record<TaskFilter, string> = {
-  open: "No open tasks.",
+  todo: "No open tasks.",
   done: "No completed tasks.",
   all: "No tasks yet.",
 };
 
 const isTaskFilter = (value: string): value is TaskFilter =>
-  value === "open" || value === "done" || value === "all";
+  value === "todo" || value === "done" || value === "all";
 
 const FilterTabs = ({
   filter,
@@ -46,7 +46,7 @@ const FilterTabs = ({
     }}
   >
     <TabsList aria-label="Task filter">
-      <TabsTrigger value="open">Open</TabsTrigger>
+      <TabsTrigger value="todo">Open</TabsTrigger>
       <TabsTrigger value="done">Done</TabsTrigger>
       <TabsTrigger value="all">All</TabsTrigger>
     </TabsList>
@@ -91,7 +91,7 @@ const TaskListBody = ({
 /** Builds the page component around the host-wired tasks queries. */
 export const createTasksScreen = (api: TasksApi) => {
   const TasksScreen = (): ReactElement => {
-    const [filter, setFilter] = useState<TaskFilter>("open");
+    const [filter, setFilter] = useState<TaskFilter>("todo");
     const [actionError, setActionError] = useState<string | null>(null);
     // The today anchor is the module's own cheap procedure; its `today`
     // value is the only date the overdue comparison ever uses.

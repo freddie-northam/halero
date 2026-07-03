@@ -7,7 +7,7 @@ import { withTasksInvalidation } from "./queries";
 const task: Task = {
   entityId: "t-1",
   title: "Buy milk",
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,
@@ -74,7 +74,7 @@ describe("withTasksInvalidation", () => {
     const { queryClient, invalidated } = makeSpyClient();
     const wrapped = withTasksInvalidation(api, queryClient);
 
-    await wrapped.list("open");
+    await wrapped.list("todo");
     await wrapped.today();
     expect(calls).toEqual(["list", "today"]);
     expect(invalidated()).toBe(0);

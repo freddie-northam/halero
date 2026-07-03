@@ -19,7 +19,7 @@ import {
 interface TaskData {
   readonly entityId: string;
   readonly title: string;
-  readonly status: "open" | "done";
+  readonly status: "todo" | "doing" | "done";
   readonly dueDate: string | null;
   readonly notes: string | null;
   readonly completedAt: number | null;
@@ -61,7 +61,7 @@ const createTask = async (
 const listTasks = async (
   app: TestApp["app"],
   cookie: string,
-  filter?: "open" | "done" | "all",
+  filter?: "todo" | "done" | "all",
 ): Promise<TaskListData> => {
   const procedure =
     filter === undefined
@@ -173,7 +173,7 @@ const seedConnectorTask = (testApp: TestApp, id: string): void => {
     .insert(tasks)
     .values({
       entityId: id,
-      status: "open",
+      status: "todo",
       dueDate: null,
       completedAt: null,
       notes: null,
@@ -220,7 +220,7 @@ describe("modules.tasks.create", () => {
     });
 
     expect(task.title).toBe("Ship the quarterly report");
-    expect(task.status).toBe("open");
+    expect(task.status).toBe("todo");
     expect(task.dueDate).toBe("2023-11-20");
     expect(task.notes).toBe("include the budget figures");
     expect(task.completedAt).toBeNull();
@@ -249,10 +249,15 @@ describe("modules.tasks.create", () => {
     const satellite = readSatelliteRow(testApp, task.entityId);
     expect(satellite).toEqual({
       entityId: task.entityId,
-      status: "open",
+      status: "todo",
+      priority: null,
+      tags: null,
       dueDate: "2023-06-20",
       completedAt: null,
       notes: null,
+      estimateMinutes: null,
+      loggedMinutes: 0,
+      sortOrder: 0,
     });
   });
 
@@ -316,7 +321,7 @@ describe("modules.tasks.create", () => {
 });
 
 describe("modules.tasks.list", () => {
-  test("filters open, done, and all, defaulting to open", async () => {
+  test("filters todo, done, and all, defaulting to todo", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     const openTask = await createTask(testApp.app, cookie, {
@@ -327,7 +332,7 @@ describe("modules.tasks.list", () => {
     });
     await toggleTask(testApp.app, cookie, doneTask.entityId);
 
-    const open = await listTasks(testApp.app, cookie, "open");
+    const open = await listTasks(testApp.app, cookie, "todo");
     const done = await listTasks(testApp.app, cookie, "done");
     const all = await listTasks(testApp.app, cookie, "all");
     const fallback = await listTasks(testApp.app, cookie);
@@ -388,7 +393,7 @@ describe("modules.tasks.list", () => {
 });
 
 describe("modules.tasks.toggle", () => {
-  test("open to done sets completed_at from the server clock and bumps updated_at", async () => {
+  test("todo to done sets completed_at from the server clock and bumps updated_at", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     const task = await createTask(testApp.app, cookie, { title: "Flip me" });
@@ -410,7 +415,7 @@ describe("modules.tasks.toggle", () => {
     );
   });
 
-  test("done back to open clears completed_at", async () => {
+  test("done back to todo clears completed_at", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     const task = await createTask(testApp.app, cookie, { title: "Flip twice" });
@@ -418,7 +423,7 @@ describe("modules.tasks.toggle", () => {
 
     const reopened = await toggleTask(testApp.app, cookie, task.entityId);
 
-    expect(reopened.status).toBe("open");
+    expect(reopened.status).toBe("todo");
     expect(reopened.completedAt).toBeNull();
     expect(readSatelliteRow(testApp, task.entityId)?.completedAt).toBeNull();
   });
@@ -617,7 +622,7 @@ describe("modules.tasks.delete", () => {
     const entity = readEntityRow(testApp, task.entityId);
     expect(entity).toBeDefined();
     expect(entity?.deletedAt).not.toBeNull();
-    expect(readSatelliteRow(testApp, task.entityId)?.status).toBe("open");
+    expect(readSatelliteRow(testApp, task.entityId)?.status).toBe("todo");
     expect((await listTasks(testApp.app, cookie, "all")).tasks).toHaveLength(0);
     expect((await readToday(testApp.app, cookie)).tasks).toHaveLength(0);
     expect(

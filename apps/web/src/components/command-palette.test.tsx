@@ -46,7 +46,7 @@ type CreateTaskStub = (input: {
 const createdTask = (title: string) => ({
   entityId: "t-new",
   title,
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,

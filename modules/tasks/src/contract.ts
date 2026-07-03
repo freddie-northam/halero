@@ -6,23 +6,24 @@
 export interface Task {
   readonly entityId: string;
   readonly title: string;
-  readonly status: "open" | "done";
+  /** Board statuses since migration 0006; legacy "open" became "todo". */
+  readonly status: "todo" | "doing" | "done";
   /** Calendar date ("YYYY-MM-DD") in the home timezone, or null. */
   readonly dueDate: string | null;
   readonly notes: string | null;
-  /** Epoch ms of the completing toggle; null while open. */
+  /** Epoch ms of the completing toggle; null while not done. */
   readonly completedAt: number | null;
 }
 
-/** The list procedure's filter values; "open" is the page default. */
-export type TaskFilter = "open" | "done" | "all";
+/** The list procedure's filter values; "todo" is the page default. */
+export type TaskFilter = "todo" | "done" | "all";
 
 export interface TaskList {
   readonly tasks: readonly Task[];
 }
 
 /**
- * Open tasks due today or overdue, anchored to the server-computed
+ * Non-done tasks due today or overdue, anchored to the server-computed
  * "today"; the client never does timezone math.
  */
 export interface TasksToday {

@@ -6,7 +6,7 @@ import { createNewTaskCommand } from "./new-task-command";
 const createdTask = (title: string): Task => ({
   entityId: "t-new",
   title,
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,
