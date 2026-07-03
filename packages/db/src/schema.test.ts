@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { eq } from "drizzle-orm";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { runMigrations } from "./migration-runner";
 import { coreMigrations } from "./migrations";
 import { type HaleroDatabase, openDatabase } from "./open-database";

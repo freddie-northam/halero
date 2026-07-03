@@ -36,6 +36,9 @@ const event = (
   location: null,
   calendarId: "primary",
   recurring: false,
+  notes: null,
+  url: null,
+  editable: false,
   ...seed,
 });
 

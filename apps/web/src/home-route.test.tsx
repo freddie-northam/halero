@@ -43,6 +43,9 @@ const standup = {
   location: null,
   calendarId: "primary",
   recurring: false,
+  notes: null,
+  url: null,
+  editable: false,
 };
 
 const dueTask: Task = {

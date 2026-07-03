@@ -44,6 +44,9 @@ const event = (seed: EventSeed): AgendaEvent => ({
   location: seed.location ?? null,
   calendarId: "primary",
   recurring: seed.recurring ?? false,
+  notes: null,
+  url: null,
+  editable: false,
 });
 
 // 2025-07-02 is a Wednesday; London is on BST (UTC+1) in July.

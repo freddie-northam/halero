@@ -99,11 +99,15 @@ describe("mapGoogleEvent", () => {
       ),
     );
 
-    expect(mapped.satellite?.url).toBe("https://calendar.google.com/event?eid=abc");
+    expect(mapped.satellite?.url).toBe(
+      "https://calendar.google.com/event?eid=abc",
+    );
   });
 
   test("stores null url when there is neither a hangout link nor a page", () => {
-    const mapped = expectUpsert(mapGoogleEvent(timedEvent(), "primary", HOME_TZ));
+    const mapped = expectUpsert(
+      mapGoogleEvent(timedEvent(), "primary", HOME_TZ),
+    );
 
     expect(mapped.satellite?.url).toBeNull();
   });

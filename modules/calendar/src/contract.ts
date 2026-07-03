@@ -14,6 +14,10 @@ export interface AgendaEvent {
   readonly calendarId: string;
   /** True for instances expanded from a recurring event. */
   readonly recurring: boolean;
+  readonly notes: string | null;
+  readonly url: string | null;
+  /** True for user-created events; false for connector-synced ones. */
+  readonly editable: boolean;
 }
 
 export interface AgendaDay {
@@ -41,4 +45,14 @@ export interface CalendarToday {
   readonly homeTimezone: string;
   /** Calendar date ("YYYY-MM-DD") of now in the home timezone. */
   readonly today: string;
+}
+
+/**
+ * The flat, deduplicated feed for the list view: one entry per event
+ * regardless of how many days it spans (unlike CalendarRange, which
+ * repeats a multi-day event under every day it touches).
+ */
+export interface CalendarEventList {
+  readonly homeTimezone: string;
+  readonly events: readonly AgendaEvent[];
 }
