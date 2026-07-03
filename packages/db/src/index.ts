@@ -18,5 +18,6 @@ export {
   settings,
   syncCursors,
   syncRuns,
+  tasks,
 } from "./schema";
 export { createSnapshot } from "./snapshot";

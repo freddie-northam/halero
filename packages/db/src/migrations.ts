@@ -10,6 +10,9 @@ import migration0002ConnectionBackoff from "../migrations/0002_connection_backof
 import migration0003ExternalRefStreams from "../migrations/0003_external_ref_streams.sql" with {
   type: "text",
 };
+import migration0004Tasks from "../migrations/0004_tasks.sql" with {
+  type: "text",
+};
 
 export interface Migration {
   readonly name: string;
@@ -23,4 +26,5 @@ export const coreMigrations: readonly Migration[] = [
   { name: "0001_core", sql: migration0001Core },
   { name: "0002_connection_backoff", sql: migration0002ConnectionBackoff },
   { name: "0003_external_ref_streams", sql: migration0003ExternalRefStreams },
+  { name: "0004_tasks", sql: migration0004Tasks },
 ];

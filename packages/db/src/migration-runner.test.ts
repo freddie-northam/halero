@@ -53,11 +53,13 @@ describe("runMigrations", () => {
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -73,6 +75,7 @@ describe("runMigrations", () => {
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
   });
 
@@ -149,18 +152,18 @@ describe("runMigrations", () => {
     const extended: Migration[] = [
       ...coreMigrations,
       {
-        name: "0004_widgets",
+        name: "0005_widgets",
         sql: "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       },
     ];
 
     const result = runMigrations(sqlite, { migrations: extended, backupsDir });
 
-    expect(result.applied).toEqual(["0004_widgets"]);
+    expect(result.applied).toEqual(["0005_widgets"]);
     if (result.snapshotPath === null) {
       throw new Error("expected a snapshot path");
     }
-    expect(basename(result.snapshotPath)).toStartWith("pre-0004_widgets-");
+    expect(basename(result.snapshotPath)).toStartWith("pre-0005_widgets-");
     expect(existsSync(result.snapshotPath)).toBe(true);
 
     const snapshot = new Database(result.snapshotPath, { readonly: true });
@@ -168,6 +171,7 @@ describe("runMigrations", () => {
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -213,6 +217,7 @@ describe("runMigrations", () => {
     expect(result.applied).toEqual([
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
@@ -270,18 +275,70 @@ describe("runMigrations", () => {
     sqlite.close();
   });
 
+  test("0004_tasks creates the tasks table and snapshots a non-empty database", () => {
+    const { sqlite, backupsDir } = makeContext();
+    const preTasks = coreMigrations.filter(
+      (migration) => migration.name !== "0004_tasks",
+    );
+    runMigrations(sqlite, { migrations: preTasks, backupsDir });
+    // Any pre-existing row makes the database non-empty, so the
+    // pre-migration snapshot must fire.
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-1', 'note', 1, 'user', 1, 1)`,
+    );
+
+    const result = runMigrations(sqlite, {
+      migrations: coreMigrations,
+      backupsDir,
+    });
+
+    expect(result.applied).toEqual(["0004_tasks"]);
+    expect(result.snapshotPath).not.toBeNull();
+    expect(tableExists(sqlite, "tasks")).toBe(true);
+    sqlite.close();
+  });
+
+  test("0004_tasks CHECK constraint rejects a status outside ('open', 'done')", () => {
+    const { sqlite, backupsDir } = makeContext();
+    runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-1', 'task', 1, 'user', 1, 1)`,
+    );
+
+    expect(() =>
+      sqlite.run(
+        "INSERT INTO tasks (entity_id, status) VALUES ('ent-1', 'archived')",
+      ),
+    ).toThrow(/CHECK/);
+    sqlite.close();
+  });
+
+  test("0004_tasks enforces the foreign key to entities", () => {
+    const { sqlite, backupsDir } = makeContext();
+    runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
+
+    expect(() =>
+      sqlite.run(
+        "INSERT INTO tasks (entity_id, status) VALUES ('missing-entity', 'open')",
+      ),
+    ).toThrow(/FOREIGN KEY/);
+    sqlite.close();
+  });
+
   test("rolls back a failed migration, keeps it out of the ledger, and stops", () => {
     const { sqlite, backupsDir } = makeContext();
     runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
     const broken: Migration = {
-      name: "0004_broken",
+      name: "0005_broken",
       sql: [
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
         "CREATE TABLE widgets (id TEXT PRIMARY KEY);",
       ].join("\n"),
     };
     const afterBroken: Migration = {
-      name: "0005_never_reached",
+      name: "0006_never_reached",
       sql: "CREATE TABLE gadgets (id TEXT PRIMARY KEY);",
     };
 
@@ -290,7 +347,7 @@ describe("runMigrations", () => {
         migrations: [...coreMigrations, broken, afterBroken],
         backupsDir,
       }),
-    ).toThrow(/0004_broken/);
+    ).toThrow(/0005_broken/);
 
     expect(tableExists(sqlite, "widgets")).toBe(false);
     expect(tableExists(sqlite, "gadgets")).toBe(false);
@@ -298,6 +355,7 @@ describe("runMigrations", () => {
       "0001_core",
       "0002_connection_backoff",
       "0003_external_ref_streams",
+      "0004_tasks",
     ]);
   });
 });
