@@ -179,16 +179,28 @@ test("quick-add creates the task with its due date and shows it after refetch", 
 
   const title = view.getByPlaceholderText("Add a task...");
   fireEvent.change(title, { target: { value: "Pay rent" } });
-  fireEvent.change(view.getByLabelText("Due date"), {
-    target: { value: "2025-07-04" },
+
+  // The DatePicker opens on the real current month (its value starts
+  // null); day 15 always falls inside that month's own grid, never on an
+  // adjacent month's outside day, so picking it is unambiguous.
+  await act(async () => {
+    fireEvent.click(view.getByLabelText("Due date"));
   });
+  await act(async () => {
+    fireEvent.click(view.getByText("15"));
+  });
+  const now = new Date();
+  const pickedDueDate = `${now.getFullYear()}-${String(
+    now.getMonth() + 1,
+  ).padStart(2, "0")}-15`;
+
   fireEvent.submit(title);
 
   expect(await view.findByText("Pay rent")).toBeTruthy();
-  expect(calls.create).toEqual([{ title: "Pay rent", dueDate: "2025-07-04" }]);
+  expect(calls.create).toEqual([{ title: "Pay rent", dueDate: pickedDueDate }]);
   // The form resets for the next capture.
   expect((title as HTMLInputElement).value).toBe("");
-  expect((view.getByLabelText("Due date") as HTMLInputElement).value).toBe("");
+  expect(view.getByLabelText("Due date").textContent).toBe("Due date");
 });
 
 test("an empty title gets the readable inline error without calling the api", async () => {
