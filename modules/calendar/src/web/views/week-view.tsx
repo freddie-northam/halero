@@ -226,10 +226,18 @@ const timedLayout = (
 ): TimedLayout => {
   const startMinutes = minutesOfDayInZone(event.start, timeZone);
   const endMinutes = minutesOfDayInZone(event.end, timeZone);
-  const top = (startMinutes / MINUTES_PER_DAY) * GRID_HEIGHT_PX;
-  const height = Math.max(
-    MIN_BLOCK_HEIGHT_PX,
-    ((endMinutes - startMinutes) / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
+  const height = Math.min(
+    GRID_HEIGHT_PX,
+    Math.max(
+      MIN_BLOCK_HEIGHT_PX,
+      ((endMinutes - startMinutes) / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
+    ),
+  );
+  // Clamp the top so a short event late in the day stays legible AND
+  // within the grid: its bottom never spills past the final hour row.
+  const top = Math.min(
+    (startMinutes / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
+    GRID_HEIGHT_PX - height,
   );
   const laneWidth = 100 / slot.laneCount;
   const gap = slot.laneCount > 1 ? LANE_GAP_PERCENT : 0;

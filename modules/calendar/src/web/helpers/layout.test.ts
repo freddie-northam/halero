@@ -68,6 +68,32 @@ describe("packEventLanes", () => {
     ]);
   });
 
+  test("three mutually-overlapping events fan out to three lanes", () => {
+    const events = [
+      { start: 0, end: 60 },
+      { start: 10, end: 70 },
+      { start: 20, end: 80 },
+    ];
+
+    expect(packEventLanes(events)).toEqual([
+      { lane: 0, laneCount: 3 },
+      { lane: 1, laneCount: 3 },
+      { lane: 2, laneCount: 3 },
+    ]);
+  });
+
+  test("events with identical start and end split into distinct lanes", () => {
+    const events = [
+      { start: 100, end: 160 },
+      { start: 100, end: 160 },
+    ];
+
+    expect(packEventLanes(events)).toEqual([
+      { lane: 0, laneCount: 2 },
+      { lane: 1, laneCount: 2 },
+    ]);
+  });
+
   test("separate overlap clusters are packed independently", () => {
     const events = [
       { start: 0, end: 60 },
