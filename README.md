@@ -10,8 +10,15 @@ directory, no external services. There is no hosted version. Connector
 credentials are encrypted with a key generated on first start, and the whole
 instance is a directory you can copy.
 
-Status: v0.1.0 released, v0.2 in progress. Interfaces and the database
-schema can still change between commits.
+A Cmd+K command palette searches across everything Halero knows and runs
+module commands; a Tasks module tracks to-dos alongside your calendar; API
+tokens let external clients, like the Raycast extension, read and write
+your data without your password.
+
+Status: v0.1.0 released, v0.2 in progress. v0.2 adds universal search, a
+Cmd+K command palette, a Tasks module, and API tokens for non-browser
+clients. Interfaces and the database schema can still change between
+commits.
 
 ## Quick start on a Mac
 
@@ -54,6 +61,10 @@ own domain, Tailscale Serve).
   upgrade and rollback procedures.
 - [docs/google-calendar.md](docs/google-calendar.md): connecting Google
   Calendar, the publishing-status trap, HTTPS options.
+- [docs/api-tokens.md](docs/api-tokens.md): minting and revoking personal
+  API tokens for non-browser clients.
+- [docs/raycast.md](docs/raycast.md): the Raycast extension, its commands
+  and preferences, and running it locally.
 
 ## Development
 
