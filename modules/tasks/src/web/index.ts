@@ -20,7 +20,12 @@ export type {
   TaskStatus,
   TasksToday,
 } from "../contract";
-export type { TaskMoveInput, TasksApi, TaskUpdateInput } from "./api";
+export type {
+  TaskLogTimeInput,
+  TaskMoveInput,
+  TasksApi,
+  TaskUpdateInput,
+} from "./api";
 export { withTasksInvalidation } from "./queries";
 export { createTasksTodaySection } from "./today-due-section";
 

@@ -99,6 +99,7 @@ const stubClient = {
       move: { mutate: () => Promise.reject(new Error("not under test")) },
       toggle: { mutate: () => Promise.reject(new Error("not under test")) },
       delete: { mutate: () => Promise.reject(new Error("not under test")) },
+      logTime: { mutate: () => Promise.reject(new Error("not under test")) },
     },
   },
 } as unknown as TrpcClient;
@@ -235,6 +236,7 @@ test("an interleaved registry section renders strictly by order", async () => {
     move: () => Promise.reject(new Error("not under test")),
     toggle: () => Promise.reject(new Error("not under test")),
     delete: () => Promise.reject(new Error("not under test")),
+    logTime: () => Promise.reject(new Error("not under test")),
   };
   const todayApi: TodayApi = {
     home: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),

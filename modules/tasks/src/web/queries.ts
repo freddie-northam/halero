@@ -59,5 +59,10 @@ export const withTasksInvalidation = (
       await invalidate();
       return result;
     },
+    logTime: async (input) => {
+      const task = await api.logTime(input);
+      await invalidate();
+      return task;
+    },
   };
 };

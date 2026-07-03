@@ -68,6 +68,7 @@ const stubClient = {
       move: { mutate: () => Promise.resolve(stubTask) },
       toggle: { mutate: () => Promise.resolve(stubTask) },
       delete: { mutate: () => Promise.resolve({ entityId: "t-1" }) },
+      logTime: { mutate: () => Promise.resolve(stubTask) },
     },
   },
 } as unknown as TrpcClient;
@@ -102,6 +103,7 @@ const stubTasksApi: TasksApi = {
   move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
+  logTime: () => Promise.reject(new Error("not under test")),
 };
 
 const modulesUnderTest = () =>
@@ -160,6 +162,8 @@ describe("buildTasksApi", () => {
     expect(invalidations).toBe(2);
     await api.delete("t-1");
     expect(invalidations).toBe(3);
+    await api.logTime({ entityId: "t-1", minutes: 15 });
+    expect(invalidations).toBe(4);
   });
 
   test("reads pass straight through without invalidating", async () => {

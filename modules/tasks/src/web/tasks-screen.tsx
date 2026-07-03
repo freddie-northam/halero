@@ -107,6 +107,11 @@ export const createTasksScreen = (api: TasksApi) => {
             await api.delete(entityId);
             setSelectedTask(null);
           }}
+          onLogTime={async (entityId, minutes) => {
+            // Keeps the sheet open, unlike save/delete: logging time is a
+            // running total, not a one-shot edit that closes the editor.
+            setSelectedTask(await api.logTime({ entityId, minutes }));
+          }}
         />
       </div>
     );

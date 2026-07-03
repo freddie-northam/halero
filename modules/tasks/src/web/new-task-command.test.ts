@@ -27,6 +27,7 @@ const apiWithCreate = (create: TasksApi["create"]): TasksApi => ({
   move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
+  logTime: () => Promise.reject(new Error("not under test")),
 });
 
 describe("the new-task command", () => {

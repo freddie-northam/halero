@@ -87,6 +87,7 @@ export const buildTasksApi = (
       move: (input) => client.modules.tasks.move.mutate(input),
       toggle: (entityId) => client.modules.tasks.toggle.mutate({ entityId }),
       delete: (entityId) => client.modules.tasks.delete.mutate({ entityId }),
+      logTime: (input) => client.modules.tasks.logTime.mutate(input),
     },
     queryClient,
   );

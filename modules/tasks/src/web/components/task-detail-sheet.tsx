@@ -20,9 +20,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@halero/ui";
-import { type FormEvent, type ReactElement, useState } from "react";
+import {
+  type FormEvent,
+  type ReactElement,
+  type RefObject,
+  useRef,
+  useState,
+} from "react";
 import type { Task, TaskPriority } from "../../contract";
 import type { TaskUpdateInput } from "../api";
+import { formatMinutes } from "../helpers/format-minutes";
 import { readableError } from "../readable-error";
 import { PriorityPicker } from "./priority-picker";
 import { TagEditor } from "./tag-editor";
@@ -32,6 +39,7 @@ export interface TaskDetailSheetProps {
   readonly onClose: () => void;
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
   readonly onDelete: (entityId: string) => Promise<void>;
+  readonly onLogTime: (entityId: string, minutes: number) => Promise<void>;
 }
 
 /** Blank clears the estimate; otherwise it must be whole minutes, zero or more. */
@@ -42,6 +50,16 @@ const parsedEstimate = (raw: string): number | null | undefined => {
   }
   const value = Number(trimmed);
   return Number.isInteger(value) && value >= 0 ? value : undefined;
+};
+
+/** Whole minutes, nonzero (negative corrects an over-log); blank/bad input is undefined. */
+const parsedLogMinutes = (raw: string): number | undefined => {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return undefined;
+  }
+  const value = Number(trimmed);
+  return Number.isInteger(value) && value !== 0 ? value : undefined;
 };
 
 /** The uncontrolled fields read from FormData, or a readable error. */
@@ -76,6 +94,69 @@ const readFormFields = (form: HTMLFormElement): ReadResult => {
   };
 };
 
+/** The quick-log row: fixed increments alongside the free-entry input. */
+const QUICK_LOG_MINUTES: readonly {
+  readonly label: string;
+  readonly minutes: number;
+}[] = [
+  { label: "+15m", minutes: 15 },
+  { label: "+30m", minutes: 30 },
+  { label: "+1h", minutes: 60 },
+];
+
+/**
+ * The running logged total plus its input. The minutes field is
+ * uncontrolled (the app's established typed-input pattern, see
+ * TagEditor's add field) and read through the ref at log time. Enter is
+ * intercepted (preventDefault) so it logs time instead of submitting
+ * the surrounding form, which would otherwise save and close the sheet.
+ */
+const TimeLogSection = ({
+  task,
+  inputRef,
+  onLogTime,
+  busy,
+}: {
+  readonly task: Task;
+  readonly inputRef: RefObject<HTMLInputElement | null>;
+  readonly onLogTime: (minutes?: number) => void;
+  readonly busy: boolean;
+}): ReactElement => (
+  <div className="flex flex-col gap-2 rounded-md border p-3 text-sm">
+    <p className="tnum font-medium">{`Logged ${formatMinutes(task.loggedMinutes)}`}</p>
+    <div className="flex items-center gap-2">
+      <Input
+        ref={inputRef}
+        aria-label="Minutes to log"
+        inputMode="numeric"
+        placeholder="Minutes"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            onLogTime();
+          }
+        }}
+      />
+      <Button variant="secondary" disabled={busy} onClick={() => onLogTime()}>
+        Log time
+      </Button>
+    </div>
+    <div className="flex gap-1">
+      {QUICK_LOG_MINUTES.map((option) => (
+        <Button
+          key={option.label}
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => onLogTime(option.minutes)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  </div>
+);
+
 const DetailFields = ({
   task,
   priority,
@@ -84,6 +165,9 @@ const DetailFields = ({
   onTagsChange,
   dueDate,
   onDueDateChange,
+  logMinutesRef,
+  onLogTime,
+  busy,
 }: {
   readonly task: Task;
   readonly priority: TaskPriority | null;
@@ -92,6 +176,9 @@ const DetailFields = ({
   readonly onTagsChange: (tags: readonly string[]) => void;
   readonly dueDate: string | null;
   readonly onDueDateChange: (dueDate: string | null) => void;
+  readonly logMinutesRef: RefObject<HTMLInputElement | null>;
+  readonly onLogTime: (minutes?: number) => void;
+  readonly busy: boolean;
 }): ReactElement => (
   <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
     <Input name="title" aria-label="Title" defaultValue={task.title} />
@@ -120,8 +207,45 @@ const DetailFields = ({
         }
       />
     </div>
+    <TimeLogSection
+      task={task}
+      inputRef={logMinutesRef}
+      onLogTime={onLogTime}
+      busy={busy}
+    />
   </div>
 );
+
+/**
+ * Owns the free-entry minutes field and both ways to log time (typed or
+ * a fixed quick-pick, which bypasses the field entirely). Split out of
+ * useTaskDetailForm to keep that hook a manageable size.
+ */
+const useLogTimeControl = (
+  task: Task,
+  onLogTime: (entityId: string, minutes: number) => Promise<void>,
+  run: (action: () => Promise<void>) => Promise<void>,
+  setError: (error: string) => void,
+) => {
+  const logMinutesRef = useRef<HTMLInputElement>(null);
+
+  const logTime = (minutes?: number): void => {
+    const field = logMinutesRef.current;
+    const value = minutes ?? parsedLogMinutes(field?.value ?? "");
+    if (value === undefined) {
+      setError("Enter a non-zero whole number of minutes.");
+      return;
+    }
+    void run(async () => {
+      await onLogTime(task.entityId, value);
+      if (field !== null) {
+        field.value = "";
+      }
+    });
+  };
+
+  return { logMinutesRef, logTime };
+};
 
 /**
  * Owns the sheet's editable state and both writes. `run` wraps save and
@@ -132,6 +256,7 @@ const useTaskDetailForm = (
   task: Task,
   onSave: (input: TaskUpdateInput) => Promise<void>,
   onDelete: (entityId: string) => Promise<void>,
+  onLogTime: (entityId: string, minutes: number) => Promise<void>,
 ) => {
   const [priority, setPriority] = useState(task.priority);
   const [tags, setTags] = useState<readonly string[]>(task.tags);
@@ -150,6 +275,12 @@ const useTaskDetailForm = (
       setBusy(false);
     }
   };
+  const { logMinutesRef, logTime } = useLogTimeControl(
+    task,
+    onLogTime,
+    run,
+    setError,
+  );
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -178,6 +309,8 @@ const useTaskDetailForm = (
     setTags,
     dueDate,
     setDueDate,
+    logMinutesRef,
+    logTime,
     error,
     busy,
     submit,
@@ -189,12 +322,14 @@ const TaskDetailForm = ({
   task,
   onSave,
   onDelete,
+  onLogTime,
 }: {
   readonly task: Task;
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
   readonly onDelete: (entityId: string) => Promise<void>;
+  readonly onLogTime: (entityId: string, minutes: number) => Promise<void>;
 }): ReactElement => {
-  const form = useTaskDetailForm(task, onSave, onDelete);
+  const form = useTaskDetailForm(task, onSave, onDelete, onLogTime);
   return (
     <form onSubmit={form.submit} className="flex h-full flex-col">
       <SheetHeader>
@@ -208,6 +343,9 @@ const TaskDetailForm = ({
         onTagsChange={form.setTags}
         dueDate={form.dueDate}
         onDueDateChange={form.setDueDate}
+        logMinutesRef={form.logMinutesRef}
+        onLogTime={form.logTime}
+        busy={form.busy}
       />
       {form.error === null ? null : (
         <Alert variant="destructive" className="mx-4">
@@ -237,6 +375,7 @@ export const TaskDetailSheet = ({
   onClose,
   onSave,
   onDelete,
+  onLogTime,
 }: TaskDetailSheetProps): ReactElement => (
   <Sheet
     open={task !== null}
@@ -253,6 +392,7 @@ export const TaskDetailSheet = ({
           task={task}
           onSave={onSave}
           onDelete={onDelete}
+          onLogTime={onLogTime}
         />
       )}
     </SheetContent>

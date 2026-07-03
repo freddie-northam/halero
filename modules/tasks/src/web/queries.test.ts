@@ -61,6 +61,10 @@ const makeStub = () => {
       calls.push("delete");
       return Promise.resolve({ entityId: task.entityId });
     },
+    logTime: () => {
+      calls.push("logTime");
+      return Promise.resolve(task);
+    },
   };
   return { api, calls };
 };
@@ -92,6 +96,8 @@ describe("withTasksInvalidation", () => {
     expect(invalidated()).toBe(4);
     await wrapped.delete("t-1");
     expect(invalidated()).toBe(5);
+    await wrapped.logTime({ entityId: "t-1", minutes: 15 });
+    expect(invalidated()).toBe(6);
   });
 
   test("passes reads through without touching the cache", async () => {

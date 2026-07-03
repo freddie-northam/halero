@@ -70,6 +70,7 @@ const makeStubApi = (initial: readonly Task[]) => {
       return Promise.resolve(toggled);
     },
     delete: () => Promise.reject(new Error("not under test")),
+    logTime: () => Promise.reject(new Error("not under test")),
   };
   return { api, calls };
 };

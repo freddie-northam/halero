@@ -27,6 +27,12 @@ export interface TaskMoveInput {
   readonly sortOrder: number;
 }
 
+export interface TaskLogTimeInput {
+  readonly entityId: string;
+  /** Non-zero whole minutes; negative corrects an over-log. */
+  readonly minutes: number;
+}
+
 export interface TasksApi {
   readonly list: (filter: TaskFilter) => Promise<TaskList>;
   readonly today: () => Promise<TasksToday>;
@@ -39,4 +45,5 @@ export interface TasksApi {
   readonly move: (input: TaskMoveInput) => Promise<Task>;
   readonly toggle: (entityId: string) => Promise<Task>;
   readonly delete: (entityId: string) => Promise<{ entityId: string }>;
+  readonly logTime: (input: TaskLogTimeInput) => Promise<Task>;
 }

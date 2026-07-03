@@ -80,6 +80,7 @@ interface StubCalls {
   readonly move: { entityId: string; status: string; sortOrder: number }[];
   readonly toggle: string[];
   readonly delete: string[];
+  readonly logTime: { entityId: string; minutes: number }[];
 }
 
 /** A stateful stub serving list/today/board like the server would. */
@@ -91,6 +92,7 @@ const makeStubApi = (initial: readonly Task[]) => {
     move: [],
     toggle: [],
     delete: [],
+    logTime: [],
   };
   const nextSortOrder = (status: Task["status"]): number =>
     Math.max(
@@ -204,6 +206,22 @@ const makeStubApi = (initial: readonly Task[]) => {
       tasks = tasks.filter((item) => item.entityId !== entityId);
       return Promise.resolve({ entityId });
     },
+    logTime: (input) => {
+      calls.logTime.push(input);
+      tasks = tasks.map((item) =>
+        item.entityId === input.entityId
+          ? task({
+              ...item,
+              loggedMinutes: Math.max(0, item.loggedMinutes + input.minutes),
+            })
+          : item,
+      );
+      const logged = tasks.find((item) => item.entityId === input.entityId);
+      if (logged === undefined) {
+        return Promise.reject(new Error("This item is not a task."));
+      }
+      return Promise.resolve(logged);
+    },
   };
   return { api, calls };
 };
@@ -275,6 +293,70 @@ test("a card shows its tag, priority, and overdue due date", async () => {
   expect(view.getByText("work")).toBeTruthy();
   expect(view.getByText("High")).toBeTruthy();
   expect(view.getByText("30 Jun").className).toContain("text-destructive");
+});
+
+test("a card shows only the estimate when nothing is logged yet", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-est", title: "Plan sprint", estimateMinutes: 60 }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Plan sprint");
+  expect(view.getByText("Est 1h")).toBeTruthy();
+});
+
+test("a card shows only the logged time when there is no estimate", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-log", title: "Fix bug", loggedMinutes: 85 }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Fix bug");
+  expect(view.getByText("Logged 1h 25m")).toBeTruthy();
+});
+
+test("a card shows both estimate and logged time together", async () => {
+  const { api } = makeStubApi([
+    task({
+      entityId: "t-both",
+      title: "Write report",
+      estimateMinutes: 180,
+      loggedMinutes: 170,
+    }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Write report");
+  expect(view.getByText("Est 3h · Logged 2h 50m")).toBeTruthy();
+});
+
+test("logging past the estimate tints the logged half instead of the whole line", async () => {
+  const { api } = makeStubApi([
+    task({
+      entityId: "t-over",
+      title: "Over budget",
+      estimateMinutes: 30,
+      loggedMinutes: 45,
+    }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Over budget");
+  const footer = view.getByText("Est 30m", { exact: false });
+  expect(footer.textContent).toBe("Est 30m · Logged 45m");
+  const logged = view.getByText("Logged 45m");
+  expect(logged.className).toContain("text-amber-600");
+});
+
+test("a card shows no time footer when neither estimate nor logged time is set", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-plain", title: "Plain task" }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Plain task");
+  expect(view.queryByText(/Est /)).toBeNull();
+  expect(view.queryByText(/Logged /)).toBeNull();
 });
 
 test("an empty column shows the quiet empty state", async () => {
@@ -431,6 +513,99 @@ test("setting the estimate in the sheet saves it as whole minutes", async () => 
     entityId: "t-today",
     estimateMinutes: 45,
   });
+});
+
+test("the sheet shows the running logged total and a log-time control adds to it", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+  // Scoped to the dialog: once logged, the board card grows its own
+  // matching time footer too, so an unscoped query becomes ambiguous.
+  const dialog = within(view.getByRole("dialog"));
+  expect(dialog.getByText("Logged 0m")).toBeTruthy();
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "50" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 50 }]);
+  expect(await dialog.findByText("Logged 50m")).toBeTruthy();
+  // Unlike Save/Delete, logging time keeps the sheet open.
+  expect(view.getByText("Edit task")).toBeTruthy();
+});
+
+test("a quick +15m button logs a fixed increment", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+  const dialog = within(view.getByRole("dialog"));
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "+15m" }));
+  });
+
+  expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 15 }]);
+  expect(await dialog.findByText("Logged 15m")).toBeTruthy();
+});
+
+test("logging zero minutes is rejected readably without calling the api", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "0" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(calls.logTime).toEqual([]);
+  expect(
+    await view.findByText("Enter a non-zero whole number of minutes."),
+  ).toBeTruthy();
+});
+
+test("a failed log-time surfaces a readable error and keeps the sheet open", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const failing: TasksApi = {
+    ...api,
+    logTime: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderTasks(failing);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "30" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(
+    await view.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(view.getByText("Edit task")).toBeTruthy();
 });
 
 test("picking a due date in the sheet saves it", async () => {
