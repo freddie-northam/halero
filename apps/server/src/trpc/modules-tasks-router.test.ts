@@ -182,6 +182,7 @@ const seedConnectorTask = (testApp: TestApp, id: string): void => {
 };
 
 const NOT_A_TASK_MESSAGE = "This item is not a task.";
+const TASK_DELETED_MESSAGE = "This task was deleted.";
 const CONNECTOR_MANAGED_MESSAGE =
   "This item is managed by a connector sync and cannot be edited.";
 
@@ -540,21 +541,61 @@ describe("modules.tasks.update", () => {
     );
   });
 
-  test("rejects a tombstoned task with the store's message", async () => {
+  test("rejects an empty title readably", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
-    const task = await createTask(testApp.app, cookie, { title: "Gone" });
-    await deleteTask(testApp.app, cookie, task.entityId);
+    const task = await createTask(testApp.app, cookie, { title: "Valid" });
 
     const message = await mutationError(
       testApp.app,
       cookie,
       "modules.tasks.update",
-      { entityId: task.entityId, title: "Necromancy" },
-      500,
+      { entityId: task.entityId, title: "   " },
+      400,
     );
 
-    expect(message).toBe("This item was deleted.");
+    expect(message).toBe("A task needs a title.");
+  });
+
+  test("rejects a 201-character title readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Valid" });
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.update",
+      { entityId: task.entityId, title: "x".repeat(201) },
+      400,
+    );
+
+    expect(message).toBe("Task titles are limited to 200 characters.");
+  });
+
+  test("rejects update and toggle on a tombstoned task as not found", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Gone" });
+    await deleteTask(testApp.app, cookie, task.entityId);
+
+    const attempts: readonly (readonly [string, unknown])[] = [
+      [
+        "modules.tasks.update",
+        { entityId: task.entityId, title: "Necromancy" },
+      ],
+      ["modules.tasks.toggle", { entityId: task.entityId }],
+    ];
+    for (const [procedure, input] of attempts) {
+      const message = await mutationError(
+        testApp.app,
+        cookie,
+        procedure,
+        input,
+        404,
+      );
+      expect(message).toBe(TASK_DELETED_MESSAGE);
+    }
   });
 });
 
@@ -694,7 +735,7 @@ describe("the task guard", () => {
     }
   });
 
-  test("rejects a connector-managed entity with the store's message", async () => {
+  test("rejects a connector-managed entity as forbidden with the store's message", async () => {
     const testApp = makeTestApp();
     const cookie = await completeSetup(testApp.app);
     seedConnectorTask(testApp, "synced-task-1");
@@ -710,7 +751,7 @@ describe("the task guard", () => {
         cookie,
         procedure,
         input,
-        500,
+        403,
       );
       expect(message).toBe(CONNECTOR_MANAGED_MESSAGE);
     }

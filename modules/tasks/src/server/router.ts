@@ -125,18 +125,48 @@ const readTask = (db: ModuleDb, entityId: string): Task => {
   return toTask(row);
 };
 
+const taskGuardColumns = {
+  status: tasks.status,
+  deletedAt: entities.deletedAt,
+  source: entities.source,
+};
+
 /**
- * Update, toggle, and delete only accept entities that ARE tasks. The
- * satellite row survives a soft delete, so a tombstoned task passes
- * here and the entity store decides how each verb treats it (update
- * rejects, a repeat delete is a no-op).
+ * Update, toggle, and delete only accept entities that ARE tasks, and
+ * the router rejects connector-owned and tombstoned ones up front with
+ * semantic statuses (403/404) instead of letting the store's plain
+ * Errors surface as 500s. The store's own guards stay as the defensive
+ * backstop. The satellite row survives a soft delete, so delete opts
+ * into tombstones (allowTombstoned) to keep its idempotent no-op.
  */
-const requireTaskSatellite = (db: ModuleDb, entityId: string) => {
-  const row = db.select().from(tasks).where(eq(tasks.entityId, entityId)).get();
+const requireTaskSatellite = (
+  db: ModuleDb,
+  entityId: string,
+  options: { readonly allowTombstoned?: boolean } = {},
+) => {
+  const row = db
+    .select(taskGuardColumns)
+    .from(tasks)
+    .innerJoin(entities, eq(entities.id, tasks.entityId))
+    .where(eq(tasks.entityId, entityId))
+    .get();
   if (row === undefined) {
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "This item is not a task.",
+    });
+  }
+  if (row.source === "connector") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      // The entity store's own message; the store remains the backstop.
+      message: "This item is managed by a connector sync and cannot be edited.",
+    });
+  }
+  if (row.deletedAt !== null && options.allowTombstoned !== true) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "This task was deleted.",
     });
   }
   return row;
@@ -295,9 +325,10 @@ export const tasksRouter = moduleRouter({
   }),
 
   // Idempotent: the satellite row survives the soft delete, so a repeat
-  // call passes the task guard and the store treats it as a no-op.
+  // call passes the task guard (tombstones allowed here, unlike update
+  // and toggle) and the store treats it as a no-op.
   delete: protectedProcedure.input(entityIdInput).mutation(({ ctx, input }) => {
-    requireTaskSatellite(ctx.db, input.entityId);
+    requireTaskSatellite(ctx.db, input.entityId, { allowTombstoned: true });
     ctx.entities.deleteUserEntity(input.entityId);
     return { entityId: input.entityId };
   }),
