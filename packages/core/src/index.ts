@@ -4,11 +4,13 @@ export {
 } from "./credential-crypto";
 export type {
   CreateLinkInput,
+  CreateUserEntityInput,
   EntityRow,
   EntityStore,
   ExternalRefKey,
   LinkRow,
   SpineInput,
+  UpdateUserEntityPatch,
   UpsertAction,
   UpsertExternalInput,
   UpsertExternalResult,

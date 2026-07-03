@@ -10,13 +10,16 @@ import {
   type HaleroDatabase,
   openDatabase,
   runMigrations,
+  tasks,
 } from "@halero/db";
 import { eq } from "drizzle-orm";
 import {
+  type CreateUserEntityInput,
   createEntityStore,
   type EntityStore,
   type UpsertExternalInput,
 } from "./entity-store";
+import { searchEntities } from "./search";
 
 const openMigrated = (): HaleroDatabase => {
   const dir = mkdtempSync(join(tmpdir(), "halero-core-"));
@@ -344,6 +347,239 @@ describe("links", () => {
     store.deleteLink(link.id);
 
     expect(store.getLinksFor(a)).toHaveLength(0);
+  });
+});
+
+const userInput = (
+  overrides: Partial<CreateUserEntityInput> = {},
+): CreateUserEntityInput => ({
+  kind: "task",
+  schemaVersion: 1,
+  title: "Write the quarterly report",
+  snippet: "budget figures due",
+  occurredStart: 1_000,
+  occurredEnd: 2_000,
+  ...overrides,
+});
+
+const NOT_FOUND_MESSAGE = "This item could not be found.";
+const DELETED_MESSAGE = "This item was deleted.";
+const CONNECTOR_MANAGED_MESSAGE =
+  "This item is managed by a connector sync and cannot be edited.";
+
+const ftsMatch = (handle: HaleroDatabase, token: string) =>
+  handle.sqlite
+    .query<{ id: string }, [string]>(
+      `SELECT id FROM entities
+       WHERE rowid IN (SELECT rowid FROM entities_fts WHERE entities_fts MATCH ?)`,
+    )
+    .get(token);
+
+describe("createUserEntity", () => {
+  test("writes a user-sourced spine row with equal timestamps", () => {
+    const { store } = makeStore();
+
+    const { entityId } = store.createUserEntity(userInput());
+
+    const entity = store.getEntity(entityId);
+    expect(entity?.source).toBe("user");
+    expect(entity?.kind).toBe("task");
+    expect(entity?.schemaVersion).toBe(1);
+    expect(entity?.title).toBe("Write the quarterly report");
+    expect(entity?.snippet).toBe("budget figures due");
+    expect(entity?.occurredStart).toBe(1_000);
+    expect(entity?.occurredEnd).toBe(2_000);
+    expect(entity?.createdAt).toBe(entity?.updatedAt ?? Number.NaN);
+    expect(entity?.deletedAt).toBeNull();
+  });
+
+  test("creates no external_refs row", () => {
+    const { handle, store } = makeStore();
+
+    const { entityId } = store.createUserEntity(userInput());
+
+    const ref = handle.db
+      .select()
+      .from(externalRefs)
+      .where(eq(externalRefs.entityId, entityId))
+      .get();
+    expect(ref).toBeUndefined();
+  });
+
+  test("FTS finds the title immediately", () => {
+    const { handle, store } = makeStore();
+
+    const { entityId } = store.createUserEntity(userInput());
+
+    expect(ftsMatch(handle, "quarterly")?.id).toBe(entityId);
+  });
+});
+
+describe("updateUserEntity", () => {
+  test("omitting a field preserves it", () => {
+    const { store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+
+    store.updateUserEntity(entityId, { title: "Annual retrospective" });
+    let entity = store.getEntity(entityId);
+    expect(entity?.title).toBe("Annual retrospective");
+    expect(entity?.snippet).toBe("budget figures due");
+    expect(entity?.occurredStart).toBe(1_000);
+    expect(entity?.occurredEnd).toBe(2_000);
+
+    store.updateUserEntity(entityId, { snippet: "attendance optional" });
+    entity = store.getEntity(entityId);
+    expect(entity?.title).toBe("Annual retrospective");
+    expect(entity?.snippet).toBe("attendance optional");
+
+    store.updateUserEntity(entityId, { occurredStart: 5_000 });
+    entity = store.getEntity(entityId);
+    expect(entity?.occurredStart).toBe(5_000);
+    expect(entity?.occurredEnd).toBe(2_000);
+    expect(entity?.title).toBe("Annual retrospective");
+  });
+
+  test("explicit null clears occurredStart and occurredEnd", () => {
+    const { store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+
+    store.updateUserEntity(entityId, {
+      occurredStart: null,
+      occurredEnd: null,
+    });
+
+    const entity = store.getEntity(entityId);
+    expect(entity?.occurredStart).toBeNull();
+    expect(entity?.occurredEnd).toBeNull();
+    expect(entity?.title).toBe("Write the quarterly report");
+  });
+
+  test("always bumps updated_at, even for an empty patch", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+    handle.sqlite.run("UPDATE entities SET updated_at = 111 WHERE id = ?", [
+      entityId,
+    ]);
+
+    store.updateUserEntity(entityId, {});
+
+    expect(store.getEntity(entityId)?.updatedAt).toBeGreaterThan(111);
+  });
+
+  test("a title change is reflected in FTS", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+
+    store.updateUserEntity(entityId, { title: "Annual retrospective" });
+
+    expect(ftsMatch(handle, "retrospective")?.id).toBe(entityId);
+    expect(ftsMatch(handle, "quarterly")).toBeNull();
+  });
+
+  test("rejects a missing entity", () => {
+    const { store } = makeStore();
+
+    expect(() => store.updateUserEntity("nope", { title: "x" })).toThrow(
+      NOT_FOUND_MESSAGE,
+    );
+  });
+
+  test("rejects a tombstoned entity", () => {
+    const { store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+    store.deleteUserEntity(entityId);
+
+    expect(() => store.updateUserEntity(entityId, { title: "x" })).toThrow(
+      DELETED_MESSAGE,
+    );
+  });
+
+  test("rejects a connector-sourced entity", () => {
+    const { store } = makeStore();
+    const { entityId } = store.upsertExternal(eventInput());
+
+    expect(() => store.updateUserEntity(entityId, { title: "x" })).toThrow(
+      CONNECTOR_MANAGED_MESSAGE,
+    );
+  });
+});
+
+describe("deleteUserEntity", () => {
+  test("soft-deletes: deleted_at set, the row remains, search excludes it", () => {
+    const { handle, store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+
+    store.deleteUserEntity(entityId);
+
+    const entity = store.getEntity(entityId);
+    expect(entity).not.toBeNull();
+    expect(entity?.deletedAt).not.toBeNull();
+    expect(searchEntities(handle.sqlite, { query: "quarterly" })).toHaveLength(
+      0,
+    );
+  });
+
+  test("a second delete is a no-op", () => {
+    const { store } = makeStore();
+    const { entityId } = store.createUserEntity(userInput());
+    store.deleteUserEntity(entityId);
+    const deletedAt = store.getEntity(entityId)?.deletedAt;
+
+    expect(() => store.deleteUserEntity(entityId)).not.toThrow();
+    expect(store.getEntity(entityId)?.deletedAt).toBe(deletedAt ?? Number.NaN);
+  });
+
+  test("rejects a missing entity", () => {
+    const { store } = makeStore();
+
+    expect(() => store.deleteUserEntity("nope")).toThrow(NOT_FOUND_MESSAGE);
+  });
+
+  test("rejects a connector-sourced entity", () => {
+    const { store } = makeStore();
+    const { entityId } = store.upsertExternal(eventInput());
+
+    expect(() => store.deleteUserEntity(entityId)).toThrow(
+      CONNECTOR_MANAGED_MESSAGE,
+    );
+  });
+});
+
+describe("user entity transaction bundling", () => {
+  test("a caller transaction rolls back the spine and a task satellite together", () => {
+    const { handle, store } = makeStore();
+
+    expect(() =>
+      store.withTransaction(() => {
+        const { entityId } = store.createUserEntity(userInput());
+        handle.db.insert(tasks).values({ entityId, status: "open" }).run();
+        throw new Error("task creation failed midway");
+      }),
+    ).toThrow("task creation failed midway");
+
+    const spineCount = handle.sqlite
+      .query<{ total: number }, []>("SELECT count(*) AS total FROM entities")
+      .get();
+    const taskCount = handle.sqlite
+      .query<{ total: number }, []>("SELECT count(*) AS total FROM tasks")
+      .get();
+    expect(spineCount?.total).toBe(0);
+    expect(taskCount?.total).toBe(0);
+  });
+});
+
+describe("searchEntities integration", () => {
+  test("a created user entity is searchable and a deleted one is not", () => {
+    const { handle, store } = makeStore();
+
+    const { entityId } = store.createUserEntity(userInput());
+    const hits = searchEntities(handle.sqlite, { query: "quarterly" });
+    expect(hits.map((hit) => hit.entityId)).toContain(entityId);
+
+    store.deleteUserEntity(entityId);
+    expect(searchEntities(handle.sqlite, { query: "quarterly" })).toHaveLength(
+      0,
+    );
   });
 });
 
