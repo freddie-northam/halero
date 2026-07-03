@@ -91,7 +91,7 @@ export const createTasksScreen = (api: TasksApi) => {
         </div>
         <div className="mt-4">
           {view === "list" ? (
-            <ListView api={api} />
+            <ListView api={api} onOpenTask={setSelectedTask} />
           ) : (
             <BoardBody api={api} onOpenTask={setSelectedTask} />
           )}

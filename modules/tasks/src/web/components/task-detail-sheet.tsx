@@ -9,6 +9,8 @@
 // that state and re-seeds the uncontrolled fields' defaultValue.
 
 import {
+  Alert,
+  AlertDescription,
   Button,
   DatePicker,
   Input,
@@ -40,6 +42,38 @@ const parsedEstimate = (raw: string): number | null | undefined => {
   }
   const value = Number(trimmed);
   return Number.isInteger(value) && value >= 0 ? value : undefined;
+};
+
+/** The uncontrolled fields read from FormData, or a readable error. */
+type ReadResult =
+  | {
+      readonly ok: true;
+      readonly title: string;
+      readonly notes: string | null;
+      readonly estimateMinutes: number | null;
+    }
+  | { readonly ok: false; readonly error: string };
+
+const readFormFields = (form: HTMLFormElement): ReadResult => {
+  const data = new FormData(form);
+  const title = String(data.get("title") ?? "").trim();
+  if (title === "") {
+    return { ok: false, error: "A task needs a title." };
+  }
+  const estimateMinutes = parsedEstimate(String(data.get("estimate") ?? ""));
+  if (estimateMinutes === undefined) {
+    return {
+      ok: false,
+      error: "The estimate must be a whole number of minutes, zero or more.",
+    };
+  }
+  const notes = String(data.get("notes") ?? "").trim();
+  return {
+    ok: true,
+    title,
+    notes: notes === "" ? null : notes,
+    estimateMinutes,
+  };
 };
 
 const DetailFields = ({
@@ -89,6 +123,68 @@ const DetailFields = ({
   </div>
 );
 
+/**
+ * Owns the sheet's editable state and both writes. `run` wraps save and
+ * delete the same way ListView's own run() does, so a rejected delete
+ * surfaces a readable error instead of an unhandled promise rejection.
+ */
+const useTaskDetailForm = (
+  task: Task,
+  onSave: (input: TaskUpdateInput) => Promise<void>,
+  onDelete: (entityId: string) => Promise<void>,
+) => {
+  const [priority, setPriority] = useState(task.priority);
+  const [tags, setTags] = useState<readonly string[]>(task.tags);
+  const [dueDate, setDueDate] = useState(task.dueDate);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const run = async (action: () => Promise<void>): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (thrown) {
+      setError(readableError(thrown));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const fields = readFormFields(event.currentTarget);
+    if (!fields.ok) {
+      setError(fields.error);
+      return;
+    }
+    void run(() =>
+      onSave({
+        entityId: task.entityId,
+        title: fields.title,
+        notes: fields.notes,
+        priority,
+        tags,
+        dueDate,
+        estimateMinutes: fields.estimateMinutes,
+      }),
+    );
+  };
+
+  return {
+    priority,
+    setPriority,
+    tags,
+    setTags,
+    dueDate,
+    setDueDate,
+    error,
+    busy,
+    submit,
+    remove: () => void run(() => onDelete(task.entityId)),
+  };
+};
+
 const TaskDetailForm = ({
   task,
   onSave,
@@ -98,75 +194,37 @@ const TaskDetailForm = ({
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
   readonly onDelete: (entityId: string) => Promise<void>;
 }): ReactElement => {
-  const [priority, setPriority] = useState(task.priority);
-  const [tags, setTags] = useState<readonly string[]>(task.tags);
-  const [dueDate, setDueDate] = useState(task.dueDate);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const title = String(data.get("title") ?? "").trim();
-    if (title === "") {
-      setError("A task needs a title.");
-      return;
-    }
-    const estimateMinutes = parsedEstimate(String(data.get("estimate") ?? ""));
-    if (estimateMinutes === undefined) {
-      setError("The estimate must be a whole number of minutes, zero or more.");
-      return;
-    }
-    const notes = String(data.get("notes") ?? "").trim();
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave({
-        entityId: task.entityId,
-        title,
-        notes: notes === "" ? null : notes,
-        priority,
-        tags,
-        dueDate,
-        estimateMinutes,
-      });
-    } catch (thrown) {
-      setError(readableError(thrown));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  const form = useTaskDetailForm(task, onSave, onDelete);
   return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      className="flex h-full flex-col"
-    >
+    <form onSubmit={form.submit} className="flex h-full flex-col">
       <SheetHeader>
         <SheetTitle>Edit task</SheetTitle>
       </SheetHeader>
       <DetailFields
         task={task}
-        priority={priority}
-        onPriorityChange={setPriority}
-        tags={tags}
-        onTagsChange={setTags}
-        dueDate={dueDate}
-        onDueDateChange={setDueDate}
+        priority={form.priority}
+        onPriorityChange={form.setPriority}
+        tags={form.tags}
+        onTagsChange={form.setTags}
+        dueDate={form.dueDate}
+        onDueDateChange={form.setDueDate}
       />
-      {error === null ? null : (
-        <p className="px-4 text-sm text-destructive">{error}</p>
+      {form.error === null ? null : (
+        <Alert variant="destructive" className="mx-4">
+          <AlertDescription>{form.error}</AlertDescription>
+        </Alert>
       )}
       <Separator />
       <div className="flex items-center justify-between p-4">
         <Button
           type="button"
           variant="ghost"
-          onClick={() => void onDelete(task.entityId)}
+          disabled={form.busy}
+          onClick={form.remove}
         >
           Delete
         </Button>
-        <Button type="submit" disabled={saving}>
+        <Button type="submit" disabled={form.busy}>
           Save
         </Button>
       </div>

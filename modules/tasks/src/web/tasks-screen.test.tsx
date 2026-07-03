@@ -209,7 +209,7 @@ const makeStubApi = (initial: readonly Task[]) => {
 };
 
 /** Mounts the page on a router, exactly as the module page contribution wires it. */
-const renderTasks = (api: TasksApi, url = "/tasks") => {
+const renderTasks = async (api: TasksApi, url = "/tasks") => {
   const queryClient = new QueryClient();
   const rootRoute = createRootRoute();
   const tasksRoute = createRoute({
@@ -222,6 +222,10 @@ const renderTasks = (api: TasksApi, url = "/tasks") => {
     routeTree: rootRoute.addChildren([tasksRoute]),
     history: createMemoryHistory({ initialEntries: [url] }),
   });
+  // Settling the router before mounting keeps its internal post-render
+  // state updates out of React's act() warnings (calendar-screen.test.tsx
+  // pattern).
+  await router.load();
   const view = render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
@@ -233,15 +237,24 @@ const renderTasks = (api: TasksApi, url = "/tasks") => {
 const searchOf = (router: { state: { location: { search: unknown } } }) =>
   normalizeTasksSearch(router.state.location.search);
 
-const selectTab = (view: ReturnType<typeof render>, name: string): void => {
+// Switching the tab fires an async router navigation, so its re-render
+// (mounting/unmounting the board's DndContext and the list's checkboxes)
+// lands outside the sync act window fireEvent opens; awaiting an async
+// act flushes that navigation and keeps the output free of act warnings.
+const selectTab = async (
+  view: ReturnType<typeof render>,
+  name: string,
+): Promise<void> => {
   const tab = view.getByRole("tab", { name });
-  fireEvent.mouseDown(tab, { button: 0 });
-  fireEvent.click(tab);
+  await act(async () => {
+    fireEvent.mouseDown(tab, { button: 0 });
+    fireEvent.click(tab);
+  });
 };
 
 test("the board is the default view, with three columns and their counts", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
 
   expect(await view.findByText("Chase invoice")).toBeTruthy();
   expect(view.getByText("Water plants")).toBeTruthy();
@@ -256,7 +269,7 @@ test("the board is the default view, with three columns and their counts", async
 
 test("a card shows its tag, priority, and overdue due date", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
   expect(view.getByText("work")).toBeTruthy();
@@ -266,14 +279,14 @@ test("a card shows its tag, priority, and overdue due date", async () => {
 
 test("an empty column shows the quiet empty state", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
 
   expect(await view.findByText("Nothing here.")).toBeTruthy();
 });
 
 test("a card is wired into dnd-kit as a real sortable item", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const title = await view.findByText("Chase invoice");
 
   const card = title.closest('[aria-roledescription="sortable"]');
@@ -283,10 +296,10 @@ test("a card is wired into dnd-kit as a real sortable item", async () => {
 
 test("the switcher moves to the list view and writes it into the URL", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view, router } = renderTasks(api);
+  const { view, router } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
-  selectTab(view, "List");
+  await selectTab(view, "List");
 
   expect(await view.findByPlaceholderText("Add a task...")).toBeTruthy();
   expect(searchOf(router)).toEqual({ view: "list" });
@@ -295,11 +308,11 @@ test("the switcher moves to the list view and writes it into the URL", async () 
 
 test("a list URL renders the list view directly, and switching back restores the board", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view, router } = renderTasks(api, "/tasks?view=list");
+  const { view, router } = await renderTasks(api, "/tasks?view=list");
 
   expect(await view.findByPlaceholderText("Add a task...")).toBeTruthy();
 
-  selectTab(view, "Board");
+  await selectTab(view, "Board");
 
   expect(await view.findByText("Chase invoice")).toBeTruthy();
   expect(searchOf(router)).toEqual({ view: "board" });
@@ -307,14 +320,14 @@ test("a list URL renders the list view directly, and switching back restores the
 
 test("a garbage ?view= falls back to the board", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api, "/tasks?view=gantt");
+  const { view } = await renderTasks(api, "/tasks?view=gantt");
 
   expect(await view.findByText("Chase invoice")).toBeTruthy();
 });
 
 test("clicking a card opens the detail sheet without dragging", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const title = await view.findByText("Water plants");
 
   fireEvent.click(title);
@@ -327,9 +340,35 @@ test("clicking a card opens the detail sheet without dragging", async () => {
   );
 });
 
+test("the card's Edit button opens the detail sheet (keyboard/SR path)", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Water plants");
+
+  // The card's own Space/Enter drive the dnd keyboard sensor, so this
+  // explicit button is how keyboard and screen-reader users reach the
+  // editor. Activating it (what Enter/Space on the focused button do)
+  // opens the sheet.
+  fireEvent.click(view.getByRole("button", { name: "Edit Water plants" }));
+
+  expect(await view.findByText("Edit task")).toBeTruthy();
+  expect(view.getByLabelText("Title")).toHaveProperty("value", "Water plants");
+});
+
+test("the list row's Edit button opens the detail sheet", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=list");
+  await view.findByText("Chase invoice");
+
+  fireEvent.click(view.getByRole("button", { name: "Edit Chase invoice" }));
+
+  expect(await view.findByText("Edit task")).toBeTruthy();
+  expect(view.getByLabelText("Title")).toHaveProperty("value", "Chase invoice");
+});
+
 test("saving a priority change calls update with the task's priority", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
   act(() => {
     fireEvent.click(card);
@@ -351,7 +390,7 @@ test("saving a priority change calls update with the task's priority", async () 
 
 test("adding a tag in the sheet saves it in the tags list", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
   act(() => {
     fireEvent.click(card);
@@ -374,7 +413,7 @@ test("adding a tag in the sheet saves it in the tags list", async () => {
 
 test("setting the estimate in the sheet saves it as whole minutes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
   act(() => {
     fireEvent.click(card);
@@ -396,7 +435,7 @@ test("setting the estimate in the sheet saves it as whole minutes", async () => 
 
 test("picking a due date in the sheet saves it", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const card = await view.findByText("Chase invoice");
   act(() => {
     fireEvent.click(card);
@@ -427,7 +466,7 @@ test("picking a due date in the sheet saves it", async () => {
 
 test("deleting from the sheet calls delete and closes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api);
+  const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
   act(() => {
     fireEvent.click(card);
@@ -446,9 +485,34 @@ test("deleting from the sheet calls delete and closes", async () => {
   expect(view.queryByText("Water plants")).toBeNull();
 });
 
+test("a failed delete surfaces a readable error instead of closing", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const failing: TasksApi = {
+    ...api,
+    delete: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderTasks(failing);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Delete" }));
+  });
+
+  // The sheet stays open with the server's readable message.
+  expect(
+    await view.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(view.getByText("Edit task")).toBeTruthy();
+});
+
 test("the list view still lists open (todo) tasks by due date, with notes markers", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api, "/tasks?view=list");
+  const { view } = await renderTasks(api, "/tasks?view=list");
 
   // The Open filter is "todo" only; "Draft proposal" is "doing" and
   // surfaces under All instead (checked below).
@@ -457,13 +521,13 @@ test("the list view still lists open (todo) tasks by due date, with notes marker
   expect(view.getByText("30 Jun")).toBeTruthy();
   expect(view.getAllByText("Has notes").length).toBe(1);
 
-  selectTab(view, "All");
+  await selectTab(view, "All");
   expect(await view.findByText("Draft proposal")).toBeTruthy();
 });
 
 test("the list view's quick-add still creates a task", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api, "/tasks?view=list");
+  const { view } = await renderTasks(api, "/tasks?view=list");
   await view.findByText("Chase invoice");
 
   fireEvent.change(view.getByPlaceholderText("Add a task..."), {
@@ -477,7 +541,7 @@ test("the list view's quick-add still creates a task", async () => {
 
 test("toggling in the list view moves a task from Open to Done", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const { view } = renderTasks(api, "/tasks?view=list");
+  const { view } = await renderTasks(api, "/tasks?view=list");
   await view.findByText("Chase invoice");
 
   await act(async () => {
@@ -488,7 +552,7 @@ test("toggling in the list view moves a task from Open to Done", async () => {
   await view.findByText("Water plants");
   expect(view.queryByText("Chase invoice")).toBeNull();
 
-  selectTab(view, "Done");
+  await selectTab(view, "Done");
   expect(await view.findByText("Chase invoice")).toBeTruthy();
 });
 
@@ -499,7 +563,7 @@ test("shows a readable error when the board cannot load", async () => {
     board: () =>
       Promise.reject(new Error("You need to sign in before doing that.")),
   };
-  const { view } = renderTasks(failing);
+  const { view } = await renderTasks(failing);
 
   expect(
     await view.findByText("You need to sign in before doing that."),

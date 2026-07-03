@@ -4,7 +4,9 @@
 // Task 5 fills in estimate/logged minutes. The whole surface is a
 // dnd-kit sortable item; the click-to-open and drag-to-move gestures
 // coexist through the sensor's activation distance (see BoardView), not
-// through anything this component does.
+// through anything this component does. Since the card's Space/Enter are
+// claimed by the dnd keyboard sensor, the EditTaskButton is the
+// keyboard/SR path to the detail sheet.
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -18,6 +20,7 @@ import {
   tagBadgeClass,
 } from "../helpers/board-style";
 import { formatDueDate, isDueOrOverdue } from "../helpers/due-date";
+import { EditTaskButton } from "./edit-task-button";
 
 export interface TaskCardProps {
   readonly task: Task;
@@ -48,14 +51,23 @@ const TimeFooter = ({ task }: { readonly task: Task }): ReactElement | null => {
 const CardBody = ({
   task,
   today,
+  onOpen,
 }: {
   readonly task: Task;
   readonly today: string;
+  readonly onOpen: () => void;
 }): ReactElement => {
   const overdue = task.status !== "done" && isDueOrOverdue(task.dueDate, today);
   return (
     <div className="flex flex-col gap-1.5 p-2.5">
-      <p className="text-sm font-medium">{task.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium">{task.title}</p>
+        <EditTaskButton
+          title={task.title}
+          onOpen={onOpen}
+          className="shrink-0 opacity-0 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+        />
+      </div>
       {task.tags.length === 0 ? null : (
         <div className="flex flex-wrap gap-1">
           {task.tags.map((tag) => (
@@ -119,12 +131,12 @@ export const TaskCard = ({
       {...listeners}
       onClick={onOpen}
       className={cn(
-        "cursor-pointer overflow-hidden rounded-md border bg-card",
+        "group cursor-pointer overflow-hidden rounded-md border bg-card",
         isDragging && "opacity-50",
       )}
     >
       {accent === null ? null : <div className={cn("h-1", accent)} />}
-      <CardBody task={task} today={today} />
+      <CardBody task={task} today={today} onOpen={onOpen} />
     </div>
   );
 };

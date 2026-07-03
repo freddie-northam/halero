@@ -22,6 +22,8 @@ import { readableError } from "../readable-error";
 
 export interface ListViewProps {
   readonly api: TasksApi;
+  /** Opens the shared detail sheet, the only editor for a task. */
+  readonly onOpenTask: (task: Task) => void;
 }
 
 const EMPTY_LINES: Record<TaskFilter, string> = {
@@ -61,12 +63,14 @@ const TaskListBody = ({
   filter,
   today,
   onToggle,
+  onOpen,
   onDelete,
 }: {
   readonly tasks: readonly Task[];
   readonly filter: TaskFilter;
   readonly today: string;
   readonly onToggle: (entityId: string) => void;
+  readonly onOpen: (task: Task) => void;
   readonly onDelete: (entityId: string) => void;
 }): ReactElement => {
   if (tasks.length === 0) {
@@ -84,6 +88,7 @@ const TaskListBody = ({
           task={task}
           today={today}
           onToggle={onToggle}
+          onOpen={onOpen}
           onDelete={onDelete}
         />
       ))}
@@ -91,7 +96,7 @@ const TaskListBody = ({
   );
 };
 
-export const ListView = ({ api }: ListViewProps): ReactElement => {
+export const ListView = ({ api, onOpenTask }: ListViewProps): ReactElement => {
   const [filter, setFilter] = useState<TaskFilter>("todo");
   const [actionError, setActionError] = useState<string | null>(null);
   // The today anchor is the module's own cheap procedure; its `today`
@@ -139,6 +144,7 @@ export const ListView = ({ api }: ListViewProps): ReactElement => {
         filter={filter}
         today={today}
         onToggle={(entityId) => void run(() => api.toggle(entityId))}
+        onOpen={onOpenTask}
         onDelete={(entityId) => void run(() => api.delete(entityId))}
       />
     );
