@@ -96,12 +96,15 @@ describe("bearer rejections", () => {
   });
 
   test("malformed Authorization headers are unauthenticated, never 500", async () => {
-    const { app } = await makeBearerApp();
+    const { app, tokenValue } = await makeBearerApp();
     const malformed = [
       "Bearer",
       "Bearer  ",
       "Bearer definitely-not-a-halero-token",
       "Basic dXNlcjpwYXNz",
+      // Duplicate Authorization headers arrive comma-joined per the fetch
+      // spec; even when both copies carry a valid token, fail closed.
+      `Bearer ${tokenValue}, Bearer ${tokenValue}`,
     ];
 
     for (const authorization of malformed) {
