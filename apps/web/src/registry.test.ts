@@ -229,7 +229,10 @@ describe("buildCommands", () => {
     // Today and calendar contribute no commands; nothing of theirs leaks in.
     const commands = buildCommands(modulesUnderTest());
 
-    expect(commands.map((entry) => entry.id)).toEqual(["tasks.new", "notes.new"]);
+    expect(commands.map((entry) => entry.id)).toEqual([
+      "tasks.new",
+      "notes.new",
+    ]);
   });
 
   test("a module without commands contributes nothing", () => {
