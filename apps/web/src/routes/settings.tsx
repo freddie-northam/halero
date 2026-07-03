@@ -21,6 +21,7 @@ import {
   type ReactNode,
   useState,
 } from "react";
+import { CopyField } from "../components/copy-field";
 import type {
   GoogleConnection,
   GoogleStatus,
@@ -30,6 +31,8 @@ import type {
 } from "../lib/api";
 import { useApi } from "../lib/api-context";
 import { readableError } from "../lib/errors";
+import { minutesBetween, relativeTimeText } from "../lib/relative-time";
+import { ApiTokensSection } from "./settings-api-tokens";
 
 export interface SettingsScreenProps {
   readonly connected: boolean;
@@ -128,30 +131,6 @@ const HttpsGatePanel = (): ReactElement => (
     </CardContent>
   </Card>
 );
-
-const CopyField = ({ value }: { readonly value: string }): ReactElement => {
-  const [copied, setCopied] = useState(false);
-  const copy = (): void => {
-    const clipboard: Clipboard | undefined = navigator.clipboard;
-    if (clipboard === undefined) {
-      return;
-    }
-    void clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-  return (
-    <span className="mt-2 flex items-center gap-2">
-      <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-2 py-1.5 text-xs">
-        {value}
-      </code>
-      <Button variant="outline" size="sm" onClick={copy}>
-        {copied ? "Copied" : "Copy"}
-      </Button>
-    </span>
-  );
-};
 
 const ProductionStatusNote = (): ReactElement => (
   <span className="mt-2 block rounded-md border border-amber-300 bg-amber-50 p-3">
@@ -355,25 +334,6 @@ const SyncOutcome = ({
       {result.error ?? "Syncing failed. Please try again."}
     </p>
   );
-};
-
-const minutesBetween = (from: number, to: number): number =>
-  Math.max(0, Math.round((to - from) / 60_000));
-
-const relativeTimeText = (from: number, now: number): string => {
-  const minutes = minutesBetween(from, now);
-  if (minutes === 0) {
-    return "just now";
-  }
-  if (minutes < 60) {
-    return `${minutes} min ago`;
-  }
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) {
-    return `${hours} hr ago`;
-  }
-  const days = Math.round(hours / 24);
-  return days === 1 ? "1 day ago" : `${days} days ago`;
 };
 
 const lastSyncedText = (lastSuccessAt: number | null, now: number): string => {
@@ -889,6 +849,9 @@ export const SettingsScreen = ({
       <div className="mt-6">{body()}</div>
       <div className="mt-6">
         <NotificationsSection />
+      </div>
+      <div className="mt-6">
+        <ApiTokensSection />
       </div>
       <div className="mt-6">
         <ServerAddressSection />

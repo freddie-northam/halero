@@ -64,6 +64,23 @@ export interface BaseUrlSettings {
   readonly url: string;
 }
 
+export interface ApiTokenSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: number;
+  /** Epoch ms of the last authenticated use; null when never used. */
+  readonly lastUsedAt: number | null;
+  /** Epoch ms of revocation; null while the token is live. */
+  readonly revokedAt: number | null;
+}
+
+export interface CreatedApiToken {
+  readonly id: string;
+  readonly name: string;
+  /** The plaintext token. Shown exactly once; never retrievable again. */
+  readonly token: string;
+}
+
 export interface SearchResult {
   readonly entityId: string;
   readonly kind: string;
@@ -103,6 +120,9 @@ export interface HaleroApi {
   readonly sendTestNotification: () => Promise<TestNotificationResult>;
   readonly baseUrl: () => Promise<BaseUrlSettings>;
   readonly saveBaseUrl: (url: string) => Promise<void>;
+  readonly listApiTokens: () => Promise<readonly ApiTokenSummary[]>;
+  readonly createApiToken: (name: string) => Promise<CreatedApiToken>;
+  readonly revokeApiToken: (id: string) => Promise<void>;
   readonly search: (
     query: string,
     opts?: SearchOptions,
@@ -133,6 +153,11 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   baseUrl: () => client.system.baseUrl.query(),
   saveBaseUrl: async (url) => {
     await client.system.setBaseUrl.mutate({ baseUrl: url });
+  },
+  listApiTokens: () => client.tokens.list.query(),
+  createApiToken: (name) => client.tokens.create.mutate({ name }),
+  revokeApiToken: async (id) => {
+    await client.tokens.revoke.mutate({ id });
   },
   search: async (query, opts) =>
     (await client.system.search.query({ query, ...opts })).results,
