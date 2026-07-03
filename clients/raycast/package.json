@@ -12,6 +12,56 @@
       "title": "Open Halero",
       "description": "Open the Halero web app in your browser.",
       "mode": "no-view"
+    },
+    {
+      "name": "search",
+      "title": "Search Halero",
+      "subtitle": "Halero",
+      "description": "Search across everything in your Halero instance.",
+      "mode": "view",
+      "keywords": [
+        "find",
+        "events",
+        "tasks"
+      ]
+    },
+    {
+      "name": "agenda",
+      "title": "Today's Agenda",
+      "subtitle": "Halero",
+      "description": "See today's calendar events from Halero.",
+      "mode": "view",
+      "keywords": [
+        "calendar",
+        "today",
+        "events"
+      ]
+    },
+    {
+      "name": "add-task",
+      "title": "Add Task",
+      "subtitle": "Halero",
+      "description": "Add a task to Halero, with an optional YYYY-MM-DD due date.",
+      "mode": "no-view",
+      "keywords": [
+        "todo",
+        "new",
+        "task"
+      ],
+      "arguments": [
+        {
+          "name": "title",
+          "type": "text",
+          "placeholder": "Title",
+          "required": true
+        },
+        {
+          "name": "due",
+          "type": "text",
+          "placeholder": "Due (YYYY-MM-DD)",
+          "required": false
+        }
+      ]
     }
   ],
   "preferences": [
