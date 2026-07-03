@@ -1,9 +1,22 @@
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
-import { act } from "react";
-import type { Task, TaskFilter } from "../contract";
-import type { TasksApi } from "./api";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  within,
+} from "@testing-library/react";
+import type { Task } from "../contract";
+import type { TasksApi, TaskUpdateInput } from "./api";
+import { normalizeTasksSearch } from "./helpers/board-search";
 import { withTasksInvalidation } from "./queries";
 import { createTasksScreen } from "./tasks-screen";
 import { registerHappyDom, unregisterHappyDom } from "./test/happy-dom";
@@ -22,9 +35,14 @@ const TODAY = "2025-07-02";
 
 const task = (seed: Partial<Task> & { entityId: string }): Task => ({
   title: "Untitled",
-  status: "open",
+  status: "todo",
+  priority: null,
+  tags: [],
   dueDate: null,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
   ...seed,
 });
@@ -33,37 +51,56 @@ const fixtureTasks: readonly Task[] = [
   task({
     entityId: "t-overdue",
     title: "Chase invoice",
+    tags: ["work"],
+    priority: "high",
     dueDate: "2025-06-30",
+    sortOrder: 1,
   }),
   task({
     entityId: "t-today",
     title: "Water plants",
     dueDate: TODAY,
     notes: "The balcony ones too.",
+    sortOrder: 2,
   }),
-  task({ entityId: "t-future", title: "Book dentist", dueDate: "2025-07-10" }),
-  task({ entityId: "t-dateless", title: "Sharpen pencils" }),
   task({
-    entityId: "t-done",
-    title: "File taxes",
-    status: "done",
-    dueDate: "2025-06-28",
-    completedAt: Date.UTC(2025, 5, 28, 12, 0, 0),
+    entityId: "t-doing",
+    title: "Draft proposal",
+    status: "doing",
+    tags: ["health"],
+    priority: "medium",
+    dueDate: "2025-07-10",
+    sortOrder: 1,
   }),
 ];
 
 interface StubCalls {
   readonly create: { title: string; dueDate?: string }[];
+  readonly update: TaskUpdateInput[];
+  readonly move: { entityId: string; status: string; sortOrder: number }[];
   readonly toggle: string[];
   readonly delete: string[];
+  readonly logTime: { entityId: string; minutes: number }[];
 }
 
-/** A stateful stub serving list/today like the server would. */
+/** A stateful stub serving list/today/board like the server would. */
 const makeStubApi = (initial: readonly Task[]) => {
   let tasks: readonly Task[] = initial;
-  const calls: StubCalls = { create: [], toggle: [], delete: [] };
+  const calls: StubCalls = {
+    create: [],
+    update: [],
+    move: [],
+    toggle: [],
+    delete: [],
+    logTime: [],
+  };
+  const nextSortOrder = (status: Task["status"]): number =>
+    Math.max(
+      0,
+      ...tasks.filter((t) => t.status === status).map((t) => t.sortOrder),
+    ) + 1;
   const api: TasksApi = {
-    list: (filter: TaskFilter) =>
+    list: (filter) =>
       Promise.resolve({
         tasks:
           filter === "all"
@@ -76,10 +113,26 @@ const makeStubApi = (initial: readonly Task[]) => {
         today: TODAY,
         tasks: tasks.filter(
           (item) =>
-            item.status === "open" &&
+            item.status !== "done" &&
             item.dueDate !== null &&
             item.dueDate <= TODAY,
         ),
+      }),
+    board: () =>
+      Promise.resolve({
+        homeTimezone: HOME_TZ,
+        today: TODAY,
+        columns: {
+          todo: tasks
+            .filter((item) => item.status === "todo")
+            .toSorted((a, b) => a.sortOrder - b.sortOrder),
+          doing: tasks
+            .filter((item) => item.status === "doing")
+            .toSorted((a, b) => a.sortOrder - b.sortOrder),
+          done: tasks
+            .filter((item) => item.status === "done")
+            .toSorted((a, b) => a.sortOrder - b.sortOrder),
+        },
       }),
     create: (input) => {
       calls.create.push(input);
@@ -87,9 +140,50 @@ const makeStubApi = (initial: readonly Task[]) => {
         entityId: `t-new-${calls.create.length}`,
         title: input.title,
         dueDate: input.dueDate ?? null,
+        sortOrder: nextSortOrder("todo"),
       });
       tasks = [...tasks, created];
       return Promise.resolve(created);
+    },
+    update: (input) => {
+      calls.update.push(input);
+      tasks = tasks.map((item) =>
+        item.entityId === input.entityId
+          ? task({
+              ...item,
+              ...(input.title === undefined ? {} : { title: input.title }),
+              ...(input.dueDate === undefined
+                ? {}
+                : { dueDate: input.dueDate }),
+              ...(input.notes === undefined ? {} : { notes: input.notes }),
+              ...(input.priority === undefined
+                ? {}
+                : { priority: input.priority }),
+              ...(input.tags === undefined ? {} : { tags: input.tags }),
+              ...(input.estimateMinutes === undefined
+                ? {}
+                : { estimateMinutes: input.estimateMinutes }),
+            })
+          : item,
+      );
+      const updated = tasks.find((item) => item.entityId === input.entityId);
+      if (updated === undefined) {
+        return Promise.reject(new Error("This item is not a task."));
+      }
+      return Promise.resolve(updated);
+    },
+    move: (input) => {
+      calls.move.push(input);
+      tasks = tasks.map((item) =>
+        item.entityId === input.entityId
+          ? task({ ...item, status: input.status, sortOrder: input.sortOrder })
+          : item,
+      );
+      const moved = tasks.find((item) => item.entityId === input.entityId);
+      if (moved === undefined) {
+        return Promise.reject(new Error("This item is not a task."));
+      }
+      return Promise.resolve(moved);
     },
     toggle: (entityId) => {
       calls.toggle.push(entityId);
@@ -97,7 +191,7 @@ const makeStubApi = (initial: readonly Task[]) => {
         item.entityId === entityId
           ? task({
               ...item,
-              status: item.status === "open" ? "done" : "open",
+              status: item.status === "done" ? "todo" : "done",
             })
           : item,
       );
@@ -112,101 +206,503 @@ const makeStubApi = (initial: readonly Task[]) => {
       tasks = tasks.filter((item) => item.entityId !== entityId);
       return Promise.resolve({ entityId });
     },
+    logTime: (input) => {
+      calls.logTime.push(input);
+      tasks = tasks.map((item) =>
+        item.entityId === input.entityId
+          ? task({
+              ...item,
+              loggedMinutes: Math.max(0, item.loggedMinutes + input.minutes),
+            })
+          : item,
+      );
+      const logged = tasks.find((item) => item.entityId === input.entityId);
+      if (logged === undefined) {
+        return Promise.reject(new Error("This item is not a task."));
+      }
+      return Promise.resolve(logged);
+    },
   };
   return { api, calls };
 };
 
-/** Mounts the page on a wrapped api, exactly as the registry wires it. */
-const renderTasks = (api: TasksApi) => {
+/** Mounts the page on a router, exactly as the module page contribution wires it. */
+const renderTasks = async (api: TasksApi, url = "/tasks") => {
   const queryClient = new QueryClient();
-  const TasksScreen = createTasksScreen(
-    withTasksInvalidation(api, queryClient),
-  );
+  const rootRoute = createRootRoute();
+  const tasksRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/tasks",
+    validateSearch: normalizeTasksSearch,
+    component: createTasksScreen(withTasksInvalidation(api, queryClient)),
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([tasksRoute]),
+    history: createMemoryHistory({ initialEntries: [url] }),
+  });
+  // Settling the router before mounting keeps its internal post-render
+  // state updates out of React's act() warnings (calendar-screen.test.tsx
+  // pattern).
+  await router.load();
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <TasksScreen />
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return view;
+  return { view, router };
 };
 
-const selectTab = (view: ReturnType<typeof render>, name: string): void => {
+const searchOf = (router: { state: { location: { search: unknown } } }) =>
+  normalizeTasksSearch(router.state.location.search);
+
+// Switching the tab fires an async router navigation, so its re-render
+// (mounting/unmounting the board's DndContext and the list's checkboxes)
+// lands outside the sync act window fireEvent opens; awaiting an async
+// act flushes that navigation and keeps the output free of act warnings.
+const selectTab = async (
+  view: ReturnType<typeof render>,
+  name: string,
+): Promise<void> => {
   const tab = view.getByRole("tab", { name });
-  fireEvent.mouseDown(tab, { button: 0 });
-  fireEvent.click(tab);
+  await act(async () => {
+    fireEvent.mouseDown(tab, { button: 0 });
+    fireEvent.click(tab);
+  });
 };
 
-test("the Open filter lists open tasks only, with due dates and the notes marker", async () => {
+test("the board is the default view, with three columns and their counts", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
+  const { view } = await renderTasks(api);
 
   expect(await view.findByText("Chase invoice")).toBeTruthy();
   expect(view.getByText("Water plants")).toBeTruthy();
-  expect(view.getByText("Book dentist")).toBeTruthy();
-  expect(view.getByText("Sharpen pencils")).toBeTruthy();
-  expect(view.queryByText("File taxes")).toBeNull();
-  expect(view.getByText("30 Jun")).toBeTruthy();
-  expect(view.getByText("10 Jul")).toBeTruthy();
-  // Only Water plants carries notes; the marker is display-only.
-  expect(view.getAllByText("Has notes").length).toBe(1);
+  expect(view.getByText("Draft proposal")).toBeTruthy();
+  const boardTab = view.getByRole("tab", { name: "Board" });
+  expect(boardTab.getAttribute("aria-selected")).toBe("true");
+  // To do (2), Doing (1), Done (0): each column's own count badge.
+  expect(view.getByText("2")).toBeTruthy();
+  expect(view.getAllByText("1").length).toBeGreaterThan(0);
+  expect(view.getByText("0")).toBeTruthy();
 });
 
-test("overdue and due-today open tasks are tinted; future and done ones are not", async () => {
+test("a card shows its tag, priority, and overdue due date", async () => {
   const { api } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
+  const { view } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
+  expect(view.getByText("work")).toBeTruthy();
+  expect(view.getByText("High")).toBeTruthy();
   expect(view.getByText("30 Jun").className).toContain("text-destructive");
-  expect(view.getByText("2 Jul").className).toContain("text-destructive");
-  expect(view.getByText("10 Jul").className).not.toContain("text-destructive");
-
-  selectTab(view, "Done");
-  const doneDate = await view.findByText("28 Jun");
-  expect(doneDate.className).not.toContain("text-destructive");
-  // A completed title reads muted and struck through.
-  expect(view.getByText("File taxes").className).toContain("line-through");
 });
 
-test("quick-add creates the task with its due date and shows it after refetch", async () => {
-  const { api, calls } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
+test("a card shows only the estimate when nothing is logged yet", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-est", title: "Plan sprint", estimateMinutes: 60 }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Plan sprint");
+  expect(view.getByText("Est 1h")).toBeTruthy();
+});
+
+test("a card shows only the logged time when there is no estimate", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-log", title: "Fix bug", loggedMinutes: 85 }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Fix bug");
+  expect(view.getByText("Logged 1h 25m")).toBeTruthy();
+});
+
+test("a card shows both estimate and logged time together", async () => {
+  const { api } = makeStubApi([
+    task({
+      entityId: "t-both",
+      title: "Write report",
+      estimateMinutes: 180,
+      loggedMinutes: 170,
+    }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Write report");
+  expect(view.getByText("Est 3h · Logged 2h 50m")).toBeTruthy();
+});
+
+test("logging past the estimate tints the logged half instead of the whole line", async () => {
+  const { api } = makeStubApi([
+    task({
+      entityId: "t-over",
+      title: "Over budget",
+      estimateMinutes: 30,
+      loggedMinutes: 45,
+    }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Over budget");
+  const footer = view.getByText("Est 30m", { exact: false });
+  expect(footer.textContent).toBe("Est 30m · Logged 45m");
+  const logged = view.getByText("Logged 45m");
+  expect(logged.className).toContain("text-amber-600");
+});
+
+test("a card shows no time footer when neither estimate nor logged time is set", async () => {
+  const { api } = makeStubApi([
+    task({ entityId: "t-plain", title: "Plain task" }),
+  ]);
+  const { view } = await renderTasks(api);
+
+  await view.findByText("Plain task");
+  expect(view.queryByText(/Est /)).toBeNull();
+  expect(view.queryByText(/Logged /)).toBeNull();
+});
+
+test("an empty column shows the quiet empty state", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+
+  expect(await view.findByText("Nothing here.")).toBeTruthy();
+});
+
+test("a card is wired into dnd-kit as a real sortable item", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const title = await view.findByText("Chase invoice");
+
+  const card = title.closest('[aria-roledescription="sortable"]');
+  expect(card).not.toBeNull();
+  expect(card?.getAttribute("tabindex")).toBe("0");
+});
+
+test("the switcher moves to the list view and writes it into the URL", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view, router } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
-  const title = view.getByPlaceholderText("Add a task...");
-  fireEvent.change(title, { target: { value: "Pay rent" } });
-  fireEvent.change(view.getByLabelText("Due date"), {
-    target: { value: "2025-07-04" },
+  await selectTab(view, "List");
+
+  expect(await view.findByPlaceholderText("Add a task...")).toBeTruthy();
+  expect(searchOf(router)).toEqual({ view: "list" });
+  expect(view.getByRole("tab", { name: "Open" })).toBeTruthy();
+});
+
+test("a list URL renders the list view directly, and switching back restores the board", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view, router } = await renderTasks(api, "/tasks?view=list");
+
+  expect(await view.findByPlaceholderText("Add a task...")).toBeTruthy();
+
+  await selectTab(view, "Board");
+
+  expect(await view.findByText("Chase invoice")).toBeTruthy();
+  expect(searchOf(router)).toEqual({ view: "board" });
+});
+
+test("a garbage ?view= falls back to the board", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=gantt");
+
+  expect(await view.findByText("Chase invoice")).toBeTruthy();
+});
+
+test("clicking a card opens the detail sheet without dragging", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const title = await view.findByText("Water plants");
+
+  fireEvent.click(title);
+
+  expect(await view.findByText("Edit task")).toBeTruthy();
+  expect(view.getByLabelText("Title")).toHaveProperty("value", "Water plants");
+  expect(view.getByLabelText("Notes")).toHaveProperty(
+    "value",
+    "The balcony ones too.",
+  );
+});
+
+test("the card's Edit button opens the detail sheet (keyboard/SR path)", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Water plants");
+
+  // The card's own Space/Enter drive the dnd keyboard sensor, so this
+  // explicit button is how keyboard and screen-reader users reach the
+  // editor. Activating it (what Enter/Space on the focused button do)
+  // opens the sheet.
+  fireEvent.click(view.getByRole("button", { name: "Edit Water plants" }));
+
+  expect(await view.findByText("Edit task")).toBeTruthy();
+  expect(view.getByLabelText("Title")).toHaveProperty("value", "Water plants");
+});
+
+test("the list row's Edit button opens the detail sheet", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=list");
+  await view.findByText("Chase invoice");
+
+  fireEvent.click(view.getByRole("button", { name: "Edit Chase invoice" }));
+
+  expect(await view.findByText("Edit task")).toBeTruthy();
+  expect(view.getByLabelText("Title")).toHaveProperty("value", "Chase invoice");
+});
+
+test("saving a priority change calls update with the task's priority", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
   });
-  fireEvent.submit(title);
+  await view.findByText("Edit task");
 
-  expect(await view.findByText("Pay rent")).toBeTruthy();
-  expect(calls.create).toEqual([{ title: "Pay rent", dueDate: "2025-07-04" }]);
-  // The form resets for the next capture.
-  expect((title as HTMLInputElement).value).toBe("");
-  expect((view.getByLabelText("Due date") as HTMLInputElement).value).toBe("");
+  fireEvent.click(view.getByRole("radio", { name: "High" }));
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls.update).toHaveLength(1);
+  expect(calls.update[0]).toMatchObject({
+    entityId: "t-today",
+    priority: "high",
+  });
+  expect(view.queryByText("Edit task")).toBeNull();
 });
 
-test("an empty title gets the readable inline error without calling the api", async () => {
+test("adding a tag in the sheet saves it in the tags list", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
-  await view.findByText("Chase invoice");
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
 
-  fireEvent.submit(view.getByPlaceholderText("Add a task..."));
+  fireEvent.change(view.getByLabelText("Add tag"), {
+    target: { value: "garden" },
+  });
+  fireEvent.click(view.getByRole("button", { name: "Add" }));
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Save" }));
+  });
 
-  expect(await view.findByText("A task needs a title.")).toBeTruthy();
-  expect(calls.create.length).toBe(0);
+  expect(calls.update[0]).toMatchObject({
+    entityId: "t-today",
+    tags: ["garden"],
+  });
 });
 
-test("a rejected create surfaces the server's readable message inline", async () => {
+test("setting the estimate in the sheet saves it as whole minutes", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  fireEvent.change(view.getByLabelText("Estimate (minutes)"), {
+    target: { value: "45" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls.update[0]).toMatchObject({
+    entityId: "t-today",
+    estimateMinutes: 45,
+  });
+});
+
+test("the sheet shows the running logged total and a log-time control adds to it", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+  // Scoped to the dialog: once logged, the board card grows its own
+  // matching time footer too, so an unscoped query becomes ambiguous.
+  const dialog = within(view.getByRole("dialog"));
+  expect(dialog.getByText("Logged 0m")).toBeTruthy();
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "50" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 50 }]);
+  expect(await dialog.findByText("Logged 50m")).toBeTruthy();
+  // Unlike Save/Delete, logging time keeps the sheet open.
+  expect(view.getByText("Edit task")).toBeTruthy();
+});
+
+test("a quick +15m button logs a fixed increment", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+  const dialog = within(view.getByRole("dialog"));
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "+15m" }));
+  });
+
+  expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 15 }]);
+  expect(await dialog.findByText("Logged 15m")).toBeTruthy();
+});
+
+test("logging zero minutes is rejected readably without calling the api", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "0" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(calls.logTime).toEqual([]);
+  expect(
+    await view.findByText("Enter a non-zero whole number of minutes."),
+  ).toBeTruthy();
+});
+
+test("a failed log-time surfaces a readable error and keeps the sheet open", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const failing: TasksApi = {
     ...api,
-    create: () =>
-      Promise.reject(
-        new Error('"2025-99-99" is not a calendar date; expected YYYY-MM-DD.'),
-      ),
+    logTime: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
   };
-  const view = renderTasks(failing);
+  const { view } = await renderTasks(failing);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  fireEvent.change(view.getByLabelText("Minutes to log"), {
+    target: { value: "30" },
+  });
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Log time" }));
+  });
+
+  expect(
+    await view.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(view.getByText("Edit task")).toBeTruthy();
+});
+
+test("picking a due date in the sheet saves it", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Chase invoice");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+  // The board's own To do quick-add also has a "Due date" picker behind
+  // the sheet, so the query is scoped to the dialog to disambiguate.
+  const dialog = within(view.getByRole("dialog"));
+
+  await act(async () => {
+    fireEvent.click(dialog.getByLabelText("Due date"));
+  });
+  // "Chase invoice" already has a due date, so the calendar opens on
+  // that date's own month (2025-06) rather than the real current one.
+  await act(async () => {
+    fireEvent.click(view.getByText("15"));
+  });
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls.update[0]).toMatchObject({
+    entityId: "t-overdue",
+    dueDate: "2025-06-15",
+  });
+});
+
+test("deleting from the sheet calls delete and closes", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Delete" }));
+  });
+
+  expect(calls.delete).toEqual(["t-today"]);
+  expect(view.queryByText("Edit task")).toBeNull();
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByText("Water plants")).toBeNull();
+});
+
+test("a failed delete surfaces a readable error instead of closing", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const failing: TasksApi = {
+    ...api,
+    delete: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderTasks(failing);
+  const card = await view.findByText("Water plants");
+  act(() => {
+    fireEvent.click(card);
+  });
+  await view.findByText("Edit task");
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "Delete" }));
+  });
+
+  // The sheet stays open with the server's readable message.
+  expect(
+    await view.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(view.getByText("Edit task")).toBeTruthy();
+});
+
+test("the list view still lists open (todo) tasks by due date, with notes markers", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=list");
+
+  // The Open filter is "todo" only; "Draft proposal" is "doing" and
+  // surfaces under All instead (checked below).
+  expect(await view.findByText("Chase invoice")).toBeTruthy();
+  expect(view.getByText("Water plants")).toBeTruthy();
+  expect(view.getByText("30 Jun")).toBeTruthy();
+  expect(view.getAllByText("Has notes").length).toBe(1);
+
+  await selectTab(view, "All");
+  expect(await view.findByText("Draft proposal")).toBeTruthy();
+});
+
+test("the list view's quick-add still creates a task", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=list");
   await view.findByText("Chase invoice");
 
   fireEvent.change(view.getByPlaceholderText("Add a task..."), {
@@ -214,70 +710,56 @@ test("a rejected create surfaces the server's readable message inline", async ()
   });
   fireEvent.submit(view.getByPlaceholderText("Add a task..."));
 
-  expect(
-    await view.findByText(
-      '"2025-99-99" is not a calendar date; expected YYYY-MM-DD.',
-    ),
-  ).toBeTruthy();
+  expect(await view.findByText("Pay rent")).toBeTruthy();
+  expect(calls.create).toEqual([{ title: "Pay rent" }]);
 });
 
-test("toggling moves a task from Open to Done across the filters", async () => {
+// Regression: in the narrow To do board column, the title input rendered
+// on the same row as "Due date" and "Add" and clipped to "Add a tas...".
+// The title now has its own row (see quick-add-form.tsx), so this checks
+// it still renders unclipped in the board and that the form still works.
+test("the board's To do quick-add renders the title input and still creates a task", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
+  const { view } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
-  // The checkbox's accessible name is the task title. The async act
-  // keeps the toggle-invalidate-refetch chain inside React's test scope.
+  const titleInput = await view.findByLabelText("Task title");
+  expect(titleInput).toBeTruthy();
+  expect(titleInput.getAttribute("placeholder")).toBe("Add a task...");
+  expect(view.getByLabelText("Due date")).toBeTruthy();
+
+  fireEvent.change(titleInput, { target: { value: "Renew passport" } });
+  fireEvent.submit(titleInput);
+
+  expect(await view.findByText("Renew passport")).toBeTruthy();
+  expect(calls.create).toEqual([{ title: "Renew passport" }]);
+});
+
+test("toggling in the list view moves a task from Open to Done", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api, "/tasks?view=list");
+  await view.findByText("Chase invoice");
+
   await act(async () => {
     fireEvent.click(view.getByRole("checkbox", { name: "Chase invoice" }));
   });
 
   expect(calls.toggle).toEqual(["t-overdue"]);
-  // Invalidation refetches the open list, which no longer holds it.
   await view.findByText("Water plants");
   expect(view.queryByText("Chase invoice")).toBeNull();
 
-  selectTab(view, "Done");
+  await selectTab(view, "Done");
   expect(await view.findByText("Chase invoice")).toBeTruthy();
-  expect(await view.findByText("File taxes")).toBeTruthy();
 });
 
-test("the row's X deletes the task", async () => {
-  const { api, calls } = makeStubApi(fixtureTasks);
-  const view = renderTasks(api);
-  const row = (await view.findByText("Sharpen pencils")).closest("li");
-  if (row === null) {
-    throw new Error("The task row did not render as a list item.");
-  }
-
-  await act(async () => {
-    fireEvent.click(within(row).getByRole("button", { name: "Delete task" }));
-  });
-
-  expect(calls.delete).toEqual(["t-dateless"]);
-  await view.findByText("Chase invoice");
-  expect(view.queryByText("Sharpen pencils")).toBeNull();
-});
-
-test("each filter has its own empty state", async () => {
-  const { api } = makeStubApi([]);
-  const view = renderTasks(api);
-
-  expect(await view.findByText("No open tasks.")).toBeTruthy();
-  selectTab(view, "Done");
-  expect(await view.findByText("No completed tasks.")).toBeTruthy();
-  selectTab(view, "All");
-  expect(await view.findByText("No tasks yet.")).toBeTruthy();
-});
-
-test("shows a readable error when the list cannot load", async () => {
+test("shows a readable error when the board cannot load", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const failing: TasksApi = {
     ...api,
-    list: () =>
+    board: () =>
       Promise.reject(new Error("You need to sign in before doing that.")),
   };
-  const view = renderTasks(failing);
+  const { view } = await renderTasks(failing);
 
   expect(
     await view.findByText("You need to sign in before doing that."),

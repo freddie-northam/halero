@@ -552,7 +552,7 @@ describe("user entity transaction bundling", () => {
     expect(() =>
       store.withTransaction(() => {
         const { entityId } = store.createUserEntity(userInput());
-        handle.db.insert(tasks).values({ entityId, status: "open" }).run();
+        handle.db.insert(tasks).values({ entityId, status: "todo" }).run();
         throw new Error("task creation failed midway");
       }),
     ).toThrow("task creation failed midway");

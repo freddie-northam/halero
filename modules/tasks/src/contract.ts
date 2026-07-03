@@ -3,26 +3,60 @@
 // both entries can import them without dragging the other side's
 // dependencies along.
 
+export type TaskStatus = "todo" | "doing" | "done";
+
+export type TaskPriority = "high" | "medium" | "low";
+
 export interface Task {
   readonly entityId: string;
   readonly title: string;
-  readonly status: "open" | "done";
+  /** Board statuses since migration 0006; legacy "open" became "todo". */
+  readonly status: TaskStatus;
+  readonly priority: TaskPriority | null;
+  /** Trimmed, deduplicated; empty when the task has no tags. */
+  readonly tags: readonly string[];
   /** Calendar date ("YYYY-MM-DD") in the home timezone, or null. */
   readonly dueDate: string | null;
   readonly notes: string | null;
-  /** Epoch ms of the completing toggle; null while open. */
+  readonly estimateMinutes: number | null;
+  /** Written by Task 5's logTime; the router only reads it back here. */
+  readonly loggedMinutes: number;
+  /**
+   * Position within the task's board column. Fractional on purpose:
+   * move() stores whatever midpoint the client computed between the
+   * two neighbor cards it dropped between.
+   */
+  readonly sortOrder: number;
+  /** Epoch ms of the completing move/toggle; null while not done. */
   readonly completedAt: number | null;
 }
 
-/** The list procedure's filter values; "open" is the page default. */
-export type TaskFilter = "open" | "done" | "all";
+/** The list procedure's filter values; "todo" is the page default. */
+export type TaskFilter = "todo" | "done" | "all";
 
 export interface TaskList {
   readonly tasks: readonly Task[];
 }
 
 /**
- * Open tasks due today or overdue, anchored to the server-computed
+ * The Kanban board: every live task grouped by status, each column
+ * ordered by sort_order then created_at. Always has all three columns,
+ * empty arrays included, so the client never has to guard on a missing
+ * key.
+ */
+export interface TaskBoard {
+  readonly homeTimezone: string;
+  /** Calendar date ("YYYY-MM-DD") of now in the home timezone. */
+  readonly today: string;
+  readonly columns: {
+    readonly todo: readonly Task[];
+    readonly doing: readonly Task[];
+    readonly done: readonly Task[];
+  };
+}
+
+/**
+ * Non-done tasks due today or overdue, anchored to the server-computed
  * "today"; the client never does timezone math.
  */
 export interface TasksToday {

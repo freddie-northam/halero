@@ -6,12 +6,14 @@ import { Button, Checkbox, cn, StickyNote, X } from "@halero/ui";
 import type { ReactElement } from "react";
 import type { Task } from "../../contract";
 import { formatDueDate, isDueOrOverdue } from "../helpers/due-date";
+import { EditTaskButton } from "./edit-task-button";
 
 export interface TaskRowProps {
   readonly task: Task;
   /** The server-computed today (home timezone), for the overdue tint. */
   readonly today: string;
   readonly onToggle: (entityId: string) => void;
+  readonly onOpen: (task: Task) => void;
   readonly onDelete: (entityId: string) => void;
 }
 
@@ -33,7 +35,7 @@ const DueDate = ({
     return null;
   }
   const slipping =
-    task.status === "open" && isDueOrOverdue(task.dueDate, today);
+    task.status !== "done" && isDueOrOverdue(task.dueDate, today);
   return (
     <span
       className={cn(
@@ -50,6 +52,7 @@ export const TaskRow = ({
   task,
   today,
   onToggle,
+  onOpen,
   onDelete,
 }: TaskRowProps): ReactElement => (
   <li className="group -mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50">
@@ -70,6 +73,11 @@ export const TaskRow = ({
       {task.notes === null ? null : <NotesMarker />}
     </span>
     <DueDate task={task} today={today} />
+    <EditTaskButton
+      title={task.title}
+      onOpen={() => onOpen(task)}
+      className="opacity-0 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+    />
     <Button
       variant="ghost"
       size="icon-xs"

@@ -6,9 +6,14 @@ import { createNewTaskCommand } from "./new-task-command";
 const createdTask = (title: string): Task => ({
   entityId: "t-new",
   title,
-  status: "open",
+  status: "todo",
+  priority: null,
+  tags: [],
   dueDate: null,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
 });
 
@@ -16,9 +21,13 @@ const createdTask = (title: string): Task => ({
 const apiWithCreate = (create: TasksApi["create"]): TasksApi => ({
   list: () => Promise.reject(new Error("not under test")),
   today: () => Promise.reject(new Error("not under test")),
+  board: () => Promise.reject(new Error("not under test")),
   create,
+  update: () => Promise.reject(new Error("not under test")),
+  move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
+  logTime: () => Promise.reject(new Error("not under test")),
 });
 
 describe("the new-task command", () => {

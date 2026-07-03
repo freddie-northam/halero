@@ -30,14 +30,19 @@ const TODAY = "2025-07-02";
 
 const task = (seed: Partial<Task> & { entityId: string }): Task => ({
   title: "Untitled",
-  status: "open",
+  status: "todo",
+  priority: null,
+  tags: [],
   dueDate: TODAY,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
   ...seed,
 });
 
-/** Serves the today view like the server: open, due today or overdue. */
+/** Serves the today view like the server: non-done, due today or overdue. */
 const makeStubApi = (initial: readonly Task[]) => {
   let tasks: readonly Task[] = initial;
   const calls: string[] = [];
@@ -47,9 +52,12 @@ const makeStubApi = (initial: readonly Task[]) => {
       Promise.resolve({
         homeTimezone: HOME_TZ,
         today: TODAY,
-        tasks: tasks.filter((item) => item.status === "open"),
+        tasks: tasks.filter((item) => item.status !== "done"),
       }),
+    board: () => Promise.reject(new Error("not under test")),
     create: () => Promise.reject(new Error("not under test")),
+    update: () => Promise.reject(new Error("not under test")),
+    move: () => Promise.reject(new Error("not under test")),
     toggle: (entityId) => {
       calls.push(entityId);
       tasks = tasks.map((item) =>
@@ -62,6 +70,7 @@ const makeStubApi = (initial: readonly Task[]) => {
       return Promise.resolve(toggled);
     },
     delete: () => Promise.reject(new Error("not under test")),
+    logTime: () => Promise.reject(new Error("not under test")),
   };
   return { api, calls };
 };

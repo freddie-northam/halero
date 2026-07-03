@@ -48,9 +48,14 @@ const standup = {
 const dueTask: Task = {
   entityId: "t-1",
   title: "Pay invoices",
-  status: "open",
+  status: "todo",
+  priority: null,
+  tags: [],
   dueDate: TODAY,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
 };
 
@@ -81,9 +86,20 @@ const stubClient = {
             tasks: [dueTask],
           }),
       },
+      board: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: HOME_TZ,
+            today: TODAY,
+            columns: { todo: [dueTask], doing: [], done: [] },
+          }),
+      },
       create: { mutate: () => Promise.reject(new Error("not under test")) },
+      update: { mutate: () => Promise.reject(new Error("not under test")) },
+      move: { mutate: () => Promise.reject(new Error("not under test")) },
       toggle: { mutate: () => Promise.reject(new Error("not under test")) },
       delete: { mutate: () => Promise.reject(new Error("not under test")) },
+      logTime: { mutate: () => Promise.reject(new Error("not under test")) },
     },
   },
 } as unknown as TrpcClient;
@@ -209,9 +225,18 @@ test("an interleaved registry section renders strictly by order", async () => {
         today: TODAY,
         tasks: [dueTask],
       }),
+    board: () =>
+      Promise.resolve({
+        homeTimezone: HOME_TZ,
+        today: TODAY,
+        columns: { todo: [], doing: [], done: [] },
+      }),
     create: () => Promise.reject(new Error("not under test")),
+    update: () => Promise.reject(new Error("not under test")),
+    move: () => Promise.reject(new Error("not under test")),
     toggle: () => Promise.reject(new Error("not under test")),
     delete: () => Promise.reject(new Error("not under test")),
+    logTime: () => Promise.reject(new Error("not under test")),
   };
   const todayApi: TodayApi = {
     home: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),

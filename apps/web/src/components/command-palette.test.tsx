@@ -46,7 +46,7 @@ type CreateTaskStub = (input: {
 const createdTask = (title: string) => ({
   entityId: "t-new",
   title,
-  status: "open",
+  status: "todo",
   dueDate: null,
   notes: null,
   completedAt: null,
@@ -72,7 +72,17 @@ const buildStubClient = (createTask: CreateTaskStub): TrpcClient =>
           query: () =>
             Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY, tasks: [] }),
         },
+        board: {
+          query: () =>
+            Promise.resolve({
+              homeTimezone: HOME_TZ,
+              today: TODAY,
+              columns: { todo: [], doing: [], done: [] },
+            }),
+        },
         create: { mutate: createTask },
+        update: { mutate: () => Promise.reject(new Error("not under test")) },
+        move: { mutate: () => Promise.reject(new Error("not under test")) },
         toggle: { mutate: () => Promise.reject(new Error("not under test")) },
         delete: { mutate: () => Promise.reject(new Error("not under test")) },
       },

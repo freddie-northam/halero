@@ -23,9 +23,14 @@ import { createAppRouter } from "./router";
 const stubTask = {
   entityId: "t-1",
   title: "Buy milk",
-  status: "open",
+  status: "todo",
+  priority: null,
+  tags: [],
   dueDate: null,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
 };
 
@@ -50,9 +55,20 @@ const stubClient = {
             tasks: [],
           }),
       },
+      board: {
+        query: () =>
+          Promise.resolve({
+            homeTimezone: "UTC",
+            today: "2023-11-14",
+            columns: { todo: [stubTask], doing: [], done: [] },
+          }),
+      },
       create: { mutate: () => Promise.resolve(stubTask) },
+      update: { mutate: () => Promise.resolve(stubTask) },
+      move: { mutate: () => Promise.resolve(stubTask) },
       toggle: { mutate: () => Promise.resolve(stubTask) },
       delete: { mutate: () => Promise.resolve({ entityId: "t-1" }) },
+      logTime: { mutate: () => Promise.resolve(stubTask) },
     },
   },
 } as unknown as TrpcClient;
@@ -76,9 +92,18 @@ const stubTasksApi: TasksApi = {
   list: () => Promise.resolve({ tasks: [] }),
   today: () =>
     Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14", tasks: [] }),
+  board: () =>
+    Promise.resolve({
+      homeTimezone: "UTC",
+      today: "2023-11-14",
+      columns: { todo: [], doing: [], done: [] },
+    }),
   create: () => Promise.reject(new Error("not under test")),
+  update: () => Promise.reject(new Error("not under test")),
+  move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
+  logTime: () => Promise.reject(new Error("not under test")),
 };
 
 const modulesUnderTest = () =>
@@ -137,6 +162,8 @@ describe("buildTasksApi", () => {
     expect(invalidations).toBe(2);
     await api.delete("t-1");
     expect(invalidations).toBe(3);
+    await api.logTime({ entityId: "t-1", minutes: 15 });
+    expect(invalidations).toBe(4);
   });
 
   test("reads pass straight through without invalidating", async () => {
@@ -148,7 +175,7 @@ describe("buildTasksApi", () => {
     }) as QueryClient["invalidateQueries"];
     const api = buildTasksApi(stubClient, queryClient);
 
-    const list = await api.list("open");
+    const list = await api.list("todo");
     const today = await api.today();
     expect(list.tasks.map((task) => task.title)).toEqual(["Buy milk"]);
     expect(today.today).toBe("2023-11-14");

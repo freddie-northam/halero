@@ -73,7 +73,7 @@ const seedFullDatabase = (testApp: TestApp): void => {
     [clock.value, clock.value],
   );
   sqlite.run(
-    "INSERT INTO tasks (entity_id, status, due_date, notes) VALUES ('ent-3', 'open', '2026-07-10', 'Renew passport')",
+    "INSERT INTO tasks (entity_id, status, due_date, notes) VALUES ('ent-3', 'todo', '2026-07-10', 'Renew passport')",
   );
   db.insert(links)
     .values({

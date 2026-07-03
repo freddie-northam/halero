@@ -70,9 +70,24 @@ export const buildTasksApi = (
     {
       list: (filter) => client.modules.tasks.list.query({ filter }),
       today: () => client.modules.tasks.today.query(),
+      board: () => client.modules.tasks.board.query(),
       create: (input) => client.modules.tasks.create.mutate(input),
+      // The tRPC input schema wants a mutable string[]; the module's
+      // TaskUpdateInput keeps tags readonly, so it is copied at the seam.
+      update: (input) =>
+        client.modules.tasks.update.mutate({
+          entityId: input.entityId,
+          title: input.title,
+          dueDate: input.dueDate,
+          notes: input.notes,
+          priority: input.priority,
+          tags: input.tags === undefined ? undefined : [...input.tags],
+          estimateMinutes: input.estimateMinutes,
+        }),
+      move: (input) => client.modules.tasks.move.mutate(input),
       toggle: (entityId) => client.modules.tasks.toggle.mutate({ entityId }),
       delete: (entityId) => client.modules.tasks.delete.mutate({ entityId }),
+      logTime: (input) => client.modules.tasks.logTime.mutate(input),
     },
     queryClient,
   );

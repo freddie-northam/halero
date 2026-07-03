@@ -7,9 +7,18 @@ const stubApi: TasksApi = {
   list: () => Promise.resolve({ tasks: [] }),
   today: () =>
     Promise.resolve({ homeTimezone: "UTC", today: "2025-07-02", tasks: [] }),
+  board: () =>
+    Promise.resolve({
+      homeTimezone: "UTC",
+      today: "2025-07-02",
+      columns: { todo: [], doing: [], done: [] },
+    }),
   create: () => Promise.reject(new Error("not under test")),
+  update: () => Promise.reject(new Error("not under test")),
+  move: () => Promise.reject(new Error("not under test")),
   toggle: () => Promise.reject(new Error("not under test")),
   delete: () => Promise.reject(new Error("not under test")),
+  logTime: () => Promise.reject(new Error("not under test")),
 };
 
 describe("the tasks web module", () => {

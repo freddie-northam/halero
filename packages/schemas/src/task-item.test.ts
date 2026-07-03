@@ -7,25 +7,40 @@ import {
 
 describe("taskSatelliteSchema", () => {
   const satellite: TaskSatellite = {
-    status: "open",
+    status: "todo",
     dueDate: null,
     completedAt: null,
     notes: null,
+    loggedMinutes: 0,
   };
 
-  test("parses a valid open-task payload", () => {
+  test("parses a minimal todo payload without the optional board fields", () => {
     expect(taskSatelliteSchema.parse(satellite)).toEqual(satellite);
   });
 
-  test("parses a completed payload with a due date and notes", () => {
+  test("parses a full board payload with priority, tags, and time", () => {
     const done: TaskSatellite = {
       status: "done",
+      priority: "high",
+      tags: ["errand", "travel"],
       dueDate: "2026-07-01",
       completedAt: 1_700_000_000_000,
       notes: "handed off to accounting",
+      estimateMinutes: 90,
+      loggedMinutes: 25,
     };
 
     expect(taskSatelliteSchema.parse(done)).toEqual(done);
+  });
+
+  test("parses a doing payload with a null estimate", () => {
+    const doing: TaskSatellite = {
+      ...satellite,
+      status: "doing",
+      estimateMinutes: null,
+    };
+
+    expect(taskSatelliteSchema.parse(doing)).toEqual(doing);
   });
 
   test("rejects a payload without a status", () => {
@@ -34,10 +49,37 @@ describe("taskSatelliteSchema", () => {
     expect(taskSatelliteSchema.safeParse(rest).success).toBe(false);
   });
 
-  test("rejects a status outside open and done", () => {
+  test("rejects the legacy 'open' status", () => {
     const parsed = taskSatelliteSchema.safeParse({
       ...satellite,
-      status: "blocked",
+      status: "open",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects a priority outside high, medium, and low", () => {
+    const parsed = taskSatelliteSchema.safeParse({
+      ...satellite,
+      priority: "urgent",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects tags that are not an array of strings", () => {
+    const parsed = taskSatelliteSchema.safeParse({
+      ...satellite,
+      tags: "errand",
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  test("rejects a fractional loggedMinutes", () => {
+    const parsed = taskSatelliteSchema.safeParse({
+      ...satellite,
+      loggedMinutes: 1.5,
     });
 
     expect(parsed.success).toBe(false);

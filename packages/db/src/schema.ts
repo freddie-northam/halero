@@ -4,6 +4,7 @@ import {
   index,
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   unique,
@@ -156,20 +157,30 @@ export const syncRuns = sqliteTable(
   ],
 );
 
+// Rebuilt by migrations/0006_tasks_board.sql for the Kanban board.
 export const tasks = sqliteTable(
   "tasks",
   {
     entityId: text("entity_id")
       .primaryKey()
       .references(() => entities.id),
-    status: text("status", { enum: ["open", "done"] })
+    status: text("status", { enum: ["todo", "doing", "done"] })
       .notNull()
-      .default("open"),
+      .default("todo"),
+    priority: text("priority", { enum: ["high", "medium", "low"] }),
+    /** JSON string array, nullable. */
+    tags: text("tags"),
     dueDate: text("due_date"),
     completedAt: integer("completed_at"),
     notes: text("notes"),
+    estimateMinutes: integer("estimate_minutes"),
+    loggedMinutes: integer("logged_minutes").notNull().default(0),
+    sortOrder: real("sort_order").notNull().default(0),
   },
-  (table) => [index("idx_tasks_status_due").on(table.status, table.dueDate)],
+  (table) => [
+    index("idx_tasks_status_due").on(table.status, table.dueDate),
+    index("idx_tasks_status_sort").on(table.status, table.sortOrder),
+  ],
 );
 
 export const apiTokens = sqliteTable("api_tokens", {
