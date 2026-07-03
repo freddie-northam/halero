@@ -23,6 +23,12 @@ describe("the tasks web module", () => {
     expect(module.pages?.map((page) => page.path)).toEqual(["/tasks"]);
   });
 
+  test("contributes the quick-capture palette command", () => {
+    expect(module.commands?.map((command) => command.id)).toEqual([
+      "tasks.new",
+    ]);
+  });
+
   test("links task items to the tasks page under the Task heading", () => {
     const link = module.entityLinks?.[0];
     expect(link?.kind).toBe(TASK_ITEM_KIND);

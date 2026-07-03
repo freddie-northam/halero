@@ -7,6 +7,7 @@
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { TASK_ITEM_KIND } from "@halero/schemas";
 import type { TasksApi } from "./api";
+import { createNewTaskCommand } from "./new-task-command";
 import { createTasksScreen } from "./tasks-screen";
 
 export type { Task, TaskFilter, TaskList, TasksToday } from "../contract";
@@ -28,4 +29,5 @@ export const createTasksWebModule = (api: TasksApi): WebModule =>
         buildLink: () => ({ path: "/tasks" }),
       },
     ],
+    commands: [createNewTaskCommand(api)],
   });
