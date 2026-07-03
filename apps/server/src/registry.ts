@@ -13,11 +13,15 @@ import {
   type ServerModule,
   type UserEntityStore,
 } from "@halero/module-sdk/server";
+import { tasksServerModule } from "@halero/module-tasks/server";
 import type { TrpcContext } from "./trpc/context";
 import { router } from "./trpc/init";
 
 /** The modules this build ships with. */
-export const serverModules: readonly ServerModule[] = [calendarServerModule];
+export const serverModules: readonly ServerModule[] = [
+  calendarServerModule,
+  tasksServerModule,
+];
 
 /**
  * Entity kind index, built and validated at boot. A duplicate module id,
@@ -33,6 +37,7 @@ export const kindRegistry: KindRegistry = buildKindRegistry(serverModules);
  */
 export const modulesRouter = router({
   calendar: calendarServerModule.router,
+  tasks: tasksServerModule.router,
 });
 
 /**

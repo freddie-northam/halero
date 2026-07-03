@@ -20,6 +20,7 @@
         "@halero/db": "workspace:*",
         "@halero/module-calendar": "workspace:*",
         "@halero/module-sdk": "workspace:*",
+        "@halero/module-tasks": "workspace:*",
         "@halero/schemas": "workspace:*",
         "@trpc/server": "^11.10.0",
         "croner": "^10.0.1",
