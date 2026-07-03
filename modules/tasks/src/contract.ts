@@ -39,6 +39,23 @@ export interface TaskList {
 }
 
 /**
+ * The Kanban board: every live task grouped by status, each column
+ * ordered by sort_order then created_at. Always has all three columns,
+ * empty arrays included, so the client never has to guard on a missing
+ * key.
+ */
+export interface TaskBoard {
+  readonly homeTimezone: string;
+  /** Calendar date ("YYYY-MM-DD") of now in the home timezone. */
+  readonly today: string;
+  readonly columns: {
+    readonly todo: readonly Task[];
+    readonly doing: readonly Task[];
+    readonly done: readonly Task[];
+  };
+}
+
+/**
  * Non-done tasks due today or overdue, anchored to the server-computed
  * "today"; the client never does timezone math.
  */

@@ -40,6 +40,16 @@ interface TasksTodayData {
   readonly tasks: readonly TaskData[];
 }
 
+interface TaskBoardData {
+  readonly homeTimezone: string;
+  readonly today: string;
+  readonly columns: {
+    readonly todo: readonly TaskData[];
+    readonly doing: readonly TaskData[];
+    readonly done: readonly TaskData[];
+  };
+}
+
 interface TrpcErrorBody {
   readonly error: { readonly message: string };
 }
@@ -88,6 +98,31 @@ const readToday = async (
   const res = await trpcQuery(app, "modules.tasks.today", { cookie });
   expect(res.status).toBe(200);
   const json = (await res.json()) as TrpcSuccess<TasksTodayData>;
+  return json.result.data;
+};
+
+const readBoard = async (
+  app: TestApp["app"],
+  cookie: string,
+): Promise<TaskBoardData> => {
+  const res = await trpcQuery(app, "modules.tasks.board", { cookie });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as TrpcSuccess<TaskBoardData>;
+  return json.result.data;
+};
+
+const moveTask = async (
+  app: TestApp["app"],
+  cookie: string,
+  input: {
+    readonly entityId: string;
+    readonly status: string;
+    readonly sortOrder: number;
+  },
+): Promise<TaskData> => {
+  const res = await trpcMutation(app, "modules.tasks.move", input, { cookie });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as TrpcSuccess<TaskData>;
   return json.result.data;
 };
 
@@ -211,7 +246,11 @@ describe("modules.tasks auth", () => {
     const { app } = makeTestApp();
     await completeSetup(app);
 
-    for (const procedure of ["modules.tasks.list", "modules.tasks.today"]) {
+    for (const procedure of [
+      "modules.tasks.list",
+      "modules.tasks.today",
+      "modules.tasks.board",
+    ]) {
       const res = await trpcQuery(app, procedure);
       expect(res.status).toBe(401);
     }
@@ -220,6 +259,7 @@ describe("modules.tasks auth", () => {
       ["modules.tasks.update", { entityId: "t1", title: "Sneak in" }],
       ["modules.tasks.toggle", { entityId: "t1" }],
       ["modules.tasks.delete", { entityId: "t1" }],
+      ["modules.tasks.move", { entityId: "t1", status: "doing", sortOrder: 1 }],
     ];
     for (const [procedure, input] of mutations) {
       const res = await trpcMutation(app, procedure, input);
@@ -562,6 +602,204 @@ describe("modules.tasks.list", () => {
   });
 });
 
+describe("modules.tasks.board", () => {
+  test("groups live tasks into todo, doing, and done, ordered by sort_order then created_at", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const first = await createTask(testApp.app, cookie, { title: "First" });
+    const second = await createTask(testApp.app, cookie, { title: "Second" });
+    // Give "second" an earlier sort_order than "first" so a correct
+    // board query must put it first despite being created later.
+    setSortOrder(testApp, second.entityId, 0);
+    setSortOrder(testApp, first.entityId, 1);
+    const doing = await createTask(testApp.app, cookie, {
+      title: "Doing now",
+    });
+    await moveTask(testApp.app, cookie, {
+      entityId: doing.entityId,
+      status: "doing",
+      sortOrder: 1,
+    });
+    const done = await createTask(testApp.app, cookie, { title: "Done now" });
+    await toggleTask(testApp.app, cookie, done.entityId);
+
+    const board = await readBoard(testApp.app, cookie);
+
+    expect(board.homeTimezone).toBe("Europe/London");
+    expect(board.today).toBe("2023-11-14");
+    expect(board.columns.todo.map((item) => item.entityId)).toEqual([
+      second.entityId,
+      first.entityId,
+    ]);
+    expect(board.columns.doing.map((item) => item.entityId)).toEqual([
+      doing.entityId,
+    ]);
+    expect(board.columns.done.map((item) => item.entityId)).toEqual([
+      done.entityId,
+    ]);
+  });
+
+  test("returns empty columns when there are no tasks", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const board = await readBoard(testApp.app, cookie);
+
+    expect(board.columns).toEqual({ todo: [], doing: [], done: [] });
+  });
+
+  test("excludes deleted tasks", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Gone" });
+    await deleteTask(testApp.app, cookie, task.entityId);
+
+    const board = await readBoard(testApp.app, cookie);
+
+    expect(board.columns.todo).toHaveLength(0);
+  });
+});
+
+describe("modules.tasks.move", () => {
+  test("todo to doing sets status and sort_order, leaves completed_at null", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Advance" });
+
+    const moved = await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "doing",
+      sortOrder: 2.5,
+    });
+
+    expect(moved.status).toBe("doing");
+    expect(moved.sortOrder).toBe(2.5);
+    expect(moved.completedAt).toBeNull();
+    expect(readSatelliteRow(testApp, task.entityId)?.status).toBe("doing");
+  });
+
+  test("moving into done sets completed_at from the injected clock", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Finish" });
+    testApp.clock.value = 1_700_000_222_000;
+
+    const moved = await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "done",
+      sortOrder: 1,
+    });
+
+    expect(moved.status).toBe("done");
+    expect(moved.completedAt).toBe(1_700_000_222_000);
+  });
+
+  test("moving out of done clears completed_at", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Reopen" });
+    await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "done",
+      sortOrder: 1,
+    });
+
+    const reopened = await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "todo",
+      sortOrder: 3,
+    });
+
+    expect(reopened.status).toBe("todo");
+    expect(reopened.completedAt).toBeNull();
+    expect(reopened.sortOrder).toBe(3);
+  });
+
+  test("repositioning within done keeps the original completed_at", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Settled" });
+    testApp.clock.value = 1_700_000_333_000;
+    const firstMove = await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "done",
+      sortOrder: 1,
+    });
+    testApp.clock.value = 1_700_000_444_000;
+
+    const repositioned = await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "done",
+      sortOrder: 4,
+    });
+
+    expect(repositioned.completedAt).toBe(firstMove.completedAt);
+    expect(repositioned.sortOrder).toBe(4);
+  });
+
+  test("bumps the spine updated_at", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Touch" });
+    testApp.database.sqlite.run(
+      "UPDATE entities SET updated_at = 111 WHERE id = ?",
+      [task.entityId],
+    );
+
+    await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "doing",
+      sortOrder: 1,
+    });
+
+    expect(readEntityRow(testApp, task.entityId)?.updatedAt).toBeGreaterThan(
+      111,
+    );
+  });
+
+  test("rejects an unknown status readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Valid" });
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.move",
+      { entityId: task.entityId, status: "blocked", sortOrder: 1 },
+      400,
+    );
+
+    expect(message).toBe(
+      '"blocked" is not a task status; expected todo, doing, or done.',
+    );
+  });
+
+  test("rejects a non-finite sort position readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Valid" });
+
+    // NaN/Infinity have no JSON literal, so JSON.stringify(input) would
+    // collapse them to null before this ever reaches validation; 1e400
+    // is valid JSON text that overflows to Infinity once parsed, so the
+    // raw body is built by hand instead of going through JSON.stringify.
+    const res = await testApp.app.fetch(
+      new Request("http://localhost/api/trpc/modules.tasks.move", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: `{"entityId":"${task.entityId}","status":"doing","sortOrder":1e400}`,
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as TrpcErrorBody;
+    expect(json.error.message).toBe(
+      "The sort position must be a finite number.",
+    );
+  });
+});
+
 describe("modules.tasks.toggle", () => {
   test("todo to done sets completed_at from the server clock and bumps updated_at", async () => {
     const testApp = makeTestApp();
@@ -596,6 +834,29 @@ describe("modules.tasks.toggle", () => {
     expect(reopened.status).toBe("todo");
     expect(reopened.completedAt).toBeNull();
     expect(readSatelliteRow(testApp, task.entityId)?.completedAt).toBeNull();
+  });
+
+  // The List checkbox has one semantic regardless of board status: it
+  // completes the task, and reopening always lands back in todo. "doing"
+  // is only reachable again via a fresh board drag, never via the
+  // checkbox.
+  test("a doing task completes via toggle, and reopening lands in todo, not doing", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Underway" });
+    await moveTask(testApp.app, cookie, {
+      entityId: task.entityId,
+      status: "doing",
+      sortOrder: 1,
+    });
+
+    const completed = await toggleTask(testApp.app, cookie, task.entityId);
+    expect(completed.status).toBe("done");
+    expect(completed.completedAt).not.toBeNull();
+
+    const reopened = await toggleTask(testApp.app, cookie, task.entityId);
+    expect(reopened.status).toBe("todo");
+    expect(reopened.completedAt).toBeNull();
   });
 });
 
@@ -859,6 +1120,10 @@ describe("modules.tasks.update", () => {
         { entityId: task.entityId, title: "Necromancy" },
       ],
       ["modules.tasks.toggle", { entityId: task.entityId }],
+      [
+        "modules.tasks.move",
+        { entityId: task.entityId, status: "doing", sortOrder: 1 },
+      ],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(
@@ -996,6 +1261,7 @@ describe("the task guard", () => {
       ["modules.tasks.update", { entityId, title: "Hijack" }],
       ["modules.tasks.toggle", { entityId }],
       ["modules.tasks.delete", { entityId }],
+      ["modules.tasks.move", { entityId, status: "doing", sortOrder: 1 }],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(
@@ -1018,6 +1284,10 @@ describe("the task guard", () => {
       ["modules.tasks.update", { entityId: "synced-task-1", title: "Mine" }],
       ["modules.tasks.toggle", { entityId: "synced-task-1" }],
       ["modules.tasks.delete", { entityId: "synced-task-1" }],
+      [
+        "modules.tasks.move",
+        { entityId: "synced-task-1", status: "doing", sortOrder: 1 },
+      ],
     ];
     for (const [procedure, input] of attempts) {
       const message = await mutationError(

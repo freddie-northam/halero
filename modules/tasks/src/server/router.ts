@@ -13,7 +13,14 @@ import { TASK_ITEM_KIND } from "@halero/schemas";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Task, TaskList, TaskPriority, TasksToday } from "../contract";
+import type {
+  Task,
+  TaskBoard,
+  TaskList,
+  TaskPriority,
+  TaskStatus,
+  TasksToday,
+} from "../contract";
 import { moduleRouter, protectedProcedure } from "./trpc";
 
 /** The task.item satellite schema version this build stores. */
@@ -25,10 +32,20 @@ const TAGS_MAX_COUNT = 12;
 const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const PRIORITIES: readonly TaskPriority[] = ["high", "medium", "low"];
+const TASK_STATUSES: readonly TaskStatus[] = ["todo", "doing", "done"];
 
 const listInput = z
   .object({ filter: z.enum(["todo", "done", "all"]).optional() })
   .optional();
+
+const moveInput = z.object({
+  entityId: z.string(),
+  status: z.string(),
+  // Not z.number(): zod 4 rejects NaN/Infinity at the schema layer with
+  // a raw issue dump, but validatedSortOrder below needs a chance to
+  // reject them with a readable message instead.
+  sortOrder: z.custom<number>((value) => typeof value === "number"),
+});
 
 // Shape only; the handlers validate values themselves so rejections
 // carry readable messages instead of zod issue dumps.
@@ -124,6 +141,26 @@ const validatedTags = (raw: readonly string[]): readonly string[] => {
     throw badRequest(`A task can have at most ${TAGS_MAX_COUNT} tags.`);
   }
   return tags;
+};
+
+const isTaskStatus = (value: string): value is TaskStatus =>
+  (TASK_STATUSES as readonly string[]).includes(value);
+
+const validatedStatus = (raw: string): TaskStatus => {
+  if (!isTaskStatus(raw)) {
+    throw badRequest(
+      `"${raw}" is not a task status; expected todo, doing, or done.`,
+    );
+  }
+  return raw;
+};
+
+/** Fractional on purpose (a drag midpoint); only NaN/Infinity are invalid. */
+const validatedSortOrder = (raw: number): number => {
+  if (!Number.isFinite(raw)) {
+    throw badRequest("The sort position must be a finite number.");
+  }
+  return raw;
 };
 
 const validatedEstimate = (raw: number): number => {
@@ -239,9 +276,12 @@ const readTask = (db: ModuleDb, entityId: string): Task => {
 
 const taskGuardColumns = {
   status: tasks.status,
-  // update's snippet recompute needs the halves the patch omits.
+  // update's snippet recompute needs the halves the patch omits; move's
+  // done-boundary check needs the current completedAt to preserve it
+  // when the status isn't actually crossing into or out of done.
   tags: tasks.tags,
   notes: tasks.notes,
+  completedAt: tasks.completedAt,
   deletedAt: entities.deletedAt,
   source: entities.source,
 };
@@ -333,6 +373,35 @@ const dueTasks = (db: ModuleDb, today: string): readonly Task[] =>
     .orderBy(asc(tasks.dueDate), asc(entities.createdAt))
     .all()
     .map(toTask);
+
+/**
+ * Every live task grouped into its board column, sort_order first then
+ * created_at as the tie-break (matches migration 0006's rowid seeding).
+ * A single globally sorted query is bucketed by status rather than
+ * three separate queries: since the order is stable, partitioning the
+ * already-sorted rows preserves each column's relative order.
+ */
+const boardColumns = (
+  db: ModuleDb,
+): { todo: Task[]; doing: Task[]; done: Task[] } => {
+  const columns = { todo: [], doing: [], done: [] } as {
+    todo: Task[];
+    doing: Task[];
+    done: Task[];
+  };
+  const rows = db
+    .select(taskColumns)
+    .from(entities)
+    .innerJoin(tasks, eq(tasks.entityId, entities.id))
+    .where(and(eq(entities.kind, TASK_ITEM_KIND), isNull(entities.deletedAt)))
+    .orderBy(asc(tasks.sortOrder), asc(entities.createdAt))
+    .all()
+    .map(toTask);
+  for (const task of rows) {
+    columns[task.status].push(task);
+  }
+  return columns;
+};
 
 /** An update with every provided field validated; omissions preserve. */
 interface TaskFieldPatch {
@@ -429,6 +498,16 @@ export const tasksRouter = moduleRouter({
     return list;
   }),
 
+  board: protectedProcedure.query(({ ctx }) => {
+    const homeTimezone = homeTimezoneOf(ctx.db);
+    const board: TaskBoard = {
+      homeTimezone,
+      today: dateStringInZone(ctx.now(), homeTimezone),
+      columns: boardColumns(ctx.db),
+    };
+    return board;
+  }),
+
   create: protectedProcedure.input(createInput).mutation(({ ctx, input }) => {
     const title = validatedTitle(input.title);
     if (input.dueDate !== undefined) {
@@ -495,6 +574,42 @@ export const tasksRouter = moduleRouter({
     });
   }),
 
+  // The board drag: sets the column (status) and the fractional position
+  // within it. The client computes sortOrder as the midpoint between the
+  // two neighbor cards it dropped between (or past the end/start of the
+  // column); this procedure just stores whatever it's given. Crossing
+  // the done boundary sets or clears completed_at; repositioning within
+  // a column (including within done) leaves it untouched.
+  move: protectedProcedure.input(moveInput).mutation(({ ctx, input }) => {
+    const status = validatedStatus(input.status);
+    const sortOrder = validatedSortOrder(input.sortOrder);
+    const current = requireTaskSatellite(ctx.db, input.entityId);
+    const entering = current.status !== "done" && status === "done";
+    const leaving = current.status === "done" && status !== "done";
+    return ctx.entities.withTransaction(() => {
+      // Bumps updated_at and enforces the store's guards.
+      ctx.entities.updateUserEntity(input.entityId, {});
+      ctx.db
+        .update(tasks)
+        .set({
+          status,
+          sortOrder,
+          completedAt: entering
+            ? ctx.now()
+            : leaving
+              ? null
+              : current.completedAt,
+        })
+        .where(eq(tasks.entityId, input.entityId))
+        .run();
+      return readTask(ctx.db, input.entityId);
+    });
+  }),
+
+  // The List checkbox's semantic: complete/reopen, always via todo.
+  // "doing" is entered only through move() (a board drag); a checkbox
+  // toggle on a doing task completes it, and reopening never restores
+  // "doing", only "todo".
   toggle: protectedProcedure.input(entityIdInput).mutation(({ ctx, input }) => {
     const row = requireTaskSatellite(ctx.db, input.entityId);
     const completing = row.status !== "done";
