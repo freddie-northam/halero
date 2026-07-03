@@ -11,6 +11,7 @@ import {
 } from "@halero/ui";
 import { useMutation } from "@tanstack/react-query";
 import { type FormEvent, type ReactElement, useState } from "react";
+import { authFieldClassName } from "../components/auth-field";
 import { PasswordInput } from "../components/password-input";
 import type { SetupInput } from "../lib/api";
 import { useApi } from "../lib/api-context";
@@ -87,7 +88,7 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
       title="Welcome to Halero"
       subtitle="Claim this instance by choosing a password."
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
         <PasswordInput
           id="password"
           label="Password"
@@ -103,9 +104,14 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
           onChange={(event) => setConfirm(event.target.value)}
         />
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="home-timezone">Home timezone</Label>
+          <Label htmlFor="home-timezone" className="text-[13px]">
+            Home timezone
+          </Label>
           <Select value={homeTimezone} onValueChange={setHomeTimezone}>
-            <SelectTrigger id="home-timezone" size="sm" className="w-full">
+            <SelectTrigger
+              id="home-timezone"
+              className={`w-full ${authFieldClassName}`}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -123,26 +129,33 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
           size="sm"
           aria-expanded={showBaseUrl}
           onClick={() => setShowBaseUrl((value) => !value)}
-          className="h-auto self-start p-0 text-xs"
+          className="h-auto self-start p-0 text-xs text-muted-foreground"
         >
           Hosting behind a domain?
         </Button>
         {showBaseUrl ? (
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="base-url">Base URL</Label>
+            <Label htmlFor="base-url" className="text-[13px]">
+              Base URL
+            </Label>
             <Input
               id="base-url"
               type="url"
               placeholder="https://halero.example.com"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
+              className={authFieldClassName}
             />
           </div>
         ) : null}
         {error === null ? null : (
           <p className="text-sm text-destructive">{error}</p>
         )}
-        <Button type="submit" disabled={setup.isPending} className="w-full">
+        <Button
+          type="submit"
+          disabled={setup.isPending}
+          className="mt-1 h-11 w-full rounded-xl text-[15px]"
+        >
           {setup.isPending ? (
             <Loader2 aria-hidden="true" className="animate-spin" />
           ) : null}

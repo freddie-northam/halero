@@ -1,9 +1,10 @@
-// A password field with a show/hide eye toggle. Wraps the vendored Input;
-// the label doubles as the accessible name (aria-label) and the placeholder,
-// so the auth screens read cleanly without separate visible labels.
+// A password field with a show/hide eye toggle, at auth scale. Wraps the
+// vendored Input; the label doubles as the accessible name (aria-label) and
+// the placeholder, so the auth screens read cleanly without visible labels.
 
 import { Eye, EyeOff, Input } from "@halero/ui";
 import { type ChangeEvent, type ReactElement, useState } from "react";
+import { authFieldClassName } from "./auth-field";
 
 export interface PasswordInputProps {
   readonly id: string;
@@ -33,18 +34,18 @@ export const PasswordInput = ({
         required
         value={value}
         onChange={onChange}
-        className="pr-10"
+        className={`${authFieldClassName} pr-11`}
       />
       <button
         type="button"
         aria-label={visible ? "Hide password" : "Show password"}
         onClick={() => setVisible((current) => !current)}
-        className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground transition-colors hover:text-foreground"
+        className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-muted-foreground transition-colors hover:text-foreground"
       >
         {visible ? (
-          <EyeOff aria-hidden="true" className="size-4" />
+          <EyeOff aria-hidden="true" className="size-[18px]" />
         ) : (
-          <Eye aria-hidden="true" className="size-4" />
+          <Eye aria-hidden="true" className="size-[18px]" />
         )}
       </button>
     </div>
