@@ -10,7 +10,7 @@ directory, no external services. There is no hosted version. Connector
 credentials are encrypted with a key generated on first start, and the whole
 instance is a directory you can copy.
 
-Status: early development, v0.1 in progress. Interfaces and the database
+Status: v0.1.0 released, v0.2 in progress. Interfaces and the database
 schema can still change between commits.
 
 ## Quick start on a Mac
@@ -68,5 +68,4 @@ bun run --filter '@halero/web' dev      # web app with Vite proxying to :4253
 
 ## License
 
-The license is not decided yet. It will be finalized before the first public
-release; until then this repository carries no LICENSE file.
+MIT, see [LICENSE](LICENSE).

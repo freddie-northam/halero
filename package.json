@@ -1,6 +1,7 @@
 {
   "name": "halero",
   "private": true,
+  "license": "MIT",
   "engines": {
     "bun": ">=1.3.0"
   },
