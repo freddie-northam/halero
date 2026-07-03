@@ -10,7 +10,7 @@ import {
 import { cleanup, render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type { AgendaEvent, CalendarRange } from "../contract";
-import type { CalendarApi } from "./calendar-screen";
+import type { CalendarApi } from "./api";
 import { registerHappyDom, unregisterHappyDom } from "./test/happy-dom";
 import { createTodayAgendaSection } from "./today-agenda-section";
 
@@ -68,6 +68,10 @@ const fixtureApi: CalendarApi = {
       homeTimezone: HOME_TZ,
       days: from === TODAY ? [{ date: TODAY, events: todaysEvents }] : [],
     }),
+  events: () => Promise.reject(new Error("not under test")),
+  createEvent: () => Promise.reject(new Error("not under test")),
+  updateEvent: () => Promise.reject(new Error("not under test")),
+  deleteEvent: () => Promise.reject(new Error("not under test")),
 };
 
 const renderSection = async (api: CalendarApi) => {
@@ -128,7 +132,7 @@ test("offers an Open calendar link into the agenda view", async () => {
 
 test("shows the quiet empty line when nothing is scheduled today", async () => {
   const emptyApi: CalendarApi = {
-    today: fixtureApi.today,
+    ...fixtureApi,
     range: () => Promise.resolve({ homeTimezone: HOME_TZ, days: [] }),
   };
   const view = await renderSection(emptyApi);
@@ -138,7 +142,7 @@ test("shows the quiet empty line when nothing is scheduled today", async () => {
 
 test("shows a readable error when today's events cannot load", async () => {
   const failingApi: CalendarApi = {
-    today: fixtureApi.today,
+    ...fixtureApi,
     range: () =>
       Promise.reject(new Error("You need to sign in before doing that.")),
   };
