@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import type { CalendarApi } from "@halero/module-calendar/web";
+import type { EntityLinkContribution, WebModule } from "@halero/module-sdk/web";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
-import { buildNav, buildTodaySections, buildWebModules } from "./registry";
+import {
+  buildEntityLinks,
+  buildNav,
+  buildTodaySections,
+  buildWebModules,
+} from "./registry";
 
 const stubClient = {
   modules: {
@@ -89,5 +95,44 @@ describe("buildNav", () => {
     ]);
 
     expect(nav.map((entry) => entry.label)).toEqual(["Settings", "Late"]);
+  });
+});
+
+describe("buildEntityLinks", () => {
+  test("maps the calendar event kind from the shipped modules", () => {
+    const links = buildEntityLinks(buildWebModules(stubClient, stubApi));
+
+    const link = links.get("calendar.event");
+    expect(link?.label).toBe("Event");
+    expect(
+      link?.buildLink({ entityId: "ev-1", occurredDate: "2023-11-14" }),
+    ).toEqual({
+      path: "/calendar",
+      search: { view: "agenda", date: "2023-11-14" },
+    });
+  });
+
+  test("leaves kinds no module links absent", () => {
+    const links = buildEntityLinks(buildWebModules(stubClient, stubApi));
+
+    expect(links.get("note")).toBeUndefined();
+  });
+
+  test("rejects two modules linking the same kind with a readable error", () => {
+    const link: EntityLinkContribution = {
+      kind: "note",
+      label: "Note",
+      buildLink: () => ({ path: "/notes" }),
+    };
+    const modules: readonly WebModule[] = [
+      { id: "first", entityLinks: [link] },
+      { id: "second", entityLinks: [link] },
+    ];
+
+    expect(() => buildEntityLinks(modules)).toThrow(
+      'The "second" module links the entity kind "note", but the "first" ' +
+        "module already links it. Each entity kind can be linked by " +
+        "exactly one module.",
+    );
   });
 });

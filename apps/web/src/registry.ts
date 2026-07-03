@@ -8,7 +8,11 @@ import {
   createCalendarWebModule,
   createTodayAgendaSection,
 } from "@halero/module-calendar/web";
-import type { NavContribution, WebModule } from "@halero/module-sdk/web";
+import type {
+  EntityLinkContribution,
+  NavContribution,
+  WebModule,
+} from "@halero/module-sdk/web";
 import {
   createTodayWebModule,
   type TodaySection,
@@ -61,6 +65,40 @@ export const buildWebModules = (
     }),
     createCalendarWebModule(calendarApi),
   ];
+};
+
+const duplicateEntityLinkMessage = (
+  kind: string,
+  owner: string,
+  claimant: string,
+): string =>
+  `The "${claimant}" module links the entity kind "${kind}", but the ` +
+  `"${owner}" module already links it. Each entity kind can be linked ` +
+  "by exactly one module.";
+
+/**
+ * Entity link index by kind, validated like the server's kind registry:
+ * two modules claiming the same kind is a build mistake and fails loudly
+ * at boot, before any search surface can route a hit ambiguously.
+ */
+export const buildEntityLinks = (
+  modules: readonly WebModule[],
+): ReadonlyMap<string, EntityLinkContribution> => {
+  const links = new Map<string, EntityLinkContribution>();
+  const owners = new Map<string, string>();
+  for (const module of modules) {
+    for (const link of module.entityLinks ?? []) {
+      const owner = owners.get(link.kind);
+      if (owner !== undefined) {
+        throw new Error(
+          duplicateEntityLinkMessage(link.kind, owner, module.id),
+        );
+      }
+      owners.set(link.kind, module.id);
+      links.set(link.kind, link);
+    }
+  }
+  return links;
 };
 
 /** Full nav (core plus module contributions), sorted by order. */
