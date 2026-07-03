@@ -21,6 +21,25 @@ export const formatTime = (epochMs: number, timeZone: string): string =>
     timeZone,
   }).format(epochMs);
 
+/**
+ * "YYYY-MM-DD" for that instant in that zone, assembled from the
+ * formatter's own labeled parts rather than a locale date string (ICU's
+ * string format differs across builds; the part types do not). Mirrors
+ * the server's dateStringInZone, so the edit modal's prefill needs no
+ * client-side timezone math of its own.
+ */
+export const formatDateInZone = (epochMs: number, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(epochMs);
+  const part = (type: "year" | "month" | "day"): string =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+
 /** "July 2026" for the month view header. */
 export const formatMonthLabel = (date: string): string =>
   new Intl.DateTimeFormat("en-GB", {
