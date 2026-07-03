@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { runMigrations } from "./migration-runner";
 import { coreMigrations } from "./migrations";
 import { type HaleroDatabase, openDatabase } from "./open-database";
-import { calendarEvents, entities, links } from "./schema";
+import { calendarEvents, entities, links, notes } from "./schema";
 
 const openMigrated = (): HaleroDatabase => {
   const dir = mkdtempSync(join(tmpdir(), "halero-db-"));
@@ -196,6 +196,36 @@ describe("core schema", () => {
     expect(event?.calendarId).toBe("primary");
     expect(event?.allDay).toBe(1);
     expect(link?.fromId).toBe("e2");
+    sqlite.close();
+  });
+
+  test("the notes Drizzle handle round-trips against the migrated schema", () => {
+    const { sqlite, db } = openMigrated();
+
+    db.insert(entities)
+      .values({
+        id: "n1",
+        kind: "note.item",
+        schemaVersion: 1,
+        title: "Trip plan",
+        snippet: "Book flights and hotel",
+        source: "user",
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .run();
+    db.insert(notes)
+      .values({
+        entityId: "n1",
+        document: '[{"type":"paragraph"}]',
+        tags: '["travel"]',
+      })
+      .run();
+
+    const note = db.select().from(notes).get();
+    expect(note?.entityId).toBe("n1");
+    expect(note?.document).toBe('[{"type":"paragraph"}]');
+    expect(note?.tags).toBe('["travel"]');
     sqlite.close();
   });
 });

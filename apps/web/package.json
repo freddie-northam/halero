@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@halero/module-calendar": "workspace:*",
+    "@halero/module-notes": "workspace:*",
     "@halero/module-sdk": "workspace:*",
     "@halero/module-tasks": "workspace:*",
     "@halero/module-today": "workspace:*",

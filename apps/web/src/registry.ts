@@ -9,6 +9,11 @@ import {
   createTodayAgendaSection,
   withCalendarInvalidation,
 } from "@halero/module-calendar/web";
+import {
+  createNotesWebModule,
+  type NotesApi,
+  withNotesInvalidation,
+} from "@halero/module-notes/web";
 import type {
   CommandContribution,
   EntityLinkContribution,
@@ -121,6 +126,39 @@ export const buildTasksApi = (
     queryClient,
   );
 
+/**
+ * The notes seam: the module's procedures off the tRPC client, wrapped
+ * with the module's own invalidation helper. The document and tags are
+ * copied to mutable arrays at the boundary, since the tRPC input schemas
+ * want mutable arrays while the module keeps them readonly.
+ */
+export const buildNotesApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): NotesApi =>
+  withNotesInvalidation(
+    {
+      list: () => client.modules.notes.list.query(),
+      get: (entityId) => client.modules.notes.get.query({ entityId }),
+      create: (input) =>
+        client.modules.notes.create.mutate({
+          title: input.title,
+          document:
+            input.document === undefined ? undefined : [...input.document],
+        }),
+      update: (input) =>
+        client.modules.notes.update.mutate({
+          entityId: input.entityId,
+          title: input.title,
+          document:
+            input.document === undefined ? undefined : [...input.document],
+          tags: input.tags === undefined ? undefined : [...input.tags],
+        }),
+      delete: (entityId) => client.modules.notes.delete.mutate({ entityId }),
+    },
+    queryClient,
+  );
+
 /** The web modules this build ships with, wired to the server clients. */
 export const buildWebModules = (
   client: TrpcClient,
@@ -129,13 +167,20 @@ export const buildWebModules = (
 ): readonly WebModule[] => {
   const calendarApi = buildCalendarApi(client, queryClient);
   const tasksApi = buildTasksApi(client, queryClient);
+  const notesApi = buildNotesApi(client, queryClient);
   return [
     createTodayWebModule({
       api: {
         // The greeting and date line reuse the calendar module's today
-        // anchor, which already carries the home timezone and its current
-        // date; no dedicated server endpoint exists for the Today page.
-        home: () => client.modules.calendar.today.query(),
+        // anchor (home timezone + current date); the owner's name for the
+        // greeting comes from system.status, merged in here.
+        home: async () => {
+          const [today, status] = await Promise.all([
+            client.modules.calendar.today.query(),
+            client.system.status.query(),
+          ]);
+          return { ...today, displayName: status.displayName };
+        },
         googleConnectionStatus: async () =>
           (await api.googleStatus()).connection?.status ?? null,
       },
@@ -143,6 +188,7 @@ export const buildWebModules = (
     }),
     createCalendarWebModule(calendarApi),
     createTasksWebModule(tasksApi),
+    createNotesWebModule(notesApi),
   ];
 };
 

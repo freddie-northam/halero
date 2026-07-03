@@ -24,6 +24,12 @@ const setupInput = z.object({
   password: z
     .string()
     .min(8, "Your password must be at least 8 characters long."),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Please enter your name.")
+    .max(80, "Your name is limited to 80 characters.")
+    .optional(),
   homeTimezone: z
     .string()
     .refine(
@@ -65,6 +71,10 @@ export const systemRouter = router({
   status: publicProcedure.query(({ ctx }) => ({
     needsSetup: getSetting(ctx.db, "setup_complete") === null,
     authenticated: ctx.session !== null,
+    // Only surfaced once signed in: the owner's name is not leaked to an
+    // unauthenticated visitor of a hosted instance.
+    displayName:
+      ctx.session !== null ? getSetting(ctx.db, "display_name") : null,
   })),
 
   setup: publicProcedure.input(setupInput).mutation(async ({ ctx, input }) => {
@@ -83,6 +93,9 @@ export const systemRouter = router({
       }
       setSetting(ctx.db, "password_hash", passwordHash);
       setSetting(ctx.db, "home_timezone", input.homeTimezone);
+      if (input.name !== undefined) {
+        setSetting(ctx.db, "display_name", input.name);
+      }
       if (input.baseUrl !== undefined) {
         setSetting(ctx.db, "base_url", input.baseUrl);
       }

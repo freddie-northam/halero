@@ -105,6 +105,16 @@ const stubClient = {
       logTime: { mutate: () => Promise.reject(new Error("not under test")) },
     },
   },
+  system: {
+    status: {
+      query: () =>
+        Promise.resolve({
+          needsSetup: false,
+          authenticated: true,
+          displayName: null,
+        }),
+    },
+  },
 } as unknown as TrpcClient;
 
 const googleStatus: GoogleStatus = {

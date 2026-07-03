@@ -275,12 +275,14 @@ describe("buildNav", () => {
       "Today",
       "Calendar",
       "Tasks",
+      "Notes",
       "Settings",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
       "/calendar",
       "/tasks",
+      "/notes",
       "/settings",
     ]);
   });
@@ -307,11 +309,14 @@ describe("buildCommands", () => {
     run: () => Promise.resolve({ message: "Done." }),
   });
 
-  test("collects only the tasks quick-capture command from the shipped modules", () => {
+  test("collects the tasks and notes quick-capture commands from the shipped modules", () => {
     // Today and calendar contribute no commands; nothing of theirs leaks in.
     const commands = buildCommands(modulesUnderTest());
 
-    expect(commands.map((entry) => entry.id)).toEqual(["tasks.new"]);
+    expect(commands.map((entry) => entry.id)).toEqual([
+      "tasks.new",
+      "notes.new",
+    ]);
   });
 
   test("a module without commands contributes nothing", () => {

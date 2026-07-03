@@ -56,7 +56,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
@@ -65,7 +66,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -84,7 +86,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
   });
 
@@ -183,7 +186,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -232,7 +236,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
@@ -553,6 +558,71 @@ describe("runMigrations", () => {
     sqlite.close();
   });
 
+  test("0007_notes creates the notes table and snapshots a non-empty database", () => {
+    const { sqlite, backupsDir } = makeContext();
+    const preNotes = coreMigrations.filter(
+      (migration) => migration.name !== "0007_notes",
+    );
+    runMigrations(sqlite, { migrations: preNotes, backupsDir });
+    // Any pre-existing row makes the database non-empty, so the
+    // pre-migration snapshot must fire.
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-1', 'note.item', 1, 'user', 1, 1)`,
+    );
+
+    const result = runMigrations(sqlite, {
+      migrations: coreMigrations,
+      backupsDir,
+    });
+
+    expect(result.applied).toEqual(["0007_notes"]);
+    expect(result.snapshotPath).not.toBeNull();
+    expect(tableExists(sqlite, "notes")).toBe(true);
+    sqlite.close();
+  });
+
+  test("0007_notes stores a document with nullable tags and requires a document", () => {
+    const { sqlite, backupsDir } = makeContext();
+    runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-1', 'note.item', 1, 'user', 1, 1)`,
+    );
+
+    sqlite.run(
+      "INSERT INTO notes (entity_id, document, tags) VALUES ('ent-1', '[]', NULL)",
+    );
+    const row = sqlite
+      .query<{ document: string; tags: string | null }, []>(
+        "SELECT document, tags FROM notes WHERE entity_id = 'ent-1'",
+      )
+      .get();
+    expect(row).toEqual({ document: "[]", tags: null });
+
+    // document is NOT NULL.
+    sqlite.run(
+      `INSERT INTO entities (id, kind, schema_version, source, created_at, updated_at)
+       VALUES ('ent-2', 'note.item', 1, 'user', 1, 1)`,
+    );
+    expect(() =>
+      sqlite.run("INSERT INTO notes (entity_id) VALUES ('ent-2')"),
+    ).toThrow(/NOT NULL/);
+    sqlite.close();
+  });
+
+  test("0007_notes enforces the foreign key to entities", () => {
+    const { sqlite, backupsDir } = makeContext();
+    runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
+
+    expect(() =>
+      sqlite.run(
+        "INSERT INTO notes (entity_id, document) VALUES ('missing-entity', '[]')",
+      ),
+    ).toThrow(/FOREIGN KEY/);
+    sqlite.close();
+  });
+
   test("rolls back a failed migration, keeps it out of the ledger, and stops", () => {
     const { sqlite, backupsDir } = makeContext();
     runMigrations(sqlite, { migrations: coreMigrations, backupsDir });
@@ -584,7 +654,8 @@ describe("runMigrations", () => {
       "0004_tasks",
       "0005_api_tokens",
       "0006_tasks_board",
-      "0007_calendar_event_notes_url",
+      "0007_notes",
+      "0008_calendar_event_notes_url",
     ]);
   });
 });

@@ -1,4 +1,4 @@
--- 0007_calendar_event_notes_url: add notes and url to calendar_events.
+-- 0008_calendar_event_notes_url: add notes and url to calendar_events.
 -- User-created events (v0.4) need a free-text notes field and a link
 -- field (a meeting join link or an external page), and synced Google
 -- events backfill the same two columns (notes from the description,
