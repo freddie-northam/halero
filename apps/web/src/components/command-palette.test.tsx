@@ -369,11 +369,12 @@ test("the idle palette offers quick capture alongside the hint", async () => {
   await view.findByPlaceholderText(PLACEHOLDER);
 
   expect(await view.findByText("New task...")).toBeTruthy();
+  expect(await view.findByText("New note...")).toBeTruthy();
   expect(view.getByText("Commands")).toBeTruthy();
   expect(view.getByText("Type to search")).toBeTruthy();
-  // Only the tasks module contributes a command: exactly one row, so
-  // today and calendar (command-less modules) contribute nothing.
-  expect(view.baseElement.querySelectorAll("[cmdk-item]").length).toBe(1);
+  // Tasks and notes each contribute one quick-capture command: exactly
+  // two rows, so today and calendar (command-less modules) add nothing.
+  expect(view.baseElement.querySelectorAll("[cmdk-item]").length).toBe(2);
 });
 
 test("typing relabels quick capture with the trimmed pending title", async () => {
@@ -434,7 +435,10 @@ test("a command receives the palette's raw input untrimmed", async () => {
   // Settle the debounced search inside act before driving selection.
   await settleDebounce();
 
-  // Quick capture sits first; ArrowDown moves onto the probe row.
+  // Quick capture sits first (tasks then notes); two ArrowDowns move onto
+  // the probe row.
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyUp(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyUp(input, { key: "ArrowDown" });
   await pressEnter(input);

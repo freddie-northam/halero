@@ -8,6 +8,11 @@ import {
   createCalendarWebModule,
   createTodayAgendaSection,
 } from "@halero/module-calendar/web";
+import {
+  createNotesWebModule,
+  type NotesApi,
+  withNotesInvalidation,
+} from "@halero/module-notes/web";
 import type {
   CommandContribution,
   EntityLinkContribution,
@@ -92,6 +97,39 @@ export const buildTasksApi = (
     queryClient,
   );
 
+/**
+ * The notes seam: the module's procedures off the tRPC client, wrapped
+ * with the module's own invalidation helper. The document and tags are
+ * copied to mutable arrays at the boundary, since the tRPC input schemas
+ * want mutable arrays while the module keeps them readonly.
+ */
+export const buildNotesApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): NotesApi =>
+  withNotesInvalidation(
+    {
+      list: () => client.modules.notes.list.query(),
+      get: (entityId) => client.modules.notes.get.query({ entityId }),
+      create: (input) =>
+        client.modules.notes.create.mutate({
+          title: input.title,
+          document:
+            input.document === undefined ? undefined : [...input.document],
+        }),
+      update: (input) =>
+        client.modules.notes.update.mutate({
+          entityId: input.entityId,
+          title: input.title,
+          document:
+            input.document === undefined ? undefined : [...input.document],
+          tags: input.tags === undefined ? undefined : [...input.tags],
+        }),
+      delete: (entityId) => client.modules.notes.delete.mutate({ entityId }),
+    },
+    queryClient,
+  );
+
 /** The web modules this build ships with, wired to the server clients. */
 export const buildWebModules = (
   client: TrpcClient,
@@ -103,6 +141,7 @@ export const buildWebModules = (
     range: (from, to) => client.modules.calendar.range.query({ from, to }),
   };
   const tasksApi = buildTasksApi(client, queryClient);
+  const notesApi = buildNotesApi(client, queryClient);
   return [
     createTodayWebModule({
       api: {
@@ -117,6 +156,7 @@ export const buildWebModules = (
     }),
     createCalendarWebModule(calendarApi),
     createTasksWebModule(tasksApi),
+    createNotesWebModule(notesApi),
   ];
 };
 
