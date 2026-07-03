@@ -3,8 +3,8 @@
 // target so it remounts fresh, uncontrolled text fields read from
 // FormData at submit, controlled state only for the pickers, a run()
 // wrapper that catches and shows readableError, and Delete (ghost) +
-// Save. Google-synced events never reach this component (editable is
-// false for them; the month view only calls onEditEvent for user events).
+// Save. Google-synced events never reach this component: the context
+// panel's Edit button, the only path in, renders only when editable.
 
 import {
   Alert,
