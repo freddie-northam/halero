@@ -195,6 +195,10 @@ const ConnectionCard = ({
     mutationFn: () => api.disconnectConnection(item.id),
     onSuccess: invalidate,
   });
+  const connectLocal = useMutation({
+    mutationFn: () => api.connectLocal(item.id),
+    onSuccess: invalidate,
+  });
 
   if (item.connection !== null) {
     return (
@@ -227,6 +231,16 @@ const ConnectionCard = ({
     );
   }
 
+  // A local source (authKind "none") has nothing to enter, so Connect just
+  // enables it; apiKey and oauth2 open a dialog.
+  const onConnect = (): void => {
+    if (item.authKind === "none") {
+      connectLocal.mutate();
+      return;
+    }
+    setDialogOpen(true);
+  };
+
   return (
     <>
       <CardShell
@@ -236,27 +250,33 @@ const ConnectionCard = ({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setDialogOpen(true)}
+            disabled={connectLocal.isPending}
+            onClick={onConnect}
           >
+            {connectLocal.isPending ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : null}
             Connect
           </Button>
         }
       />
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          {item.authKind === "apiKey" ? (
-            <ApiKeyConnect
-              item={item}
-              onDone={() => {
-                setDialogOpen(false);
-                invalidate();
-              }}
-            />
-          ) : (
-            <OauthConnect item={item} />
-          )}
-        </DialogContent>
-      </Dialog>
+      {item.authKind === "none" ? null : (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent>
+            {item.authKind === "apiKey" ? (
+              <ApiKeyConnect
+                item={item}
+                onDone={() => {
+                  setDialogOpen(false);
+                  invalidate();
+                }}
+              />
+            ) : (
+              <OauthConnect item={item} />
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 };

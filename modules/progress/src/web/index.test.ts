@@ -3,13 +3,7 @@ import type { ProgressApi } from "./api";
 import { createProgressWebModule } from "./index";
 
 const stubApi: ProgressApi = {
-  status: () =>
-    Promise.resolve({
-      connected: false,
-      login: null,
-      lastSyncedAt: null,
-      lastError: null,
-    }),
+  status: () => Promise.resolve({ sources: [] }),
   heatmap: () => Promise.reject(new Error("not under test")),
   refresh: () => Promise.reject(new Error("not under test")),
 };

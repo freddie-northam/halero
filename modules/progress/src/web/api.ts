@@ -5,12 +5,22 @@
 
 import type { HeatmapRange, HeatmapView, ProgressStatus } from "../contract";
 
-export interface ProgressApi {
-  readonly status: () => Promise<ProgressStatus>;
-  readonly heatmap: (range: HeatmapRange) => Promise<HeatmapView>;
-  readonly refresh: () => Promise<{
+export interface RefreshResult {
+  readonly lastSyncedAt: number;
+  readonly sources: readonly {
+    readonly id: string;
     readonly syncedDays: number;
     readonly total: number;
-    readonly lastSyncedAt: number;
-  }>;
+    readonly error: string | null;
+  }[];
+}
+
+export interface ProgressApi {
+  readonly status: () => Promise<ProgressStatus>;
+  /** `source` omitted (or "all") gives the merged heatmap. */
+  readonly heatmap: (
+    range: HeatmapRange,
+    source?: string,
+  ) => Promise<HeatmapView>;
+  readonly refresh: () => Promise<RefreshResult>;
 }

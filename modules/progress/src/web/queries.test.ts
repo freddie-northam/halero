@@ -4,6 +4,7 @@ import type { ProgressApi } from "./api";
 import { withProgressInvalidation } from "./queries";
 
 const heatmap = {
+  source: "all",
   from: "2025-07-03",
   to: "2026-07-03",
   today: "2026-07-03",
@@ -13,7 +14,10 @@ const heatmap = {
   longestStreak: 0,
 };
 
-const refreshResult = { syncedDays: 3, total: 42, lastSyncedAt: 1_700_000_000 };
+const refreshResult = {
+  lastSyncedAt: 1_700_000_000,
+  sources: [{ id: "github", syncedDays: 3, total: 42, error: null }],
+};
 
 const makeStub = () => {
   const calls: string[] = [];
@@ -21,10 +25,15 @@ const makeStub = () => {
     status: () => {
       calls.push("status");
       return Promise.resolve({
-        connected: true,
-        login: "octocat",
-        lastSyncedAt: null,
-        lastError: null,
+        sources: [
+          {
+            id: "github",
+            displayName: "GitHub",
+            connected: true,
+            lastSyncedAt: null,
+            lastError: null,
+          },
+        ],
       });
     },
     heatmap: () => {

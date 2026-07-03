@@ -2,14 +2,20 @@
 // returns and its web page consumes. Pure types so both entries can
 // import them without dragging the other side's dependencies along.
 
-/** The GitHub connection's health for the Progress page. */
-export interface ProgressStatus {
+/** One activity source's health for the Progress page's source selector. */
+export interface SourceStatus {
+  readonly id: string;
+  readonly displayName: string;
   readonly connected: boolean;
-  readonly login: string | null;
-  /** Epoch ms of the last successful sync, or null when never synced. */
+  /** Epoch ms of the last refresh, or null when never refreshed. */
   readonly lastSyncedAt: number | null;
-  /** The last sync failure's readable message, or null when healthy. */
+  /** The last refresh failure's readable message, or null when healthy. */
   readonly lastError: string | null;
+}
+
+/** Every activity source and whether it is connected. */
+export interface ProgressStatus {
+  readonly sources: readonly SourceStatus[];
 }
 
 /** How much history the heatmap covers. */
@@ -24,6 +30,8 @@ export interface HeatmapDay {
 
 /** A full heatmap window: bounds, the densified days, and headline stats. */
 export interface HeatmapView {
+  /** The source this heatmap is for, or "all" for the merged view. */
+  readonly source: string;
   /** Inclusive first date of the window ("YYYY-MM-DD"). */
   readonly from: string;
   /** Inclusive last date of the window ("YYYY-MM-DD"). */

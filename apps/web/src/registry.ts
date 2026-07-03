@@ -182,7 +182,8 @@ export const buildProgressApi = (
   withProgressInvalidation(
     {
       status: () => client.progress.status.query(),
-      heatmap: (range) => client.progress.heatmap.query({ range }),
+      heatmap: (range, source) =>
+        client.progress.heatmap.query({ range, source }),
       refresh: () => client.progress.refresh.mutate(),
     },
     queryClient,

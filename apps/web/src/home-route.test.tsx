@@ -121,6 +121,7 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
   saveOauthClient: () => Promise.resolve(),
   connectApiKey: () =>
     Promise.resolve({ connected: true as const, accountLabel: "" }),
+  connectLocal: () => Promise.resolve(),
   disconnectConnection: () => Promise.resolve(),
   syncConnection: () =>
     Promise.resolve({ status: "success", upserts: 0, deletes: 0, error: null }),

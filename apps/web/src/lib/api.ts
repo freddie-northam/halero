@@ -108,6 +108,7 @@ export interface HaleroApi {
     connectorId: string,
     token: string,
   ) => Promise<{ connected: true; accountLabel: string }>;
+  readonly connectLocal: (connectorId: string) => Promise<void>;
   readonly disconnectConnection: (connectorId: string) => Promise<void>;
   readonly syncConnection: (connectorId: string) => Promise<SyncNowResult>;
   readonly notificationSettings: () => Promise<NotificationSettings>;
@@ -146,6 +147,9 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   },
   connectApiKey: (connectorId, token) =>
     client.connections.connectApiKey.mutate({ connectorId, token }),
+  connectLocal: async (connectorId) => {
+    await client.connections.connectLocal.mutate({ connectorId });
+  },
   disconnectConnection: async (connectorId) => {
     await client.connections.disconnect.mutate({ connectorId });
   },

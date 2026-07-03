@@ -11,8 +11,8 @@ const progressRootKey = ["progress"] as const;
 
 export const progressStatusKey = [...progressRootKey, "status"] as const;
 
-export const progressHeatmapKey = (range: HeatmapRange) =>
-  [...progressRootKey, "heatmap", range] as const;
+export const progressHeatmapKey = (range: HeatmapRange, source: string) =>
+  [...progressRootKey, "heatmap", source, range] as const;
 
 /**
  * Wraps a ProgressApi so a successful refresh invalidates the module's
