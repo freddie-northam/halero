@@ -116,7 +116,7 @@ describe("the shipped web module registry", () => {
     );
 
     expect(calendar?.nav).toEqual([
-      { label: "Calendar", path: "/calendar", order: 20 },
+      { label: "Calendar", path: "/calendar", order: 20, icon: "calendar" },
     ]);
     expect(calendar?.pages?.map((page) => page.path)).toEqual(["/calendar"]);
   });
@@ -124,14 +124,18 @@ describe("the shipped web module registry", () => {
   test("provides the home page and Today nav entry from the today module", () => {
     const today = modulesUnderTest().find((module) => module.id === "today");
 
-    expect(today?.nav).toEqual([{ label: "Today", path: "/", order: 10 }]);
+    expect(today?.nav).toEqual([
+      { label: "Today", path: "/", order: 10, icon: "home" },
+    ]);
     expect(today?.pages?.map((page) => page.path)).toEqual(["/"]);
   });
 
   test("provides the tasks page and nav entry from the module", () => {
     const tasks = modulesUnderTest().find((module) => module.id === "tasks");
 
-    expect(tasks?.nav).toEqual([{ label: "Tasks", path: "/tasks", order: 30 }]);
+    expect(tasks?.nav).toEqual([
+      { label: "Tasks", path: "/tasks", order: 30, icon: "tasks" },
+    ]);
     expect(tasks?.pages?.map((page) => page.path)).toEqual(["/tasks"]);
   });
 

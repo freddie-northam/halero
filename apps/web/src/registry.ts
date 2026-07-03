@@ -30,7 +30,13 @@ import type { TrpcClient } from "./lib/trpc";
 
 /** Core-owned navigation. Settings stays core; modules slot in around it. */
 const coreNav: readonly NavContribution[] = [
-  { label: "Settings", path: "/settings", order: 100 },
+  {
+    label: "Settings",
+    path: "/settings",
+    order: 100,
+    icon: "settings",
+    group: "secondary",
+  },
 ];
 
 /**

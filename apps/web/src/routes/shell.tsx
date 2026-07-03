@@ -35,6 +35,17 @@ export interface ShellScreenProps {
 // 14rem matches the pre-shadcn 224px rail width.
 const SHELL_STYLE = { "--sidebar-width": "14rem" } as CSSProperties;
 
+/**
+ * The collapse choice the sidebar persisted in the `sidebar_state` cookie, so
+ * it survives a reload. The vendored SidebarProvider writes the cookie but
+ * defaults to open on mount, so the shell seeds `defaultOpen` from it.
+ */
+const readSidebarState = (): boolean => {
+  if (typeof document === "undefined") return true;
+  const match = document.cookie.match(/(?:^|;\s*)sidebar_state=(true|false)/);
+  return match ? match[1] === "true" : true;
+};
+
 export const ShellScreen = ({
   onLoggedOut,
   nav,
@@ -47,13 +58,19 @@ export const ShellScreen = ({
 }: ShellScreenProps): ReactElement => {
   const api = useApi();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [defaultSidebarOpen] = useState(readSidebarState);
   const logout = useMutation({
     mutationFn: () => api.logout(),
     onSuccess: onLoggedOut,
   });
+  const title = nav.find((item) => item.path === activePath)?.label;
 
   return (
-    <SidebarProvider className="h-dvh" style={SHELL_STYLE}>
+    <SidebarProvider
+      className="h-dvh"
+      style={SHELL_STYLE}
+      defaultOpen={defaultSidebarOpen}
+    >
       <AppSidebar
         items={nav}
         activePath={activePath}
@@ -62,7 +79,10 @@ export const ShellScreen = ({
         logoutPending={logout.isPending}
       />
       <SidebarInset className="min-w-0">
-        <CommandBarSlot onSearchClick={() => setSearchOpen(true)} />
+        <CommandBarSlot
+          onSearchClick={() => setSearchOpen(true)}
+          title={title}
+        />
         <div className="flex-1 overflow-auto">{children}</div>
       </SidebarInset>
       <CommandPalette
