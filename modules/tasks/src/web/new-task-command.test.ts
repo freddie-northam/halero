@@ -7,8 +7,13 @@ const createdTask = (title: string): Task => ({
   entityId: "t-new",
   title,
   status: "todo",
+  priority: null,
+  tags: [],
   dueDate: null,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
 });
 

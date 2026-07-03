@@ -49,8 +49,13 @@ const dueTask: Task = {
   entityId: "t-1",
   title: "Pay invoices",
   status: "todo",
+  priority: null,
+  tags: [],
   dueDate: TODAY,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
 };
 

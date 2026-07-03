@@ -13,14 +13,18 @@ import { TASK_ITEM_KIND } from "@halero/schemas";
 import { TRPCError } from "@trpc/server";
 import { and, asc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Task, TaskList, TasksToday } from "../contract";
+import type { Task, TaskList, TaskPriority, TasksToday } from "../contract";
 import { moduleRouter, protectedProcedure } from "./trpc";
 
 /** The task.item satellite schema version this build stores. */
 export const TASK_ITEM_SCHEMA_VERSION = 1;
 
 const TITLE_MAX_LENGTH = 200;
+const TAG_MAX_LENGTH = 40;
+const TAGS_MAX_COUNT = 12;
 const DATE_STRING_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const PRIORITIES: readonly TaskPriority[] = ["high", "medium", "low"];
 
 const listInput = z
   .object({ filter: z.enum(["todo", "done", "all"]).optional() })
@@ -32,6 +36,9 @@ const createInput = z.object({
   title: z.string(),
   dueDate: z.string().optional(),
   notes: z.string().optional(),
+  priority: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  estimateMinutes: z.number().optional(),
 });
 
 const updateInput = z.object({
@@ -39,6 +46,11 @@ const updateInput = z.object({
   title: z.string().optional(),
   dueDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  priority: z.string().nullable().optional(),
+  // No null variant: an empty array clears, mirroring the [] the read
+  // side returns for an untagged task.
+  tags: z.array(z.string()).optional(),
+  estimateMinutes: z.number().nullable().optional(),
 });
 
 const entityIdInput = z.object({ entityId: z.string() });
@@ -81,12 +93,102 @@ const validatedTitle = (raw: string): string => {
   return title;
 };
 
+const isPriority = (value: string): value is TaskPriority =>
+  (PRIORITIES as readonly string[]).includes(value);
+
+const validatedPriority = (raw: string): TaskPriority => {
+  if (!isPriority(raw)) {
+    throw badRequest(
+      `"${raw}" is not a task priority; expected high, medium, or low.`,
+    );
+  }
+  return raw;
+};
+
+/** Trims, rejects blanks and oversizes readably, and deduplicates. */
+const validatedTags = (raw: readonly string[]): readonly string[] => {
+  const tags: string[] = [];
+  for (const rawTag of raw) {
+    const tag = rawTag.trim();
+    if (tag.length === 0) {
+      throw badRequest("Tags cannot be empty.");
+    }
+    if (tag.length > TAG_MAX_LENGTH) {
+      throw badRequest(`Tags are limited to ${TAG_MAX_LENGTH} characters.`);
+    }
+    if (!tags.includes(tag)) {
+      tags.push(tag);
+    }
+  }
+  if (tags.length > TAGS_MAX_COUNT) {
+    throw badRequest(`A task can have at most ${TAGS_MAX_COUNT} tags.`);
+  }
+  return tags;
+};
+
+const validatedEstimate = (raw: number): number => {
+  if (!Number.isInteger(raw) || raw < 0) {
+    throw badRequest(
+      "The estimate must be a whole number of minutes, zero or more.",
+    );
+  }
+  return raw;
+};
+
+/** null for no tags so the column reads NULL, not "[]". */
+const tagsColumnValue = (tags: readonly string[]): string | null =>
+  tags.length === 0 ? null : JSON.stringify(tags);
+
+const parseTags = (raw: string | null): readonly string[] => {
+  if (raw === null) {
+    return [];
+  }
+  const parsed: unknown = JSON.parse(raw);
+  return Array.isArray(parsed)
+    ? parsed.filter((tag): tag is string => typeof tag === "string")
+    : [];
+};
+
+/**
+ * The spine snippet mirrors tags and notes so both are full-text
+ * searchable; recomputed whenever either half changes. Empty string
+ * (not null: the store's patch type is string-only) when both are gone.
+ */
+const taskSnippet = (tags: readonly string[], notes: string | null): string => {
+  const noteText = notes?.trim() ?? "";
+  return [tags.join(" "), noteText]
+    .filter((part) => part.length > 0)
+    .join("\n");
+};
+
+/**
+ * The end of a status column: past every live AND migrated row there.
+ * Migration 0006 seeded sort_order from rowid (1..N), so "append" must
+ * be max+1 over the whole column, never a fresh 0-based counter.
+ */
+const nextSortOrder = (
+  db: ModuleDb,
+  status: "todo" | "doing" | "done",
+): number => {
+  const row = db
+    .select({ value: sql<number | null>`max(${tasks.sortOrder})` })
+    .from(tasks)
+    .where(eq(tasks.status, status))
+    .get();
+  return (row?.value ?? 0) + 1;
+};
+
 const taskColumns = {
   entityId: entities.id,
   title: entities.title,
   status: tasks.status,
+  priority: tasks.priority,
+  tags: tasks.tags,
   dueDate: tasks.dueDate,
   notes: tasks.notes,
+  estimateMinutes: tasks.estimateMinutes,
+  loggedMinutes: tasks.loggedMinutes,
+  sortOrder: tasks.sortOrder,
   completedAt: tasks.completedAt,
 };
 
@@ -94,8 +196,13 @@ interface TaskRow {
   readonly entityId: string;
   readonly title: string | null;
   readonly status: "todo" | "doing" | "done";
+  readonly priority: TaskPriority | null;
+  readonly tags: string | null;
   readonly dueDate: string | null;
   readonly notes: string | null;
+  readonly estimateMinutes: number | null;
+  readonly loggedMinutes: number;
+  readonly sortOrder: number;
   readonly completedAt: number | null;
 }
 
@@ -103,8 +210,13 @@ const toTask = (row: TaskRow): Task => ({
   entityId: row.entityId,
   title: row.title ?? "",
   status: row.status,
+  priority: row.priority,
+  tags: parseTags(row.tags),
   dueDate: row.dueDate,
   notes: row.notes,
+  estimateMinutes: row.estimateMinutes,
+  loggedMinutes: row.loggedMinutes,
+  sortOrder: row.sortOrder,
   completedAt: row.completedAt,
 });
 
@@ -127,6 +239,9 @@ const readTask = (db: ModuleDb, entityId: string): Task => {
 
 const taskGuardColumns = {
   status: tasks.status,
+  // update's snippet recompute needs the halves the patch omits.
+  tags: tasks.tags,
+  notes: tasks.notes,
   deletedAt: entities.deletedAt,
   source: entities.source,
 };
@@ -219,27 +334,91 @@ const dueTasks = (db: ModuleDb, today: string): readonly Task[] =>
     .all()
     .map(toTask);
 
-/** Omission preserves; a null due date clears the spine anchor. */
+/** An update with every provided field validated; omissions preserve. */
+interface TaskFieldPatch {
+  readonly title?: string;
+  readonly dueDate?: string | null;
+  readonly notes?: string | null;
+  readonly priority?: TaskPriority | null;
+  readonly tags?: readonly string[];
+  readonly estimateMinutes?: number | null;
+}
+
+type UpdateInput = z.infer<typeof updateInput>;
+
+const validatedPatch = (input: UpdateInput): TaskFieldPatch => {
+  if (typeof input.dueDate === "string") {
+    assertValidDueDate(input.dueDate);
+  }
+  return {
+    ...(input.title === undefined
+      ? {}
+      : { title: validatedTitle(input.title) }),
+    ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
+    ...(input.notes === undefined ? {} : { notes: input.notes }),
+    ...(input.priority === undefined
+      ? {}
+      : {
+          priority:
+            input.priority === null ? null : validatedPriority(input.priority),
+        }),
+    ...(input.tags === undefined ? {} : { tags: validatedTags(input.tags) }),
+    ...(input.estimateMinutes === undefined
+      ? {}
+      : {
+          estimateMinutes:
+            input.estimateMinutes === null
+              ? null
+              : validatedEstimate(input.estimateMinutes),
+        }),
+  };
+};
+
+/**
+ * Omission preserves; a null due date clears the spine anchor. The
+ * snippet is recomputed whenever tags or notes change, pulling the
+ * untouched half from the current satellite row.
+ */
 const spinePatch = (
-  title: string | undefined,
-  dueDate: string | null | undefined,
+  patch: TaskFieldPatch,
+  current: { readonly tags: string | null; readonly notes: string | null },
   homeTimezone: string,
 ): UpdateUserEntityPatch => ({
-  ...(title === undefined ? {} : { title }),
-  ...(dueDate === undefined
+  ...(patch.title === undefined ? {} : { title: patch.title }),
+  ...(patch.dueDate === undefined
     ? {}
     : {
         occurredStart:
-          dueDate === null ? null : startOfDayInZone(dueDate, homeTimezone),
+          patch.dueDate === null
+            ? null
+            : startOfDayInZone(patch.dueDate, homeTimezone),
+      }),
+  ...(patch.tags === undefined && patch.notes === undefined
+    ? {}
+    : {
+        snippet: taskSnippet(
+          patch.tags ?? parseTags(current.tags),
+          patch.notes === undefined ? current.notes : patch.notes,
+        ),
       }),
 });
 
-const satellitePatch = (input: {
-  dueDate?: string | null;
-  notes?: string | null;
-}): Partial<{ dueDate: string | null; notes: string | null }> => ({
-  ...(input.dueDate === undefined ? {} : { dueDate: input.dueDate }),
-  ...(input.notes === undefined ? {} : { notes: input.notes }),
+const satellitePatch = (
+  patch: TaskFieldPatch,
+): Partial<{
+  dueDate: string | null;
+  notes: string | null;
+  priority: TaskPriority | null;
+  tags: string | null;
+  estimateMinutes: number | null;
+}> => ({
+  ...(patch.dueDate === undefined ? {} : { dueDate: patch.dueDate }),
+  ...(patch.notes === undefined ? {} : { notes: patch.notes }),
+  ...(patch.priority === undefined ? {} : { priority: patch.priority }),
+  ...(patch.tags === undefined ? {} : { tags: tagsColumnValue(patch.tags) }),
+  ...(patch.estimateMinutes === undefined
+    ? {}
+    : { estimateMinutes: patch.estimateMinutes }),
 });
 
 export const tasksRouter = moduleRouter({
@@ -255,12 +434,21 @@ export const tasksRouter = moduleRouter({
     if (input.dueDate !== undefined) {
       assertValidDueDate(input.dueDate);
     }
+    const priority =
+      input.priority === undefined ? null : validatedPriority(input.priority);
+    const tags = input.tags === undefined ? [] : validatedTags(input.tags);
+    const estimateMinutes =
+      input.estimateMinutes === undefined
+        ? null
+        : validatedEstimate(input.estimateMinutes);
     const homeTimezone = homeTimezoneOf(ctx.db);
+    const snippet = taskSnippet(tags, input.notes ?? null);
     return ctx.entities.withTransaction(() => {
       const { entityId } = ctx.entities.createUserEntity({
         kind: TASK_ITEM_KIND,
         schemaVersion: TASK_ITEM_SCHEMA_VERSION,
         title,
+        ...(snippet === "" ? {} : { snippet }),
         ...(input.dueDate === undefined
           ? {}
           : { occurredStart: startOfDayInZone(input.dueDate, homeTimezone) }),
@@ -270,9 +458,14 @@ export const tasksRouter = moduleRouter({
         .values({
           entityId,
           status: "todo",
+          priority,
+          tags: tagsColumnValue(tags),
           dueDate: input.dueDate ?? null,
           completedAt: null,
           notes: input.notes ?? null,
+          estimateMinutes,
+          // Appended to the todo column, after every migrated row.
+          sortOrder: nextSortOrder(ctx.db, "todo"),
         })
         .run();
       return readTask(ctx.db, entityId);
@@ -280,21 +473,17 @@ export const tasksRouter = moduleRouter({
   }),
 
   update: protectedProcedure.input(updateInput).mutation(({ ctx, input }) => {
-    const title =
-      input.title === undefined ? undefined : validatedTitle(input.title);
-    if (typeof input.dueDate === "string") {
-      assertValidDueDate(input.dueDate);
-    }
-    requireTaskSatellite(ctx.db, input.entityId);
+    const patch = validatedPatch(input);
+    const current = requireTaskSatellite(ctx.db, input.entityId);
     const homeTimezone = homeTimezoneOf(ctx.db);
     return ctx.entities.withTransaction(() => {
       // Always runs, even for a satellite-only patch: it bumps
       // updated_at and enforces the store's tombstone/source guards.
       ctx.entities.updateUserEntity(
         input.entityId,
-        spinePatch(title, input.dueDate, homeTimezone),
+        spinePatch(patch, current, homeTimezone),
       );
-      const changes = satellitePatch(input);
+      const changes = satellitePatch(patch);
       if (Object.keys(changes).length > 0) {
         ctx.db
           .update(tasks)

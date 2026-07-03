@@ -20,8 +20,13 @@ interface TaskData {
   readonly entityId: string;
   readonly title: string;
   readonly status: "todo" | "doing" | "done";
+  readonly priority: "high" | "medium" | "low" | null;
+  readonly tags: readonly string[];
   readonly dueDate: string | null;
   readonly notes: string | null;
+  readonly estimateMinutes: number | null;
+  readonly loggedMinutes: number;
+  readonly sortOrder: number;
   readonly completedAt: number | null;
 }
 
@@ -43,6 +48,9 @@ interface CreateTaskInput {
   readonly title: string;
   readonly dueDate?: string;
   readonly notes?: string;
+  readonly priority?: string;
+  readonly tags?: readonly string[];
+  readonly estimateMinutes?: number;
 }
 
 const createTask = async (
@@ -147,6 +155,18 @@ const setCreatedAt = (
 ): void => {
   testApp.database.sqlite.run(
     "UPDATE entities SET created_at = ? WHERE id = ?",
+    [value, entityId],
+  );
+};
+
+/** Pins a satellite position directly, like a migrated 1..N row. */
+const setSortOrder = (
+  testApp: TestApp,
+  entityId: string,
+  value: number,
+): void => {
+  testApp.database.sqlite.run(
+    "UPDATE tasks SET sort_order = ? WHERE entity_id = ?",
     [value, entityId],
   );
 };
@@ -257,8 +277,158 @@ describe("modules.tasks.create", () => {
       notes: null,
       estimateMinutes: null,
       loggedMinutes: 0,
-      sortOrder: 0,
+      sortOrder: 1,
     });
+  });
+
+  test("stores priority, tags, and estimate and returns them", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const task = await createTask(testApp.app, cookie, {
+      title: "Model the runway",
+      priority: "high",
+      tags: ["finance", " deep work "],
+      estimateMinutes: 90,
+    });
+
+    expect(task.priority).toBe("high");
+    expect(task.tags).toEqual(["finance", "deep work"]);
+    expect(task.estimateMinutes).toBe(90);
+    expect(task.loggedMinutes).toBe(0);
+    const satellite = readSatelliteRow(testApp, task.entityId);
+    expect(satellite?.priority).toBe("high");
+    expect(satellite?.tags).toBe(JSON.stringify(["finance", "deep work"]));
+    expect(satellite?.estimateMinutes).toBe(90);
+  });
+
+  test("drops duplicate tags after trimming", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const task = await createTask(testApp.app, cookie, {
+      title: "Tag twice",
+      tags: ["urgent", " urgent", "later"],
+    });
+
+    expect(task.tags).toEqual(["urgent", "later"]);
+  });
+
+  test("lands at the end of the todo column, after migrated rows", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const migrated = await createTask(testApp.app, cookie, {
+      title: "Migrated survivor",
+    });
+    // Migration 0006 seeds sort_order from rowid, so pre-board rows can
+    // hold any positive position; a new task must never sort before it.
+    setSortOrder(testApp, migrated.entityId, 5);
+
+    const fresh = await createTask(testApp.app, cookie, { title: "Fresh" });
+
+    expect(fresh.sortOrder).toBeGreaterThan(5);
+    expect(readSatelliteRow(testApp, fresh.entityId)?.sortOrder).toBe(6);
+  });
+
+  test("mirrors tags and notes into the search snippet", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const task = await createTask(testApp.app, cookie, {
+      title: "Untitled errand",
+      tags: ["finance"],
+      notes: "quarterly numbers",
+    });
+
+    const byTag = searchEntities(testApp.database.sqlite, {
+      query: "finance",
+    });
+    expect(byTag.map((hit) => hit.entityId)).toContain(task.entityId);
+    const byNotes = searchEntities(testApp.database.sqlite, {
+      query: "quarterly",
+    });
+    expect(byNotes.map((hit) => hit.entityId)).toContain(task.entityId);
+  });
+
+  test("rejects an unknown priority readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.create",
+      { title: "Rank me", priority: "urgent" },
+      400,
+    );
+
+    expect(message).toBe(
+      '"urgent" is not a task priority; expected high, medium, or low.',
+    );
+  });
+
+  test("rejects a blank tag readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.create",
+      { title: "Tag me", tags: ["ok", "   "] },
+      400,
+    );
+
+    expect(message).toBe("Tags cannot be empty.");
+  });
+
+  test("rejects a 41-character tag readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.create",
+      { title: "Tag me", tags: ["y".repeat(41)] },
+      400,
+    );
+
+    expect(message).toBe("Tags are limited to 40 characters.");
+  });
+
+  test("rejects more than 12 tags readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const tags = Array.from({ length: 13 }, (_, index) => `tag-${index}`);
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.create",
+      { title: "Tag me", tags },
+      400,
+    );
+
+    expect(message).toBe("A task can have at most 12 tags.");
+  });
+
+  test("rejects a negative or fractional estimate readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    for (const estimateMinutes of [-5, 7.5]) {
+      const message = await mutationError(
+        testApp.app,
+        cookie,
+        "modules.tasks.create",
+        { title: "Size me", estimateMinutes },
+        400,
+      );
+      expect(message).toBe(
+        "The estimate must be a whole number of minutes, zero or more.",
+      );
+    }
   });
 
   test("stores no spine anchor without a due date", async () => {
@@ -505,6 +675,105 @@ describe("modules.tasks.update", () => {
     expect(json.result.data.dueDate).toBeNull();
     expect(readEntityRow(testApp, task.entityId)?.occurredStart).toBeNull();
     expect(readSatelliteRow(testApp, task.entityId)?.dueDate).toBeNull();
+  });
+
+  test("sets and clears priority, tags, and estimate", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, { title: "Plain" });
+
+    const setRes = await trpcMutation(
+      testApp.app,
+      "modules.tasks.update",
+      {
+        entityId: task.entityId,
+        priority: "medium",
+        tags: ["home"],
+        estimateMinutes: 30,
+      },
+      { cookie },
+    );
+    expect(setRes.status).toBe(200);
+    const set = ((await setRes.json()) as TrpcSuccess<TaskData>).result.data;
+    expect(set.priority).toBe("medium");
+    expect(set.tags).toEqual(["home"]);
+    expect(set.estimateMinutes).toBe(30);
+
+    const clearRes = await trpcMutation(
+      testApp.app,
+      "modules.tasks.update",
+      {
+        entityId: task.entityId,
+        priority: null,
+        tags: [],
+        estimateMinutes: null,
+      },
+      { cookie },
+    );
+    expect(clearRes.status).toBe(200);
+    const cleared = ((await clearRes.json()) as TrpcSuccess<TaskData>).result
+      .data;
+    expect(cleared.priority).toBeNull();
+    expect(cleared.tags).toEqual([]);
+    expect(cleared.estimateMinutes).toBeNull();
+    const satellite = readSatelliteRow(testApp, task.entityId);
+    expect(satellite?.priority).toBeNull();
+    expect(satellite?.tags).toBeNull();
+    expect(satellite?.estimateMinutes).toBeNull();
+  });
+
+  test("recomputes the search snippet when the tags change", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, {
+      title: "Retag me",
+      tags: ["finance"],
+      notes: "quarterly numbers",
+    });
+
+    const res = await trpcMutation(
+      testApp.app,
+      "modules.tasks.update",
+      { entityId: task.entityId, tags: ["household"] },
+      { cookie },
+    );
+
+    expect(res.status).toBe(200);
+    const oldTag = searchEntities(testApp.database.sqlite, {
+      query: "finance",
+    });
+    expect(oldTag.map((hit) => hit.entityId)).not.toContain(task.entityId);
+    const newTag = searchEntities(testApp.database.sqlite, {
+      query: "household",
+    });
+    expect(newTag.map((hit) => hit.entityId)).toContain(task.entityId);
+    // The notes half of the snippet survives a tags-only change.
+    const byNotes = searchEntities(testApp.database.sqlite, {
+      query: "quarterly",
+    });
+    expect(byNotes.map((hit) => hit.entityId)).toContain(task.entityId);
+  });
+
+  test("keeps tags searchable when only the notes change", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const task = await createTask(testApp.app, cookie, {
+      title: "Annotate me",
+      tags: ["finance"],
+    });
+
+    const res = await trpcMutation(
+      testApp.app,
+      "modules.tasks.update",
+      { entityId: task.entityId, notes: "fresh commentary" },
+      { cookie },
+    );
+
+    expect(res.status).toBe(200);
+    for (const query of ["finance", "commentary"]) {
+      const hits = searchEntities(testApp.database.sqlite, { query });
+      expect(hits.map((hit) => hit.entityId)).toContain(task.entityId);
+    }
   });
 
   test("an explicit null clears the notes", async () => {

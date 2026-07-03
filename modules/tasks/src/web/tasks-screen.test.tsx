@@ -23,8 +23,13 @@ const TODAY = "2025-07-02";
 const task = (seed: Partial<Task> & { entityId: string }): Task => ({
   title: "Untitled",
   status: "todo",
+  priority: null,
+  tags: [],
   dueDate: null,
   notes: null,
+  estimateMinutes: null,
+  loggedMinutes: 0,
+  sortOrder: 1,
   completedAt: null,
   ...seed,
 });
