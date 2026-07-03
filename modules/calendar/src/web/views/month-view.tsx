@@ -52,7 +52,7 @@ const DayHeading = ({
       type="button"
       aria-label={`Add event on ${date}`}
       onClick={() => onCreateOn(date)}
-      className="invisible flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:visible focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none group-hover:visible group-focus-within:visible"
+      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none group-hover:opacity-100 group-focus-within:opacity-100"
     >
       <Plus className="size-3" aria-hidden="true" />
     </button>
