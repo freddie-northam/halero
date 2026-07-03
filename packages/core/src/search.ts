@@ -51,13 +51,23 @@ const MAX_LIMIT = 50;
  * so callers can skip the query entirely.
  */
 export const toFtsQuery = (raw: string): string | null => {
-  const phrases = raw
-    .trim()
+  // FTS5 parses the bound MATCH text as a NUL-terminated C string: an
+  // embedded NUL truncates the query mid-phrase and the dangling quote
+  // is a syntax error. Blank out the whole C0 control range before
+  // tokenizing; that also covers the highlight markers, so raw input
+  // can never spoof a highlight region in the output.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping the C0 range is the point
+  const cleaned = raw.replaceAll(/[\u0000-\u001f]/gu, " ").trim();
+  if (cleaned === "") {
+    return null;
+  }
+  // Splitting a non-empty trimmed string on whitespace runs can never
+  // produce an empty token, so every phrase below is non-empty.
+  return cleaned
     .split(/\s+/u)
     .slice(0, MAX_TOKENS)
-    .filter((token) => token.trim().length > 0)
-    .map((token) => `"${token.replaceAll('"', '""')}"*`);
-  return phrases.length === 0 ? null : phrases.join(" ");
+    .map((token) => `"${token.replaceAll('"', '""')}"*`)
+    .join(" ");
 };
 
 interface SearchRow {

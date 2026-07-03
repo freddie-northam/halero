@@ -51,6 +51,11 @@ const HOSTILE_INPUTS = [
   "NOT NOT",
   "^caret",
   "col: (x OR y) NEAR/2 z",
+  "foo\u0000bar",
+  "\u0000",
+  "a \u0000 b",
+  "plan\u0000",
+  "\u0001spoof\u0002",
   "   ",
   "",
 ];
@@ -107,6 +112,18 @@ describe("toFtsQuery", () => {
 
   test("passes emoji and accented unicode through quoted", () => {
     expect(toFtsQuery("café 🚀")).toBe('"café"* "🚀"*');
+  });
+
+  test("strips NUL bytes that would truncate the C string FTS5 parses", () => {
+    expect(toFtsQuery("foo\u0000bar")).toBe('"foo"* "bar"*');
+    expect(toFtsQuery("\u0000")).toBeNull();
+    expect(toFtsQuery("a \u0000 b")).toBe('"a"* "b"*');
+    expect(toFtsQuery("plan\u0000")).toBe('"plan"*');
+  });
+
+  test("strips the full C0 range including the highlight markers", () => {
+    expect(toFtsQuery("x\u0001spoof\u0002")).toBe('"x"* "spoof"*');
+    expect(toFtsQuery("\u0007\u000b\u001f")).toBeNull();
   });
 
   test("returns null for empty input", () => {
