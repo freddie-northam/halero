@@ -12,6 +12,16 @@ export const csrfOriginCheck =
     if (SAFE_METHODS.has(c.req.method)) {
       return next();
     }
+    // Requests carrying an Authorization header skip the origin check:
+    // a browser only attaches one after a CORS preflight, which this
+    // server never answers, so such a request cannot be a cross-site
+    // ambient-authority request. And because the session middleware
+    // never lets the cookie decide when an Authorization header is
+    // present, the cookie cannot be the deciding credential here.
+    // Cookie-authenticated mutations keep the origin check below.
+    if (c.req.header("authorization") !== undefined) {
+      return next();
+    }
     const origin = c.req.header("origin");
     if (origin === undefined) {
       return next();

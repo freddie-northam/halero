@@ -41,9 +41,18 @@ export const authRouter = router({
     }),
 
   logout: protectedProcedure.mutation(({ ctx }) => {
-    if (ctx.sessionToken !== null) {
-      destroySession(ctx.db, ctx.sessionToken);
+    // Logout only applies to password sessions. A token principal gets
+    // a readable rejection rather than a silent no-op: a client that
+    // believed logout disabled its token would keep a live credential
+    // around by mistake.
+    if (ctx.session.kind !== "password") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "API tokens cannot sign out. To disable this token, revoke it instead.",
+      });
     }
+    destroySession(ctx.db, ctx.session.token);
     ctx.clearSessionCookie();
     return { ok: true };
   }),

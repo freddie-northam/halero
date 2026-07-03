@@ -64,7 +64,6 @@ export const createTrpcHandler = (
       config,
       key,
       session: c.get("session"),
-      sessionToken: c.get("sessionToken"),
       now,
       loginRateLimiter,
       outboundFetch,
