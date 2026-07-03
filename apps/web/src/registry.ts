@@ -146,9 +146,15 @@ export const buildWebModules = (
     createTodayWebModule({
       api: {
         // The greeting and date line reuse the calendar module's today
-        // anchor, which already carries the home timezone and its current
-        // date; no dedicated server endpoint exists for the Today page.
-        home: () => client.modules.calendar.today.query(),
+        // anchor (home timezone + current date); the owner's name for the
+        // greeting comes from system.status, merged in here.
+        home: async () => {
+          const [today, status] = await Promise.all([
+            client.modules.calendar.today.query(),
+            client.system.status.query(),
+          ]);
+          return { ...today, displayName: status.displayName };
+        },
         googleConnectionStatus: async () =>
           (await api.googleStatus()).connection?.status ?? null,
       },

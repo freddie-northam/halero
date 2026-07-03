@@ -49,6 +49,7 @@ const validate = (
 
 export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
   const api = useApi();
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [homeTimezone, setHomeTimezone] = useState(detectTimezone);
@@ -74,6 +75,7 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
     }
     setup.mutate({
       password,
+      name: name.trim(),
       homeTimezone,
       baseUrl: trimmedBaseUrl === "" ? undefined : trimmedBaseUrl,
     });
@@ -86,6 +88,16 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
   return (
     <AuthLayout subtitle="Create a password to claim this instance.">
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <Input
+          id="name"
+          aria-label="Your name"
+          placeholder="Your name"
+          autoComplete="name"
+          required
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          className={authFieldClassName}
+        />
         <PasswordInput
           id="password"
           label="Password"
@@ -111,7 +123,7 @@ export const SetupScreen = ({ onSuccess }: SetupScreenProps): ReactElement => {
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper">
               {listTimezones(homeTimezone).map((zone) => (
                 <SelectItem key={zone} value={zone}>
                   {zone}
