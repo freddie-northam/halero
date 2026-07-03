@@ -1,0 +1,22 @@
+/* A gentle entrance for the form block, so the screen settles in rather
+   than snapping. Disabled under reduced-motion. */
+.auth-enter {
+  animation: auth-enter 0.5s ease-out both;
+}
+
+@keyframes auth-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-enter {
+    animation: none;
+  }
+}
