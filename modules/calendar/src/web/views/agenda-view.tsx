@@ -81,13 +81,13 @@ export const AgendaView = ({
 }: AgendaViewProps): ReactElement => {
   if (days.length === 0) {
     return (
-      <div className="max-w-2xl">
+      <div className="w-full">
         <EmptyState />
       </div>
     );
   }
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    <div className="flex w-full flex-col gap-6">
       {days.map((day) => (
         <DayGroup key={day.date} day={day} timeZone={timeZone} />
       ))}
