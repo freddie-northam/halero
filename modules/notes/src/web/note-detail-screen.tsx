@@ -19,6 +19,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   lazy,
   type ReactElement,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -55,10 +56,12 @@ const NoteDetailLoaded = ({
   note,
   api,
   onDeleted,
+  renderRelated,
 }: {
   readonly note: Note;
   readonly api: NotesApi;
   readonly onDeleted: () => void;
+  readonly renderRelated?: (entityId: string) => ReactNode;
 }): ReactElement => {
   const [title, setTitle] = useState(note.title);
   const [tags, setTags] = useState<readonly string[]>(note.tags);
@@ -118,12 +121,18 @@ const NoteDetailLoaded = ({
           </Button>
         </div>
       </div>
+      {renderRelated ? (
+        <div className="border-t pt-4">{renderRelated(note.entityId)}</div>
+      ) : null}
     </div>
   );
 };
 
 /** Builds the editor page component around the host-wired notes queries. */
-export const createNoteDetailScreen = (api: NotesApi) => {
+export const createNoteDetailScreen = (
+  api: NotesApi,
+  renderRelated?: (entityId: string) => ReactNode,
+) => {
   const NoteDetailScreen = (): ReactElement => {
     const params = useParams({ strict: false }) as { noteId?: string };
     const noteId = params.noteId ?? "";
@@ -170,6 +179,7 @@ export const createNoteDetailScreen = (api: NotesApi) => {
             note={noteQuery.data}
             api={api}
             onDeleted={goToList}
+            renderRelated={renderRelated}
           />
         )}
       </div>

@@ -9,7 +9,7 @@
 import { Alert, AlertDescription, Loader2, PageHeader } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import type {
   AgendaEvent,
   CalendarEventList,
@@ -214,7 +214,10 @@ const useCalendarData = (
 };
 
 /** Builds the page component around the host-wired calendar queries. */
-export const createCalendarScreen = (api: CalendarApi) => {
+export const createCalendarScreen = (
+  api: CalendarApi,
+  renderRelated?: (entityId: string) => ReactNode,
+) => {
   const CalendarScreen = (): ReactElement => {
     const rawSearch: unknown = useSearch({ strict: false });
     const { view, date } = normalizeCalendarSearch(rawSearch);
@@ -329,6 +332,7 @@ export const createCalendarScreen = (api: CalendarApi) => {
                 timeZone={homeTimezone}
                 onEdit={onEdit}
                 onClearSelection={() => setSelected(null)}
+                renderRelated={renderRelated}
               />
             </aside>
           )}

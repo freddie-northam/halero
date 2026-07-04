@@ -7,6 +7,7 @@
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { NOTE_ITEM_KIND } from "@halero/schemas";
+import type { ReactNode } from "react";
 import type { NotesApi } from "./api";
 import { normalizeNotesSearch } from "./helpers/notes-search";
 import { createNewNoteCommand } from "./new-note-command";
@@ -17,7 +18,15 @@ export type { Note, NoteDocument, NoteList, NoteListItem } from "../contract";
 export type { NotesApi, NoteUpdateInput } from "./api";
 export { withNotesInvalidation } from "./queries";
 
-export const createNotesWebModule = (api: NotesApi): WebModule =>
+export interface NotesWebModuleOptions {
+  /** Host slot: renders a note's relationships on its editor page. */
+  readonly renderRelated?: (entityId: string) => ReactNode;
+}
+
+export const createNotesWebModule = (
+  api: NotesApi,
+  options: NotesWebModuleOptions = {},
+): WebModule =>
   defineWebModule({
     id: "notes",
     nav: [{ label: "Notes", path: "/notes", order: 40, icon: "notes" }],
@@ -29,7 +38,7 @@ export const createNotesWebModule = (api: NotesApi): WebModule =>
       },
       {
         path: "/notes/$noteId",
-        component: createNoteDetailScreen(api),
+        component: createNoteDetailScreen(api, options.renderRelated),
       },
     ],
     entityLinks: [

@@ -130,6 +130,9 @@ const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({
     Promise.resolve({ id: "tok-1", name, token: `halero_${"a".repeat(64)}` }),
   revokeApiToken: () => Promise.resolve(),
   search: () => Promise.resolve([]),
+  entityLinks: () => Promise.resolve({ links: [] }),
+  createEntityLink: () => Promise.resolve({ id: "link-1" }),
+  deleteEntityLink: () => Promise.resolve(),
   ...overrides,
 });
 

@@ -23,6 +23,7 @@ import {
 import {
   type FormEvent,
   type ReactElement,
+  type ReactNode,
   type RefObject,
   useRef,
   useState,
@@ -40,6 +41,12 @@ export interface TaskDetailDialogProps {
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
   readonly onDelete: (entityId: string) => Promise<void>;
   readonly onLogTime: (entityId: string, minutes: number) => Promise<void>;
+  /**
+   * Host slot for the entity's relationships. The module stays decoupled
+   * from the host's link registry and router: the host injects a rendered
+   * panel keyed to the task's entity id, or nothing.
+   */
+  readonly renderRelated?: (entityId: string) => ReactNode;
 }
 
 /** Blank clears the estimate; otherwise it must be whole minutes, zero or more. */
@@ -323,11 +330,13 @@ const TaskDetailForm = ({
   onSave,
   onDelete,
   onLogTime,
+  renderRelated,
 }: {
   readonly task: Task;
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
   readonly onDelete: (entityId: string) => Promise<void>;
   readonly onLogTime: (entityId: string, minutes: number) => Promise<void>;
+  readonly renderRelated?: (entityId: string) => ReactNode;
 }): ReactElement => {
   const form = useTaskDetailForm(task, onSave, onDelete, onLogTime);
   return (
@@ -352,6 +361,9 @@ const TaskDetailForm = ({
           <AlertDescription>{form.error}</AlertDescription>
         </Alert>
       )}
+      {renderRelated ? (
+        <div className="px-4 pb-2">{renderRelated(task.entityId)}</div>
+      ) : null}
       <Separator />
       <div className="flex items-center justify-between p-4">
         <Button
@@ -376,6 +388,7 @@ export const TaskDetailDialog = ({
   onSave,
   onDelete,
   onLogTime,
+  renderRelated,
 }: TaskDetailDialogProps): ReactElement => (
   <Dialog
     open={task !== null}
@@ -393,6 +406,7 @@ export const TaskDetailDialog = ({
           onSave={onSave}
           onDelete={onDelete}
           onLogTime={onLogTime}
+          renderRelated={renderRelated}
         />
       )}
     </DialogContent>

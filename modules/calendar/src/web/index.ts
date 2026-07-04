@@ -5,6 +5,7 @@
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
+import type { ReactNode } from "react";
 import type { CalendarApi } from "./api";
 import { createCalendarScreen } from "./calendar-screen";
 import { normalizeCalendarSearch } from "./helpers/calendar-search";
@@ -26,7 +27,15 @@ export type {
 export { withCalendarInvalidation } from "./queries";
 export { createTodayAgendaSection } from "./today-agenda-section";
 
-export const createCalendarWebModule = (api: CalendarApi): WebModule =>
+export interface CalendarWebModuleOptions {
+  /** Host slot: renders a selected event's relationships in the panel. */
+  readonly renderRelated?: (entityId: string) => ReactNode;
+}
+
+export const createCalendarWebModule = (
+  api: CalendarApi,
+  options: CalendarWebModuleOptions = {},
+): WebModule =>
   defineWebModule({
     id: "calendar",
     nav: [
@@ -35,7 +44,7 @@ export const createCalendarWebModule = (api: CalendarApi): WebModule =>
     pages: [
       {
         path: "/calendar",
-        component: createCalendarScreen(api),
+        component: createCalendarScreen(api, options.renderRelated),
         validateSearch: normalizeCalendarSearch,
       },
     ],
