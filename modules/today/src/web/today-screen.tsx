@@ -7,7 +7,7 @@
 // own. The greeting hour is the CURRENT instant read in that home
 // timezone, never the browser's.
 
-import { Alert, AlertDescription, Loader2 } from "@halero/ui";
+import { Alert, AlertDescription, Loader2, PageHeader } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactElement } from "react";
@@ -74,16 +74,12 @@ const TodayBody = ({
   readonly sections: readonly TodaySection[];
 }): ReactElement => (
   <>
-    <header>
-      <h1 className="text-lg font-semibold tracking-tight">
-        {`${greetingForHour(hourInZone(now(), home.homeTimezone))}${
-          home.displayName ? `, ${home.displayName}` : ""
-        }`}
-      </h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {formatFullDate(home.today)}
-      </p>
-    </header>
+    <PageHeader
+      title={`${greetingForHour(hourInZone(now(), home.homeTimezone))}${
+        home.displayName ? `, ${home.displayName}` : ""
+      }`}
+      description={formatFullDate(home.today)}
+    />
     {connectionStatus === "reauth_required" ? <ReauthAlert /> : null}
     {connectionStatus === null ? <ConnectPointer /> : null}
     <div className="mt-8 flex flex-col gap-8">
@@ -141,7 +137,9 @@ export const createTodayScreen = (
       );
     };
 
-    return <div className="mx-auto w-full max-w-2xl px-6 py-8">{body()}</div>;
+    // No width/padding wrapper here: the shell frames every page in
+    // PageContainer, so pages only supply their PageHeader and body.
+    return body();
   };
   return TodayScreen;
 };

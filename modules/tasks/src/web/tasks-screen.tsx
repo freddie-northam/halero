@@ -5,7 +5,7 @@
 // overdue tint and the board's "today" always compare against the
 // server-computed date, so the client does no timezone math anywhere.
 
-import { Alert, AlertDescription, Loader2 } from "@halero/ui";
+import { Alert, AlertDescription, Loader2, PageHeader } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
@@ -86,12 +86,11 @@ export const createTasksScreen = (api: TasksApi) => {
     };
 
     return (
-      <div className="mx-auto w-full max-w-5xl px-6 py-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold tracking-tight">Tasks</h1>
+      <>
+        <PageHeader title="Tasks">
           <TasksViewSwitcher view={view} onViewChange={setView} />
-        </div>
-        <div className="mt-4">
+        </PageHeader>
+        <div className="mt-6">
           {view === "list" ? (
             <ListView api={api} onOpenTask={setSelectedTask} />
           ) : (
@@ -115,7 +114,7 @@ export const createTasksScreen = (api: TasksApi) => {
             setSelectedTask(await api.logTime({ entityId, minutes }));
           }}
         />
-      </div>
+      </>
     );
   };
   return TasksScreen;

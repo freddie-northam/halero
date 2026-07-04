@@ -22,9 +22,11 @@ export {
   ChevronLeft,
   ChevronRight,
   Circle,
+  CircleHelp,
   ExternalLink,
   Eye,
   EyeOff,
+  Gift,
   House,
   ListTodo,
   Loader2,
@@ -88,6 +90,11 @@ export {
 } from "./components/ui/dialog";
 export { Input } from "./components/ui/input";
 export { Label } from "./components/ui/label";
+export {
+  PageContainer,
+  PageHeader,
+  type PageHeaderProps,
+} from "./components/ui/page";
 export {
   Popover,
   PopoverAnchor,

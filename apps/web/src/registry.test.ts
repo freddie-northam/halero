@@ -150,11 +150,11 @@ describe("the shipped web module registry", () => {
     expect(calendar?.pages?.map((page) => page.path)).toEqual(["/calendar"]);
   });
 
-  test("provides the home page and Today nav entry from the today module", () => {
+  test("provides the home page and Home nav entry from the today module", () => {
     const today = modulesUnderTest().find((module) => module.id === "today");
 
     expect(today?.nav).toEqual([
-      { label: "Today", path: "/", order: 10, icon: "home" },
+      { label: "Home", path: "/", order: 10, icon: "home" },
     ]);
     expect(today?.pages?.map((page) => page.path)).toEqual(["/"]);
   });
@@ -272,7 +272,7 @@ describe("buildNav", () => {
     const nav = buildNav(modulesUnderTest());
 
     expect(nav.map((entry) => entry.label)).toEqual([
-      "Today",
+      "Home",
       "Calendar",
       "Tasks",
       "Notes",

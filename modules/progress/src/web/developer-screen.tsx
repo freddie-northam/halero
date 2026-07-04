@@ -4,7 +4,14 @@
 // tRPC client and no @halero/db here, ever. The module id stays "progress"
 // (a deliberate low-churn choice); only the label and route are "Developer".
 
-import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from "@halero/ui";
+import {
+  PageHeader,
+  Skeleton,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import type { ProgressApi } from "./api";
@@ -56,16 +63,13 @@ export const createDeveloperScreen = (api: ProgressApi) => {
     };
 
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 py-8">
-        <header className="mb-8">
-          <h1 className="text-lg font-semibold tracking-tight">Developer</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Triage today's work and reflect on your output across GitHub, Claude
-            Code, and Codex.
-          </p>
-        </header>
-        {body()}
-      </div>
+      <>
+        <PageHeader
+          title="Developer"
+          description="Triage today's work and reflect on your output across GitHub, Claude Code, and Codex."
+        />
+        <div className="mt-6">{body()}</div>
+      </>
     );
   };
   return DeveloperScreen;

@@ -6,7 +6,7 @@
 // every day boundary (and "now", for the panel) is computed server-side
 // in the home timezone, and this screen only renders what it gets back.
 
-import { Alert, AlertDescription, Loader2 } from "@halero/ui";
+import { Alert, AlertDescription, Loader2, PageHeader } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
@@ -16,7 +16,7 @@ import type {
   CalendarRange,
 } from "../contract";
 import type { CalendarApi } from "./api";
-import { CalendarHeader } from "./components/calendar-header";
+import { CalendarActions } from "./components/calendar-actions";
 import { ContextPanel } from "./components/context-panel";
 import { EventModal, type EventModalTarget } from "./components/event-modal";
 import {
@@ -291,29 +291,31 @@ export const createCalendarScreen = (api: CalendarApi) => {
     };
 
     return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-6">
-        <CalendarHeader
-          label={anchor === undefined ? "" : rangeLabel(view, anchor)}
-          view={view}
-          onViewChange={(next) => setSearch({ view: next, date })}
-          onPrevious={() => {
-            if (anchor !== undefined) {
-              setSearch({ view, date: steppedAnchor(view, anchor, -1) });
-            }
-          }}
-          onToday={() => setSearch({ view })}
-          onNext={() => {
-            if (anchor !== undefined) {
-              setSearch({ view, date: steppedAnchor(view, anchor, 1) });
-            }
-          }}
-          navDisabled={anchor === undefined}
-          onNewEvent={() => {
-            if (anchor !== undefined) {
-              onCreateOn(anchor);
-            }
-          }}
-        />
+      <>
+        <PageHeader title="Calendar">
+          <CalendarActions
+            label={anchor === undefined ? "" : rangeLabel(view, anchor)}
+            view={view}
+            onViewChange={(next) => setSearch({ view: next, date })}
+            onPrevious={() => {
+              if (anchor !== undefined) {
+                setSearch({ view, date: steppedAnchor(view, anchor, -1) });
+              }
+            }}
+            onToday={() => setSearch({ view })}
+            onNext={() => {
+              if (anchor !== undefined) {
+                setSearch({ view, date: steppedAnchor(view, anchor, 1) });
+              }
+            }}
+            navDisabled={anchor === undefined}
+            onNewEvent={() => {
+              if (anchor !== undefined) {
+                onCreateOn(anchor);
+              }
+            }}
+          />
+        </PageHeader>
         <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1">{body()}</div>
           {homeTimezone === undefined ? null : (
@@ -358,7 +360,7 @@ export const createCalendarScreen = (api: CalendarApi) => {
             }
           />
         )}
-      </div>
+      </>
     );
   };
   return CalendarScreen;
