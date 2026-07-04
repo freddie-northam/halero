@@ -28,13 +28,19 @@ const NAV_ITEMS = [
 // render them inside the provider just like the shell does.
 // onSearchClick defaults to a no-op so the nav tests stay focused; the search
 // test overrides it.
+// onSearchClick and accountName default so the nav tests stay focused; the
+// search and account tests override them.
 const renderSidebar = (
-  props: Omit<AppSidebarProps, "onSearchClick"> &
-    Partial<Pick<AppSidebarProps, "onSearchClick">>,
+  props: Omit<AppSidebarProps, "onSearchClick" | "accountName"> &
+    Partial<Pick<AppSidebarProps, "onSearchClick" | "accountName">>,
 ): RenderResult =>
   render(
     <SidebarProvider>
-      <AppSidebar onSearchClick={() => undefined} {...props} />
+      <AppSidebar
+        onSearchClick={() => undefined}
+        accountName="Freddie"
+        {...props}
+      />
     </SidebarProvider>,
   );
 
@@ -63,6 +69,18 @@ test("marks a module-contributed item active on its own path", () => {
   const today = view.getByRole("button", { name: "Today" });
   expect(calendar.getAttribute("aria-current")).toBe("page");
   expect(today.getAttribute("aria-current")).toBeNull();
+});
+
+test("opens Settings from the account row", () => {
+  const visited: string[] = [];
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: (path) => visited.push(path),
+    accountName: "Freddie",
+  });
+  fireEvent.click(view.getByRole("button", { name: "Freddie" }));
+  expect(visited).toEqual(["/settings"]);
 });
 
 test("opens the command palette from the sidebar search", () => {

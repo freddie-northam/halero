@@ -3,16 +3,22 @@ import type {
   EntityLink,
   EntityLinkContribution,
 } from "@halero/module-sdk/web";
-import { PageContainer, SidebarInset, SidebarProvider } from "@halero/ui";
+import {
+  PageContainer,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@halero/ui";
+import { useQuery } from "@tanstack/react-query";
 import {
   type CSSProperties,
   type ReactElement,
   type ReactNode,
   useState,
 } from "react";
-import { CommandBarSlot } from "../components/command-bar-slot";
 import { CommandPalette } from "../components/command-palette";
 import { AppSidebar, type SidebarNavItem } from "../components/sidebar";
+import { useApi } from "../lib/api-context";
 
 export interface ShellScreenProps {
   /** Nav entries from the web module registry, already sorted. */
@@ -69,9 +75,15 @@ export const ShellScreen = ({
   onOpenLink,
   children,
 }: ShellScreenProps): ReactElement => {
+  const api = useApi();
   const [searchOpen, setSearchOpen] = useState(false);
   const [defaultSidebarOpen] = useState(readSidebarState);
   const activeItem = navItemFor(nav, activePath);
+  // The owner's name for the sidebar account row (present once signed in).
+  const status = useQuery({
+    queryKey: ["system-status"],
+    queryFn: () => api.systemStatus(),
+  });
 
   return (
     <SidebarProvider
@@ -84,19 +96,22 @@ export const ShellScreen = ({
         activePath={activeItem?.path ?? activePath}
         onNavigate={onNavigate}
         onSearchClick={() => setSearchOpen(true)}
+        accountName={status.data?.displayName ?? null}
       />
-      {/* The inset is a transparent frame column: the account bar sits on the
-          warm frame, and the routed content floats below it as a white rounded
-          panel that fills the width (a hairline border carries the edge, no
-          shadow). The ml-2 keeps a warm gap between the sidebar and the panel. */}
-      <SidebarInset className="min-w-0 gap-3 bg-transparent shadow-none md:peer-data-[variant=inset]:ml-2">
-        <CommandBarSlot onSettingsClick={() => onNavigate("/settings")} />
+      {/* The routed content is the single white panel, floating in the warm
+          inset frame with a uniform margin so its padding reads even on every
+          side. A hairline border carries the edge; no shadow. Search and the
+          account live in the sidebar, so on desktop there is no top bar. */}
+      <SidebarInset className="min-w-0 overflow-hidden border bg-card md:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:shadow-none">
+        {/* Mobile only: the sidebar is an off-canvas drawer, so keep a trigger
+            to open it. Hidden at md+, where the sidebar is always present. */}
+        <div className="flex h-12 shrink-0 items-center px-4 md:hidden">
+          <SidebarTrigger />
+        </div>
         {/* PageContainer is the single width/padding authority: wrapping every
             routed page here means no page can set its own width. */}
-        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border bg-card">
-          <div className="h-full overflow-auto">
-            <PageContainer>{children}</PageContainer>
-          </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <PageContainer>{children}</PageContainer>
         </div>
       </SidebarInset>
       <CommandPalette

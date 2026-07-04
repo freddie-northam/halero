@@ -45,7 +45,15 @@ export interface AppSidebarProps {
   readonly onNavigate: (path: string) => void;
   /** Opens the command palette; the search lives at the top of the sidebar. */
   readonly onSearchClick: () => void;
+  /** The owner's name for the account row; null while unknown. */
+  readonly accountName: string | null;
 }
+
+/** The account avatar's letter: the owner's initial, or "H" as a fallback. */
+const initialFor = (name: string | null | undefined): string => {
+  const first = name?.trim().charAt(0) ?? "";
+  return first === "" ? "H" : first.toUpperCase();
+};
 
 /** Maps a nav item's semantic icon key to its rail glyph. */
 const NAV_ICONS: Record<string, LucideIcon> = {
@@ -88,42 +96,60 @@ const SidebarToggle = (): ReactElement => {
 };
 
 /**
- * The universal-search trigger, at the top of the sidebar (under the logo).
- * A full-width pill when expanded; a search-icon button on the collapsed rail,
- * with a tooltip like the nav rows. Opens the same command palette as ⌘K.
+ * The universal-search trigger, a full-width pill at the top of the sidebar
+ * (under the logo). Hidden on the collapsed rail, where it adds little (⌘K
+ * still opens the palette from the keyboard). Opens the same command palette.
  */
 const SidebarSearch = ({
   onSearchClick,
 }: {
   readonly onSearchClick: () => void;
-}): ReactElement => {
-  const { state } = useSidebar();
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          data-slot="command-bar"
-          aria-label="Search Halero"
-          onClick={onSearchClick}
-          className="flex h-9 w-full items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-        >
-          <Search className="size-4 shrink-0" />
-          <span className="truncate group-data-[collapsible=icon]:hidden">
-            Search Halero...
-          </span>
-          <kbd className="pointer-events-none ml-auto rounded-sm border px-1 font-sans text-[10px] leading-4 text-muted-foreground group-data-[collapsible=icon]:hidden">
-            ⌘K
-          </kbd>
-        </button>
-      </TooltipTrigger>
-      {/* Only useful on the collapsed rail; the expanded pill already labels itself. */}
-      <TooltipContent side="right" hidden={state !== "collapsed"}>
-        Search ⌘K
-      </TooltipContent>
-    </Tooltip>
-  );
-};
+}): ReactElement => (
+  <button
+    type="button"
+    data-slot="command-bar"
+    aria-label="Search Halero"
+    onClick={onSearchClick}
+    className="flex h-9 w-full items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+  >
+    <Search className="size-4 shrink-0" />
+    <span className="truncate">Search Halero...</span>
+    <kbd className="pointer-events-none ml-auto rounded-sm border px-1 font-sans text-[10px] leading-4 text-muted-foreground">
+      ⌘K
+    </kbd>
+  </button>
+);
+
+/**
+ * The account row at the bottom of the sidebar: a coral initial avatar plus the
+ * owner's name, opening Settings on click. On the collapsed rail it shrinks to
+ * just the avatar, like the nav rows.
+ */
+const SidebarAccount = ({
+  name,
+  onOpen,
+}: {
+  readonly name: string | null;
+  readonly onOpen: () => void;
+}): ReactElement => (
+  <SidebarMenuItem>
+    <SidebarMenuButton
+      type="button"
+      aria-label={name ?? "Account"}
+      tooltip={name ?? "Account"}
+      className="h-9 gap-3 rounded-lg text-[15px]"
+      onClick={onOpen}
+    >
+      <span
+        aria-hidden="true"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+      >
+        {initialFor(name)}
+      </span>
+      <span className="truncate">{name ?? "Account"}</span>
+    </SidebarMenuButton>
+  </SidebarMenuItem>
+);
 
 const NavButton = ({
   item,
@@ -186,6 +212,7 @@ export const AppSidebar = ({
   activePath,
   onNavigate,
   onSearchClick,
+  accountName,
 }: AppSidebarProps): ReactElement => {
   const primary = items.filter((item) => item.group !== "secondary");
   const secondary = items.filter((item) => item.group === "secondary");
@@ -193,19 +220,18 @@ export const AppSidebar = ({
     <Sidebar variant="inset" collapsible="icon">
       <SidebarHeader className="gap-3 p-3 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
         <SidebarToggle />
-        <img
-          src="/brand/halero-logo.png"
-          alt="Halero"
-          className="h-7 w-auto group-data-[collapsible=icon]:hidden"
-        />
-        <img
-          src="/brand/halero-mark.png"
-          alt="Halero"
-          className="hidden size-7 group-data-[collapsible=icon]:block"
-        />
+        {/* One image in both states so the H never changes size: the collapsing
+            rail clips the wordmark, leaving just the mark. */}
+        <div className="overflow-hidden group-data-[collapsible=icon]:w-[30px]">
+          <img
+            src="/brand/halero-logo.png"
+            alt="Halero"
+            className="h-7 max-w-none"
+          />
+        </div>
       </SidebarHeader>
       <SidebarContent>
-        <div className="px-2 pt-1">
+        <div className="px-2 pt-1 group-data-[collapsible=icon]:hidden">
           <SidebarSearch onSearchClick={onSearchClick} />
         </div>
         <nav aria-label="Primary" className="p-2">
@@ -236,6 +262,10 @@ export const AppSidebar = ({
             label="Help"
             href={`${REPO_URL}#readme`}
             icon={CircleHelp}
+          />
+          <SidebarAccount
+            name={accountName}
+            onOpen={() => onNavigate("/settings")}
           />
         </SidebarMenu>
       </SidebarFooter>
