@@ -260,7 +260,10 @@ export const buildWebModules = (
       },
       sections: buildTodaySections(calendarApi, tasksApi),
     }),
-    createCalendarWebModule(calendarApi),
+    createCalendarWebModule(calendarApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
     createTasksWebModule(tasksApi, {
       renderRelated: (entityId) =>
         createElement(HostRelatedPanel, { entityId }),

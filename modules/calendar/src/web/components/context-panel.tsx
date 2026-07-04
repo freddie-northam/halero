@@ -14,7 +14,7 @@ import {
   CardTitle,
   X,
 } from "@halero/ui";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { AgendaEvent } from "../../contract";
 import {
   formatDateInZone,
@@ -32,6 +32,8 @@ export interface ContextPanelProps {
   /** Opens the event in the edit modal; called only for editable events. */
   readonly onEdit: (event: AgendaEvent) => void;
   readonly onClearSelection: () => void;
+  /** Host slot: renders the selected event's relationships. */
+  readonly renderRelated?: (entityId: string) => ReactNode;
 }
 
 /** The accent dot matches the chips' cue; the label spells it out. */
@@ -146,11 +148,13 @@ const SelectedSection = ({
   timeZone,
   onEdit,
   onClearSelection,
+  renderRelated,
 }: {
   readonly selected: AgendaEvent | null;
   readonly timeZone: string;
   readonly onEdit: (event: AgendaEvent) => void;
   readonly onClearSelection: () => void;
+  readonly renderRelated?: (entityId: string) => ReactNode;
 }): ReactElement | null => {
   if (selected === null) {
     return null;
@@ -168,8 +172,13 @@ const SelectedSection = ({
           <X />
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
         <EventDetails event={selected} timeZone={timeZone} onEdit={onEdit} />
+        {renderRelated ? (
+          <div className="border-t pt-3">
+            {renderRelated(selected.entityId)}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -181,6 +190,7 @@ export const ContextPanel = ({
   timeZone,
   onEdit,
   onClearSelection,
+  renderRelated,
 }: ContextPanelProps): ReactElement => (
   <div className="flex flex-col gap-4">
     <NextUpSection upcoming={upcoming} timeZone={timeZone} onEdit={onEdit} />
@@ -189,6 +199,7 @@ export const ContextPanel = ({
       timeZone={timeZone}
       onEdit={onEdit}
       onClearSelection={onClearSelection}
+      renderRelated={renderRelated}
     />
   </div>
 );
