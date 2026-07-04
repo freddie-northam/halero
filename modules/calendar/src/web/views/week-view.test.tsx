@@ -204,3 +204,56 @@ test("two overlapping timed events render side by side in distinct lanes", () =>
   expect(firstBlock.style.width).not.toBe("100%");
   expect(secondBlock.style.width).not.toBe("100%");
 });
+
+test("a timed event crossing midnight anchors to the bottom of its start day and the top of the next", () => {
+  // 2025-07-01 23:00 BST to 2025-07-02 01:00 BST (London is UTC+1 in July).
+  const overnight = event({
+    entityId: "ev-overnight",
+    title: "Red-eye",
+    start: Date.UTC(2025, 6, 1, 22, 0, 0),
+    end: Date.UTC(2025, 6, 2, 0, 0, 0),
+  });
+  // groupBySpannedDays lists a multi-day event under every day it covers.
+  const view = renderWeek(
+    new Map([
+      ["2025-07-01", [overnight]],
+      ["2025-07-02", [overnight]],
+    ]),
+  );
+
+  const blocks = view.getAllByTitle("Red-eye");
+  expect(blocks).toHaveLength(2);
+  // DOM order follows the day columns, so the start day comes first.
+  expect(blocks.map((block) => block.style.top)).toEqual([
+    `${GRID_HEIGHT_PX - HOUR_ROW_HEIGHT_PX}px`,
+    "0px",
+  ]);
+  expect(blocks.map((block) => block.style.height)).toEqual([
+    `${HOUR_ROW_HEIGHT_PX}px`,
+    `${HOUR_ROW_HEIGHT_PX}px`,
+  ]);
+});
+
+test("overlaps on a continuation day are lane-packed against that day's slice", () => {
+  // Both fall on 2025-07-02 in London: the overnight event's slice is
+  // 00:00-02:00, the early event is 00:30-01:30, so they overlap there.
+  const overnight = event({
+    entityId: "ev-overnight",
+    title: "Overnight",
+    start: Date.UTC(2025, 6, 1, 22, 0, 0),
+    end: Date.UTC(2025, 6, 2, 1, 0, 0),
+  });
+  const early = event({
+    entityId: "ev-early",
+    title: "Early",
+    start: Date.UTC(2025, 6, 1, 23, 30, 0),
+    end: Date.UTC(2025, 6, 2, 0, 30, 0),
+  });
+  const view = renderWeek(new Map([["2025-07-02", [overnight, early]]]));
+
+  const overnightBlock = view.getByTitle("Overnight");
+  const earlyBlock = view.getByTitle("Early");
+  expect(overnightBlock.style.left).not.toBe(earlyBlock.style.left);
+  expect(Number.parseFloat(overnightBlock.style.width)).toBeLessThan(100);
+  expect(Number.parseFloat(earlyBlock.style.width)).toBeLessThan(100);
+});

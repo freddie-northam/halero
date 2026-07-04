@@ -12,6 +12,7 @@ import { RecurrenceIcon } from "../components/recurrence-icon";
 import { weekDates } from "../helpers/date-matrix";
 import {
   dayOfMonth,
+  formatDateInZone,
   formatTime,
   formatWeekdayShort,
   minutesOfDayInZone,
@@ -197,6 +198,7 @@ const TimedGrid = ({
       {dates.map((date) => (
         <DayColumn
           key={date}
+          date={date}
           events={eventsFor(date)}
           timeZone={timeZone}
           onSelectEvent={onSelectEvent}
@@ -213,30 +215,52 @@ interface TimedLayout {
   readonly width: number;
 }
 
+/** An event's minute span WITHIN one day column, both in 0..1440. */
+interface DayMinutes {
+  readonly start: number;
+  readonly end: number;
+}
+
 /**
- * Pixel top/height come from minutes-of-day (parsed from formatTime, per
- * the module's timezone discipline); percent left/width come from the
- * event's packed lane. Server-enforced invariant: timed events are
- * same-day, so start/end minutes always fall within 0..1440.
+ * The event's [start, end) minute span clamped to a single day column, so
+ * an event that crosses local midnight (only connector events can, since
+ * user events are same-day) sits at the bottom of the day it starts and
+ * the top of the day it continues into, instead of both days repeating the
+ * start day's minutes. Dates are compared, and minutes read, only through
+ * the server-timezone formatters, never by offset arithmetic on the epoch.
  */
-const timedLayout = (
+const dayMinutes = (
   event: AgendaEvent,
+  date: string,
   timeZone: string,
-  slot: PackedSlot,
-): TimedLayout => {
-  const startMinutes = minutesOfDayInZone(event.start, timeZone);
-  const endMinutes = minutesOfDayInZone(event.end, timeZone);
+): DayMinutes => ({
+  start:
+    formatDateInZone(event.start, timeZone) < date
+      ? 0
+      : minutesOfDayInZone(event.start, timeZone),
+  end:
+    formatDateInZone(event.end, timeZone) > date
+      ? MINUTES_PER_DAY
+      : minutesOfDayInZone(event.end, timeZone),
+});
+
+/**
+ * Pixel top/height come from the clamped day minutes; percent left/width
+ * come from the event's packed lane (packed over the same clamped ranges,
+ * so overlaps on a continuation day are correct).
+ */
+const timedLayout = (range: DayMinutes, slot: PackedSlot): TimedLayout => {
   const height = Math.min(
     GRID_HEIGHT_PX,
     Math.max(
       MIN_BLOCK_HEIGHT_PX,
-      ((endMinutes - startMinutes) / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
+      ((range.end - range.start) / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
     ),
   );
   // Clamp the top so a short event late in the day stays legible AND
   // within the grid: its bottom never spills past the final hour row.
   const top = Math.min(
-    (startMinutes / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
+    (range.start / MINUTES_PER_DAY) * GRID_HEIGHT_PX,
     GRID_HEIGHT_PX - height,
   );
   const laneWidth = 100 / slot.laneCount;
@@ -314,16 +338,19 @@ const TimedBlock = ({
 };
 
 const DayColumn = ({
+  date,
   events,
   timeZone,
   onSelectEvent,
 }: {
+  readonly date: string;
   readonly events: readonly AgendaEvent[];
   readonly timeZone: string;
   readonly onSelectEvent: (event: AgendaEvent) => void;
 }): ReactElement => {
   const timed = events.filter((event) => !event.allDay);
-  const slots = packEventLanes(timed);
+  const ranges = timed.map((event) => dayMinutes(event, date, timeZone));
+  const slots = packEventLanes(ranges);
   return (
     <div
       className="relative min-w-0 bg-background"
@@ -336,8 +363,7 @@ const DayColumn = ({
           event={event}
           timeZone={timeZone}
           layout={timedLayout(
-            event,
-            timeZone,
+            ranges[index] ?? { start: 0, end: 0 },
             slots[index] ?? { lane: 0, laneCount: 1 },
           )}
           onSelectEvent={onSelectEvent}
