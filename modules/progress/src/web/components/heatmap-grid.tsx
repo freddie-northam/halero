@@ -66,8 +66,15 @@ export const HeatmapGrid = ({
     <TooltipProvider delayDuration={100}>
       <div className="overflow-x-auto">
         <div
-          className="grid grid-flow-col gap-1"
-          style={{ gridTemplateRows: "repeat(7, minmax(0, 1fr))" }}
+          className="grid gap-1"
+          // grid-auto-flow is set inline, not via a Tailwind utility: the
+          // `grid-flow-col` class is not always emitted into the app's built
+          // CSS, and without column flow every cell wraps onto its own row
+          // (the grid collapses to a single column).
+          style={{
+            gridAutoFlow: "column",
+            gridTemplateRows: "repeat(7, minmax(0, 1fr))",
+          }}
           role="img"
           aria-label="Contribution heatmap"
         >
