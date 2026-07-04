@@ -232,7 +232,7 @@ export const settings = sqliteTable("settings", {
   value: text("value").notNull(),
 });
 
-// Added by migrations/0009_f1.sql for the F1 module.
+// Added by migrations/0010_f1.sql for the F1 module.
 
 // f1.session satellite: one row per F1 session, keyed to the entity spine.
 export const f1Sessions = sqliteTable(
@@ -361,7 +361,7 @@ export const f1Boards = sqliteTable("f1_boards", {
   updatedAt: integer("updated_at").notNull(),
 });
 
-// Added by migrations/0010_f1_detail.sql: fetch-on-view race detail.
+// Added by migrations/0011_f1_detail.sql: fetch-on-view race detail.
 
 export const f1Laps = sqliteTable(
   "f1_laps",

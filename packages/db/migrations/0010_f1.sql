@@ -1,4 +1,4 @@
--- 0009_f1: the F1 module's tables. Two kinds of data:
+-- 0010_f1: the F1 module's tables. Two kinds of data:
 --
 --   * f1_sessions is a SATELLITE of the entity spine (keyed by entity_id):
 --     one row per F1 session, produced by the OpenF1 connector so sessions

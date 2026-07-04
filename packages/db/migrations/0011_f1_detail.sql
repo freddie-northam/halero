@@ -1,4 +1,4 @@
--- 0010_f1_detail: the F1 module's race-explorer detail tables. All
+-- 0011_f1_detail: the F1 module's race-explorer detail tables. All
 -- module-owned (not on the entity spine), keyed by OpenF1's own keys, and
 -- filled fetch-on-view then cached: historical race data is immutable once
 -- a session ends, so these rows are a permanent local archive. All of this
