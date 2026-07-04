@@ -6,6 +6,7 @@
 // unvalidated connector can never reach the sync engine.
 
 import { googleCalendarConnector } from "@halero/connector-google-calendar";
+import { openf1Connector } from "@halero/connector-openf1";
 import {
   type Connector,
   connectorManifestSchema,
@@ -78,7 +79,7 @@ export const registerConnectors = (
 
 /** The connectors this build ships with, validated against its modules. */
 export const connectorRegistry: ConnectorRegistry = registerConnectors(
-  [googleCalendarConnector],
+  [googleCalendarConnector, openf1Connector],
   kindRegistry,
 );
 

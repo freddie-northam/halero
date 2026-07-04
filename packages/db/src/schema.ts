@@ -231,3 +231,132 @@ export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+// Added by migrations/0009_f1.sql for the F1 module.
+
+// f1.session satellite: one row per F1 session, keyed to the entity spine.
+export const f1Sessions = sqliteTable(
+  "f1_sessions",
+  {
+    entityId: text("entity_id")
+      .primaryKey()
+      .references(() => entities.id),
+    sessionKey: integer("session_key").notNull().unique(),
+    meetingKey: integer("meeting_key").notNull(),
+    sessionName: text("session_name").notNull(),
+    sessionType: text("session_type").notNull(),
+    year: integer("year").notNull(),
+    dateStart: text("date_start"),
+    dateEnd: text("date_end"),
+    gmtOffset: text("gmt_offset"),
+    circuitKey: integer("circuit_key"),
+    circuitShortName: text("circuit_short_name"),
+    countryName: text("country_name"),
+    countryCode: text("country_code"),
+    location: text("location"),
+    meetingName: text("meeting_name"),
+    countryFlagUrl: text("country_flag_url"),
+    circuitImageUrl: text("circuit_image_url"),
+    circuitInfoUrl: text("circuit_info_url"),
+    isCancelled: integer("is_cancelled").notNull().default(0),
+    raw: text("raw"),
+  },
+  (table) => [
+    index("idx_f1_sessions_meeting").on(table.meetingKey),
+    index("idx_f1_sessions_year_type").on(table.year, table.sessionType),
+  ],
+);
+
+export const f1Meetings = sqliteTable(
+  "f1_meetings",
+  {
+    meetingKey: integer("meeting_key").primaryKey(),
+    year: integer("year").notNull(),
+    meetingName: text("meeting_name"),
+    meetingOfficialName: text("meeting_official_name"),
+    countryName: text("country_name"),
+    countryCode: text("country_code"),
+    countryFlagUrl: text("country_flag_url"),
+    circuitKey: integer("circuit_key"),
+    circuitShortName: text("circuit_short_name"),
+    circuitImageUrl: text("circuit_image_url"),
+    circuitInfoUrl: text("circuit_info_url"),
+    location: text("location"),
+    gmtOffset: text("gmt_offset"),
+    dateStart: text("date_start"),
+    dateEnd: text("date_end"),
+  },
+  (table) => [index("idx_f1_meetings_year").on(table.year)],
+);
+
+export const f1Drivers = sqliteTable(
+  "f1_drivers",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    meetingKey: integer("meeting_key"),
+    fullName: text("full_name"),
+    broadcastName: text("broadcast_name"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    nameAcronym: text("name_acronym"),
+    teamName: text("team_name"),
+    teamColour: text("team_colour"),
+    headshotUrl: text("headshot_url"),
+    countryCode: text("country_code"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1SessionResults = sqliteTable(
+  "f1_session_results",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    position: integer("position"),
+    points: real("points"),
+    dnf: integer("dnf").notNull().default(0),
+    dns: integer("dns").notNull().default(0),
+    dsq: integer("dsq").notNull().default(0),
+    duration: real("duration"),
+    // number OR "+1 LAP" OR null -> stored as text.
+    gapToLeader: text("gap_to_leader"),
+    numberOfLaps: integer("number_of_laps"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1StandingsDrivers = sqliteTable(
+  "f1_standings_drivers",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    positionCurrent: integer("position_current"),
+    positionStart: integer("position_start"),
+    pointsCurrent: real("points_current"),
+    pointsStart: real("points_start"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1StandingsTeams = sqliteTable(
+  "f1_standings_teams",
+  {
+    sessionKey: integer("session_key").notNull(),
+    teamName: text("team_name").notNull(),
+    positionCurrent: integer("position_current"),
+    positionStart: integer("position_start"),
+    pointsCurrent: real("points_current"),
+    pointsStart: real("points_start"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.teamName] })],
+);
+
+export const f1Boards = sqliteTable("f1_boards", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  sortOrder: real("sort_order").notNull().default(0),
+  layout: text("layout").notNull().default("[]"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
