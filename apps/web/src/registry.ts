@@ -265,7 +265,10 @@ export const buildWebModules = (
       renderRelated: (entityId) =>
         createElement(HostRelatedPanel, { entityId }),
     }),
-    createNotesWebModule(notesApi),
+    createNotesWebModule(notesApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
     createProgressWebModule(progressApi),
     createF1WebModule(f1Api),
   ];
