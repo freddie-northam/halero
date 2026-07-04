@@ -108,3 +108,134 @@ export interface SessionResult {
   readonly meetingName: string | null;
   readonly rows: readonly ResultRow[];
 }
+
+// --- phase 2: race explorer ----------------------------------------------
+
+/** A pointer to one finished session, for a widget's session dropdown. */
+export interface RaceSessionRef {
+  readonly sessionKey: number;
+  readonly label: string;
+  readonly sessionType: string;
+  readonly dateStart: string | null;
+  readonly meetingName: string | null;
+}
+
+/** One driver's timing for a single lap. */
+export interface LapPoint {
+  readonly lapNumber: number;
+  readonly lapDuration: number | null;
+  readonly durationSector1: number | null;
+  readonly durationSector2: number | null;
+  readonly durationSector3: number | null;
+  readonly i1Speed: number | null;
+  readonly i2Speed: number | null;
+  readonly stSpeed: number | null;
+  readonly isPitOutLap: boolean;
+  readonly dateStart: string | null;
+}
+
+/** Driver metadata shared by every per-driver detail series. */
+export interface DriverMeta {
+  readonly driverNumber: number;
+  readonly nameAcronym: string | null;
+  readonly fullName: string | null;
+  readonly teamName: string | null;
+  readonly teamColour: string | null;
+}
+
+export interface DriverLaps extends DriverMeta {
+  readonly laps: readonly LapPoint[];
+}
+
+/** One tyre stint (a run on one set of tyres between pit stops). */
+export interface Stint {
+  readonly stintNumber: number;
+  readonly lapStart: number | null;
+  readonly lapEnd: number | null;
+  readonly compound: string | null;
+  readonly tyreAgeAtStart: number | null;
+}
+
+export interface DriverStints extends DriverMeta {
+  readonly stints: readonly Stint[];
+}
+
+/** A single pit stop, with the driver it belongs to. */
+export interface PitStop extends DriverMeta {
+  readonly lapNumber: number;
+  readonly date: string | null;
+  readonly laneDuration: number | null;
+  readonly stopDuration: number | null;
+}
+
+/** A driver's track position sampled at one instant. */
+export interface PositionPoint {
+  readonly date: string;
+  readonly position: number | null;
+}
+
+export interface DriverPositions extends DriverMeta {
+  readonly points: readonly PositionPoint[];
+}
+
+/** One race-control message (flags, safety car, investigations). */
+export interface RaceControlMessage {
+  readonly date: string | null;
+  readonly lapNumber: number | null;
+  readonly category: string | null;
+  readonly flag: string | null;
+  readonly scope: string | null;
+  readonly sector: number | null;
+  readonly driverNumber: number | null;
+  readonly message: string | null;
+}
+
+/**
+ * One team-radio clip, with a playable recording url when present. The
+ * driver is nullable (some clips are marshal/race-director calls), so this
+ * carries the meta fields directly rather than extending DriverMeta.
+ */
+export interface TeamRadioClip {
+  readonly driverNumber: number | null;
+  readonly nameAcronym: string | null;
+  readonly fullName: string | null;
+  readonly teamName: string | null;
+  readonly teamColour: string | null;
+  readonly date: string | null;
+  readonly recordingUrl: string | null;
+}
+
+/** One overtake: the passer, the passed, and where it happened. */
+export interface Overtake {
+  readonly date: string | null;
+  readonly position: number | null;
+  readonly overtakingDriverNumber: number | null;
+  readonly overtakingAcronym: string | null;
+  readonly overtakingColour: string | null;
+  readonly overtakenDriverNumber: number | null;
+  readonly overtakenAcronym: string | null;
+  readonly overtakenColour: string | null;
+}
+
+/** One weather sample over the course of a session. */
+export interface WeatherPoint {
+  readonly date: string;
+  readonly airTemperature: number | null;
+  readonly trackTemperature: number | null;
+  readonly humidity: number | null;
+  readonly pressure: number | null;
+  readonly rainfall: number | null;
+  readonly windSpeed: number | null;
+  readonly windDirection: number | null;
+}
+
+/** One place on the starting grid, derived from qualifying. */
+export interface GridSlot {
+  readonly position: number | null;
+  readonly driverNumber: number;
+  readonly nameAcronym: string | null;
+  readonly fullName: string | null;
+  readonly teamName: string | null;
+  readonly teamColour: string | null;
+  readonly headshotUrl: string | null;
+}

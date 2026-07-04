@@ -360,3 +360,136 @@ export const f1Boards = sqliteTable("f1_boards", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+// Added by migrations/0010_f1_detail.sql: fetch-on-view race detail.
+
+export const f1Laps = sqliteTable(
+  "f1_laps",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    lapNumber: integer("lap_number").notNull(),
+    dateStart: text("date_start"),
+    lapDuration: real("lap_duration"),
+    durationSector1: real("duration_sector_1"),
+    durationSector2: real("duration_sector_2"),
+    durationSector3: real("duration_sector_3"),
+    i1Speed: integer("i1_speed"),
+    i2Speed: integer("i2_speed"),
+    stSpeed: integer("st_speed"),
+    isPitOutLap: integer("is_pit_out_lap").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.lapNumber],
+    }),
+  ],
+);
+
+export const f1Stints = sqliteTable(
+  "f1_stints",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    stintNumber: integer("stint_number").notNull(),
+    lapStart: integer("lap_start"),
+    lapEnd: integer("lap_end"),
+    compound: text("compound"),
+    tyreAgeAtStart: integer("tyre_age_at_start"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.stintNumber],
+    }),
+  ],
+);
+
+export const f1Pits = sqliteTable(
+  "f1_pits",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    lapNumber: integer("lap_number").notNull(),
+    date: text("date"),
+    laneDuration: real("lane_duration"),
+    stopDuration: real("stop_duration"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.lapNumber],
+    }),
+  ],
+);
+
+export const f1Positions = sqliteTable(
+  "f1_positions",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    date: text("date").notNull(),
+    position: integer("position"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.date],
+    }),
+  ],
+);
+
+export const f1RaceControl = sqliteTable(
+  "f1_race_control",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    date: text("date"),
+    lapNumber: integer("lap_number"),
+    category: text("category"),
+    flag: text("flag"),
+    scope: text("scope"),
+    sector: integer("sector"),
+    driverNumber: integer("driver_number"),
+    message: text("message"),
+  },
+  (table) => [index("idx_f1_race_control_session").on(table.sessionKey)],
+);
+
+export const f1TeamRadio = sqliteTable(
+  "f1_team_radio",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number"),
+    date: text("date"),
+    recordingUrl: text("recording_url"),
+  },
+  (table) => [index("idx_f1_team_radio_session").on(table.sessionKey)],
+);
+
+export const f1Overtakes = sqliteTable(
+  "f1_overtakes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    date: text("date"),
+    position: integer("position"),
+    overtakingDriverNumber: integer("overtaking_driver_number"),
+    overtakenDriverNumber: integer("overtaken_driver_number"),
+  },
+  (table) => [index("idx_f1_overtakes_session").on(table.sessionKey)],
+);
+
+export const f1Weather = sqliteTable(
+  "f1_weather",
+  {
+    sessionKey: integer("session_key").notNull(),
+    date: text("date").notNull(),
+    airTemperature: real("air_temperature"),
+    trackTemperature: real("track_temperature"),
+    humidity: real("humidity"),
+    pressure: real("pressure"),
+    rainfall: real("rainfall"),
+    windSpeed: real("wind_speed"),
+    windDirection: integer("wind_direction"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.date] })],
+);

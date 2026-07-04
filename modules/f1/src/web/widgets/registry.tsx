@@ -10,8 +10,18 @@ import type { F1Api } from "../api";
 import { CalendarWidget } from "./calendar";
 import { ConstructorStandingsWidget } from "./constructor-standings";
 import { DriverStandingsWidget } from "./driver-standings";
+import { GridWidget } from "./grid";
+import { HeadToHeadWidget } from "./head-to-head";
+import { LapChartWidget } from "./lap-chart";
 import { LatestResultWidget } from "./latest-result";
 import { NextRaceWidget } from "./next-race";
+import { OvertakesWidget } from "./overtakes";
+import { PitStopsWidget } from "./pit-stops";
+import { PositionChangesWidget } from "./position-changes";
+import { RaceControlWidget } from "./race-control";
+import { TeamRadioWidget } from "./team-radio";
+import { TyreStrategyWidget } from "./tyre-strategy";
+import { WeatherWidget } from "./weather";
 import { WeekendScheduleWidget } from "./weekend-schedule";
 
 /** The props every widget component receives: the API seam and its config. */
@@ -72,6 +82,76 @@ export const WIDGETS: Readonly<Record<string, WidgetDef>> = {
     defaultSize: "l",
     Component: LatestResultWidget,
   },
+  "tyre-strategy": {
+    type: "tyre-strategy",
+    title: "Tyre strategy",
+    category: "Analysis",
+    defaultSize: "l",
+    Component: TyreStrategyWidget,
+  },
+  "lap-chart": {
+    type: "lap-chart",
+    title: "Lap times",
+    category: "Analysis",
+    defaultSize: "l",
+    Component: LapChartWidget,
+  },
+  "position-changes": {
+    type: "position-changes",
+    title: "Position changes",
+    category: "Analysis",
+    defaultSize: "l",
+    Component: PositionChangesWidget,
+  },
+  "pit-stops": {
+    type: "pit-stops",
+    title: "Pit stops",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: PitStopsWidget,
+  },
+  "race-control": {
+    type: "race-control",
+    title: "Race control",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: RaceControlWidget,
+  },
+  "team-radio": {
+    type: "team-radio",
+    title: "Team radio",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: TeamRadioWidget,
+  },
+  overtakes: {
+    type: "overtakes",
+    title: "Overtakes",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: OvertakesWidget,
+  },
+  weather: {
+    type: "weather",
+    title: "Weather",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: WeatherWidget,
+  },
+  grid: {
+    type: "grid",
+    title: "Starting grid",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: GridWidget,
+  },
+  "head-to-head": {
+    type: "head-to-head",
+    title: "Head to head",
+    category: "Analysis",
+    defaultSize: "m",
+    Component: HeadToHeadWidget,
+  },
 };
 
 /** The registry in display order, for the add-widget menu. */
@@ -82,4 +162,14 @@ export const WIDGET_LIST: readonly WidgetDef[] = [
   WIDGETS["driver-standings"],
   WIDGETS["constructor-standings"],
   WIDGETS["latest-result"],
+  WIDGETS["tyre-strategy"],
+  WIDGETS["lap-chart"],
+  WIDGETS["position-changes"],
+  WIDGETS["pit-stops"],
+  WIDGETS["race-control"],
+  WIDGETS["team-radio"],
+  WIDGETS.overtakes,
+  WIDGETS.weather,
+  WIDGETS.grid,
+  WIDGETS["head-to-head"],
 ].filter((def): def is WidgetDef => def !== undefined);

@@ -26,6 +26,13 @@ export const f1StandingsKey = (
   sessionKey: number | null,
 ) => [...f1RootKey, "standings", kind, sessionKey] as const;
 
+/** The race-explorer session list feeding every widget's session picker. */
+export const f1RaceSessionsKey = [...f1RootKey, "raceSessions"] as const;
+
+/** A phase-2 detail query's key: one leaf per widget name and session. */
+export const f1DetailKey = (name: string, sessionKey: number | null) =>
+  [...f1RootKey, name, sessionKey] as const;
+
 /**
  * Wraps an F1Api so every successful board mutation invalidates the
  * board list and resolves only after active queries refetched. Reads and
@@ -46,6 +53,17 @@ export const withF1Invalidation = (
     latestResult: api.latestResult,
     driverStandings: api.driverStandings,
     constructorStandings: api.constructorStandings,
+    // Phase-2 race detail is read-only; it passes straight through.
+    raceSessions: api.raceSessions,
+    laps: api.laps,
+    stints: api.stints,
+    pits: api.pits,
+    positions: api.positions,
+    raceControl: api.raceControl,
+    teamRadio: api.teamRadio,
+    overtakes: api.overtakes,
+    weather: api.weather,
+    startingGrid: api.startingGrid,
     boards: {
       list: api.boards.list,
       create: async (input) => {

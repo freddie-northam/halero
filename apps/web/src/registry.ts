@@ -189,6 +189,16 @@ export const buildF1Api = (
         client.modules.f1.driverStandings.query(input),
       constructorStandings: (input) =>
         client.modules.f1.constructorStandings.query(input),
+      raceSessions: () => client.modules.f1.raceSessions.query(),
+      laps: (input) => client.modules.f1.laps.query(input),
+      stints: (input) => client.modules.f1.stints.query(input),
+      pits: (input) => client.modules.f1.pits.query(input),
+      positions: (input) => client.modules.f1.positions.query(input),
+      raceControl: (input) => client.modules.f1.raceControl.query(input),
+      teamRadio: (input) => client.modules.f1.teamRadio.query(input),
+      overtakes: (input) => client.modules.f1.overtakes.query(input),
+      weather: (input) => client.modules.f1.weather.query(input),
+      startingGrid: (input) => client.modules.f1.startingGrid.query(input),
       boards: {
         list: () => client.modules.f1.boards.list.query(),
         create: (input) => client.modules.f1.boards.create.mutate(input),

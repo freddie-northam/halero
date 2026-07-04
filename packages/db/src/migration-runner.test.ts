@@ -60,6 +60,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
@@ -72,6 +73,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -94,6 +96,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
   });
 
@@ -196,6 +199,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -248,6 +252,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
@@ -668,6 +673,7 @@ describe("runMigrations", () => {
       "0008_calendar_event_notes_url",
       "0009_activity",
       "0009_f1",
+      "0010_f1_detail",
     ]);
   });
 });

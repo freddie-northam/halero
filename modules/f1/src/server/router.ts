@@ -10,25 +10,44 @@
 import {
   f1Boards,
   f1Drivers,
+  f1Laps,
+  f1Overtakes,
+  f1Pits,
+  f1Positions,
+  f1RaceControl,
   f1SessionResults,
   f1Sessions,
   f1StandingsDrivers,
   f1StandingsTeams,
+  f1Stints,
+  f1TeamRadio,
+  f1Weather,
   settings,
 } from "@halero/db";
 import type { ModuleDb } from "@halero/module-sdk/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type {
   Board,
+  DriverLaps,
+  DriverMeta,
+  DriverPositions,
   DriverStanding,
+  DriverStints,
+  GridSlot,
   NextUp,
+  Overtake,
+  PitStop,
+  RaceControlMessage,
+  RaceSessionRef,
   ResultRow,
   SeasonSchedule,
   SessionLite,
   SessionResult,
   SessionState,
+  TeamRadioClip,
   TeamStanding,
+  WeatherPoint,
   Weekend,
   WidgetInstance,
 } from "../contract";
@@ -465,6 +484,570 @@ const readTeamStandings = (
     .sort((a, b) => (a.position ?? 99) - (b.position ?? 99));
 };
 
+// --- phase 2: race explorer ------------------------------------------------
+//
+// Every dataset below is fetch-on-view exactly like results: query the cache
+// for the session, and only when it is empty pull from OpenF1, insert, and
+// read back. Race detail is immutable once a session ends, so a filled cache
+// is never refetched. The autoincrement tables (race control, team radio,
+// overtakes) insert-only when empty; the keyed tables upsert.
+
+/** The driver metadata every per-driver detail series carries. */
+const metaOf = (
+  d: DriverRow | undefined,
+  driverNumber: number,
+): DriverMeta => ({
+  driverNumber,
+  nameAcronym: d?.nameAcronym ?? null,
+  fullName: d?.fullName ?? null,
+  teamName: d?.teamName ?? null,
+  teamColour: d?.teamColour ?? null,
+});
+
+const ensureLaps = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Laps.driverNumber })
+    .from(f1Laps)
+    .where(eq(f1Laps.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(fetchImpl, `laps?session_key=${sessionKey}`);
+  for (const row of rows) {
+    const driverNumber = asNumber(row.driver_number);
+    const lapNumber = asNumber(row.lap_number);
+    if (driverNumber === null || lapNumber === null) {
+      continue;
+    }
+    const values = {
+      sessionKey,
+      driverNumber,
+      lapNumber,
+      dateStart: asString(row.date_start),
+      lapDuration: asNumber(row.lap_duration),
+      durationSector1: asNumber(row.duration_sector_1),
+      durationSector2: asNumber(row.duration_sector_2),
+      durationSector3: asNumber(row.duration_sector_3),
+      i1Speed: asNumber(row.i1_speed),
+      i2Speed: asNumber(row.i2_speed),
+      stSpeed: asNumber(row.st_speed),
+      isPitOutLap: asBool(row.is_pit_out_lap) ? 1 : 0,
+    };
+    db.insert(f1Laps)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [f1Laps.sessionKey, f1Laps.driverNumber, f1Laps.lapNumber],
+        set: values,
+      })
+      .run();
+  }
+};
+
+const readLaps = (db: ModuleDb, sessionKey: number): DriverLaps[] => {
+  const drivers = driverIndex(db, sessionKey);
+  const byDriver = new Map<number, DriverLaps>();
+  for (const r of db
+    .select()
+    .from(f1Laps)
+    .where(eq(f1Laps.sessionKey, sessionKey))
+    .orderBy(asc(f1Laps.driverNumber), asc(f1Laps.lapNumber))
+    .all()) {
+    let entry = byDriver.get(r.driverNumber);
+    if (entry === undefined) {
+      entry = {
+        ...metaOf(drivers.get(r.driverNumber), r.driverNumber),
+        laps: [],
+      };
+      byDriver.set(r.driverNumber, entry);
+    }
+    (entry.laps as LapPointMutable[]).push({
+      lapNumber: r.lapNumber,
+      lapDuration: r.lapDuration,
+      durationSector1: r.durationSector1,
+      durationSector2: r.durationSector2,
+      durationSector3: r.durationSector3,
+      i1Speed: r.i1Speed,
+      i2Speed: r.i2Speed,
+      stSpeed: r.stSpeed,
+      isPitOutLap: r.isPitOutLap === 1,
+      dateStart: r.dateStart,
+    });
+  }
+  return [...byDriver.values()];
+};
+
+// Local mutable aliases: the contract keeps series arrays readonly, so the
+// build-up pushes through a mutable view of the same element shape.
+type LapPointMutable = DriverLaps["laps"][number];
+type StintMutable = DriverStints["stints"][number];
+type PositionMutable = DriverPositions["points"][number];
+
+const ensureStints = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Stints.driverNumber })
+    .from(f1Stints)
+    .where(eq(f1Stints.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(fetchImpl, `stints?session_key=${sessionKey}`);
+  for (const row of rows) {
+    const driverNumber = asNumber(row.driver_number);
+    const stintNumber = asNumber(row.stint_number);
+    if (driverNumber === null || stintNumber === null) {
+      continue;
+    }
+    const values = {
+      sessionKey,
+      driverNumber,
+      stintNumber,
+      lapStart: asNumber(row.lap_start),
+      lapEnd: asNumber(row.lap_end),
+      compound: asString(row.compound),
+      tyreAgeAtStart: asNumber(row.tyre_age_at_start),
+    };
+    db.insert(f1Stints)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          f1Stints.sessionKey,
+          f1Stints.driverNumber,
+          f1Stints.stintNumber,
+        ],
+        set: values,
+      })
+      .run();
+  }
+};
+
+const readStints = (db: ModuleDb, sessionKey: number): DriverStints[] => {
+  const drivers = driverIndex(db, sessionKey);
+  const byDriver = new Map<number, DriverStints>();
+  for (const r of db
+    .select()
+    .from(f1Stints)
+    .where(eq(f1Stints.sessionKey, sessionKey))
+    .orderBy(asc(f1Stints.driverNumber), asc(f1Stints.stintNumber))
+    .all()) {
+    let entry = byDriver.get(r.driverNumber);
+    if (entry === undefined) {
+      entry = {
+        ...metaOf(drivers.get(r.driverNumber), r.driverNumber),
+        stints: [],
+      };
+      byDriver.set(r.driverNumber, entry);
+    }
+    (entry.stints as StintMutable[]).push({
+      stintNumber: r.stintNumber,
+      lapStart: r.lapStart,
+      lapEnd: r.lapEnd,
+      compound: r.compound,
+      tyreAgeAtStart: r.tyreAgeAtStart,
+    });
+  }
+  return [...byDriver.values()];
+};
+
+const ensurePits = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Pits.driverNumber })
+    .from(f1Pits)
+    .where(eq(f1Pits.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(fetchImpl, `pit?session_key=${sessionKey}`);
+  for (const row of rows) {
+    const driverNumber = asNumber(row.driver_number);
+    const lapNumber = asNumber(row.lap_number);
+    if (driverNumber === null || lapNumber === null) {
+      continue;
+    }
+    const values = {
+      sessionKey,
+      driverNumber,
+      lapNumber,
+      date: asString(row.date),
+      laneDuration: asNumber(row.lane_duration),
+      stopDuration: asNumber(row.pit_duration ?? row.stop_duration),
+    };
+    db.insert(f1Pits)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [f1Pits.sessionKey, f1Pits.driverNumber, f1Pits.lapNumber],
+        set: values,
+      })
+      .run();
+  }
+};
+
+const readPits = (db: ModuleDb, sessionKey: number): PitStop[] => {
+  const drivers = driverIndex(db, sessionKey);
+  return db
+    .select()
+    .from(f1Pits)
+    .where(eq(f1Pits.sessionKey, sessionKey))
+    .orderBy(asc(f1Pits.lapNumber))
+    .all()
+    .map((r) => ({
+      ...metaOf(drivers.get(r.driverNumber), r.driverNumber),
+      lapNumber: r.lapNumber,
+      date: r.date,
+      laneDuration: r.laneDuration,
+      stopDuration: r.stopDuration,
+    }));
+};
+
+const ensurePositions = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Positions.driverNumber })
+    .from(f1Positions)
+    .where(eq(f1Positions.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(fetchImpl, `position?session_key=${sessionKey}`);
+  for (const row of rows) {
+    const driverNumber = asNumber(row.driver_number);
+    const date = asString(row.date);
+    if (driverNumber === null || date === null) {
+      continue;
+    }
+    const values = {
+      sessionKey,
+      driverNumber,
+      date,
+      position: asNumber(row.position),
+    };
+    db.insert(f1Positions)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [
+          f1Positions.sessionKey,
+          f1Positions.driverNumber,
+          f1Positions.date,
+        ],
+        set: values,
+      })
+      .run();
+  }
+};
+
+const readPositions = (db: ModuleDb, sessionKey: number): DriverPositions[] => {
+  const drivers = driverIndex(db, sessionKey);
+  const byDriver = new Map<number, DriverPositions>();
+  for (const r of db
+    .select()
+    .from(f1Positions)
+    .where(eq(f1Positions.sessionKey, sessionKey))
+    .orderBy(asc(f1Positions.driverNumber), asc(f1Positions.date))
+    .all()) {
+    let entry = byDriver.get(r.driverNumber);
+    if (entry === undefined) {
+      entry = {
+        ...metaOf(drivers.get(r.driverNumber), r.driverNumber),
+        points: [],
+      };
+      byDriver.set(r.driverNumber, entry);
+    }
+    (entry.points as PositionMutable[]).push({
+      date: r.date,
+      position: r.position,
+    });
+  }
+  return [...byDriver.values()];
+};
+
+const ensureRaceControl = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1RaceControl.id })
+    .from(f1RaceControl)
+    .where(eq(f1RaceControl.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(
+    fetchImpl,
+    `race_control?session_key=${sessionKey}`,
+  );
+  for (const row of rows) {
+    db.insert(f1RaceControl)
+      .values({
+        sessionKey,
+        date: asString(row.date),
+        lapNumber: asNumber(row.lap_number),
+        category: asString(row.category),
+        flag: asString(row.flag),
+        scope: asString(row.scope),
+        sector: asNumber(row.sector),
+        driverNumber: asNumber(row.driver_number),
+        message: asString(row.message),
+      })
+      .run();
+  }
+};
+
+const readRaceControl = (
+  db: ModuleDb,
+  sessionKey: number,
+): RaceControlMessage[] =>
+  db
+    .select()
+    .from(f1RaceControl)
+    .where(eq(f1RaceControl.sessionKey, sessionKey))
+    .orderBy(asc(f1RaceControl.date), asc(f1RaceControl.id))
+    .all()
+    .map((r) => ({
+      date: r.date,
+      lapNumber: r.lapNumber,
+      category: r.category,
+      flag: r.flag,
+      scope: r.scope,
+      sector: r.sector,
+      driverNumber: r.driverNumber,
+      message: r.message,
+    }));
+
+const ensureTeamRadio = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1TeamRadio.id })
+    .from(f1TeamRadio)
+    .where(eq(f1TeamRadio.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(
+    fetchImpl,
+    `team_radio?session_key=${sessionKey}`,
+  );
+  for (const row of rows) {
+    db.insert(f1TeamRadio)
+      .values({
+        sessionKey,
+        driverNumber: asNumber(row.driver_number),
+        date: asString(row.date),
+        recordingUrl: asString(row.recording_url),
+      })
+      .run();
+  }
+};
+
+const readTeamRadio = (db: ModuleDb, sessionKey: number): TeamRadioClip[] => {
+  const drivers = driverIndex(db, sessionKey);
+  return db
+    .select()
+    .from(f1TeamRadio)
+    .where(eq(f1TeamRadio.sessionKey, sessionKey))
+    .orderBy(asc(f1TeamRadio.date), asc(f1TeamRadio.id))
+    .all()
+    .map((r) => ({
+      ...metaOf(
+        r.driverNumber === null ? undefined : drivers.get(r.driverNumber),
+        r.driverNumber ?? 0,
+      ),
+      driverNumber: r.driverNumber,
+      date: r.date,
+      recordingUrl: r.recordingUrl,
+    }));
+};
+
+const ensureOvertakes = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Overtakes.id })
+    .from(f1Overtakes)
+    .where(eq(f1Overtakes.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(
+    fetchImpl,
+    `overtakes?session_key=${sessionKey}`,
+  );
+  for (const row of rows) {
+    db.insert(f1Overtakes)
+      .values({
+        sessionKey,
+        date: asString(row.date),
+        position: asNumber(row.position),
+        overtakingDriverNumber: asNumber(row.overtaking_driver_number),
+        overtakenDriverNumber: asNumber(row.overtaken_driver_number),
+      })
+      .run();
+  }
+};
+
+const readOvertakes = (db: ModuleDb, sessionKey: number): Overtake[] => {
+  const drivers = driverIndex(db, sessionKey);
+  const acronym = (n: number | null): string | null =>
+    n === null ? null : (drivers.get(n)?.nameAcronym ?? String(n));
+  const colour = (n: number | null): string | null =>
+    n === null ? null : (drivers.get(n)?.teamColour ?? null);
+  return db
+    .select()
+    .from(f1Overtakes)
+    .where(eq(f1Overtakes.sessionKey, sessionKey))
+    .orderBy(asc(f1Overtakes.date), asc(f1Overtakes.id))
+    .all()
+    .map((r) => ({
+      date: r.date,
+      position: r.position,
+      overtakingDriverNumber: r.overtakingDriverNumber,
+      overtakingAcronym: acronym(r.overtakingDriverNumber),
+      overtakingColour: colour(r.overtakingDriverNumber),
+      overtakenDriverNumber: r.overtakenDriverNumber,
+      overtakenAcronym: acronym(r.overtakenDriverNumber),
+      overtakenColour: colour(r.overtakenDriverNumber),
+    }));
+};
+
+const ensureWeather = async (
+  db: ModuleDb,
+  fetchImpl: FetchLike,
+  sessionKey: number,
+): Promise<void> => {
+  const existing = db
+    .select({ n: f1Weather.date })
+    .from(f1Weather)
+    .where(eq(f1Weather.sessionKey, sessionKey))
+    .all();
+  if (existing.length > 0) {
+    return;
+  }
+  const rows = await fetchRows(fetchImpl, `weather?session_key=${sessionKey}`);
+  for (const row of rows) {
+    const date = asString(row.date);
+    if (date === null) {
+      continue;
+    }
+    const values = {
+      sessionKey,
+      date,
+      airTemperature: asNumber(row.air_temperature),
+      trackTemperature: asNumber(row.track_temperature),
+      humidity: asNumber(row.humidity),
+      pressure: asNumber(row.pressure),
+      rainfall: asNumber(row.rainfall),
+      windSpeed: asNumber(row.wind_speed),
+      windDirection: asNumber(row.wind_direction),
+    };
+    db.insert(f1Weather)
+      .values(values)
+      .onConflictDoUpdate({
+        target: [f1Weather.sessionKey, f1Weather.date],
+        set: values,
+      })
+      .run();
+  }
+};
+
+const readWeather = (db: ModuleDb, sessionKey: number): WeatherPoint[] =>
+  db
+    .select()
+    .from(f1Weather)
+    .where(eq(f1Weather.sessionKey, sessionKey))
+    .orderBy(asc(f1Weather.date))
+    .all()
+    .map((r) => ({
+      date: r.date,
+      airTemperature: r.airTemperature,
+      trackTemperature: r.trackTemperature,
+      humidity: r.humidity,
+      pressure: r.pressure,
+      rainfall: r.rainfall,
+      windSpeed: r.windSpeed,
+      windDirection: r.windDirection,
+    }));
+
+/** The starting grid is the qualifying classification for the race's meeting. */
+const readStartingGrid = (db: ModuleDb, qualiKey: number): GridSlot[] => {
+  const drivers = driverIndex(db, qualiKey);
+  return db
+    .select()
+    .from(f1SessionResults)
+    .where(eq(f1SessionResults.sessionKey, qualiKey))
+    .all()
+    .map((r) => {
+      const d = drivers.get(r.driverNumber);
+      return {
+        position: r.position,
+        driverNumber: r.driverNumber,
+        nameAcronym: d?.nameAcronym ?? null,
+        fullName: d?.fullName ?? null,
+        teamName: d?.teamName ?? null,
+        teamColour: d?.teamColour ?? null,
+        headshotUrl: d?.headshotUrl ?? null,
+      };
+    })
+    .sort((a, b) => {
+      if (a.position === null && b.position === null) return 0;
+      if (a.position === null) return 1;
+      if (b.position === null) return -1;
+      return a.position - b.position;
+    });
+};
+
+/** The season's finished Race/Sprint/Qualifying sessions, newest first. */
+const RACE_EXPLORER_TYPES = new Set(["Race", "Sprint", "Qualifying"]);
+
+const readRaceSessions = (db: ModuleDb, now: number): RaceSessionRef[] =>
+  db
+    .select()
+    .from(f1Sessions)
+    .where(eq(f1Sessions.year, currentYear(now)))
+    .orderBy(asc(f1Sessions.dateStart))
+    .all()
+    .filter(
+      (row) =>
+        RACE_EXPLORER_TYPES.has(row.sessionType) &&
+        sessionState(now, row.dateStart, row.dateEnd) === "done",
+    )
+    .map((row) => ({
+      sessionKey: row.sessionKey,
+      label:
+        row.meetingName === null
+          ? row.sessionName
+          : `${row.meetingName} - ${row.sessionName}`,
+      sessionType: row.sessionType,
+      dateStart: row.dateStart,
+      meetingName: row.meetingName,
+    }))
+    .reverse();
+
 // --- boards ---------------------------------------------------------------
 
 const widgetInstanceSchema = z.object({
@@ -596,6 +1179,103 @@ export const f1Router = moduleRouter({
       await ensureDrivers(ctx.db, globalFetch, key);
       await ensureStandings(ctx.db, globalFetch, key);
       return readTeamStandings(ctx.db, key);
+    }),
+
+  // --- phase 2: race explorer detail (all reads, fetch-on-view) ---------
+
+  raceSessions: protectedProcedure.query(({ ctx }): RaceSessionRef[] => {
+    return readRaceSessions(ctx.db, ctx.now());
+  }),
+
+  laps: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<DriverLaps[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensureLaps(ctx.db, globalFetch, input.sessionKey);
+      return readLaps(ctx.db, input.sessionKey);
+    }),
+
+  stints: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<DriverStints[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensureStints(ctx.db, globalFetch, input.sessionKey);
+      return readStints(ctx.db, input.sessionKey);
+    }),
+
+  pits: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<PitStop[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensurePits(ctx.db, globalFetch, input.sessionKey);
+      return readPits(ctx.db, input.sessionKey);
+    }),
+
+  positions: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<DriverPositions[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensurePositions(ctx.db, globalFetch, input.sessionKey);
+      return readPositions(ctx.db, input.sessionKey);
+    }),
+
+  raceControl: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<RaceControlMessage[]> => {
+      await ensureRaceControl(ctx.db, globalFetch, input.sessionKey);
+      return readRaceControl(ctx.db, input.sessionKey);
+    }),
+
+  teamRadio: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<TeamRadioClip[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensureTeamRadio(ctx.db, globalFetch, input.sessionKey);
+      return readTeamRadio(ctx.db, input.sessionKey);
+    }),
+
+  overtakes: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<Overtake[]> => {
+      await ensureDrivers(ctx.db, globalFetch, input.sessionKey);
+      await ensureOvertakes(ctx.db, globalFetch, input.sessionKey);
+      return readOvertakes(ctx.db, input.sessionKey);
+    }),
+
+  weather: protectedProcedure
+    .input(z.object({ sessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<WeatherPoint[]> => {
+      await ensureWeather(ctx.db, globalFetch, input.sessionKey);
+      return readWeather(ctx.db, input.sessionKey);
+    }),
+
+  startingGrid: protectedProcedure
+    .input(z.object({ raceSessionKey: z.number().int() }))
+    .query(async ({ ctx, input }): Promise<GridSlot[]> => {
+      const race = ctx.db
+        .select()
+        .from(f1Sessions)
+        .where(eq(f1Sessions.sessionKey, input.raceSessionKey))
+        .get();
+      if (race === undefined) {
+        return [];
+      }
+      const quali = ctx.db
+        .select()
+        .from(f1Sessions)
+        .where(
+          and(
+            eq(f1Sessions.meetingKey, race.meetingKey),
+            eq(f1Sessions.sessionType, "Qualifying"),
+          ),
+        )
+        .get();
+      if (quali === undefined) {
+        return [];
+      }
+      await ensureDrivers(ctx.db, globalFetch, quali.sessionKey);
+      await ensureResults(ctx.db, globalFetch, quali.sessionKey);
+      return readStartingGrid(ctx.db, quali.sessionKey);
     }),
 
   boards: moduleRouter({

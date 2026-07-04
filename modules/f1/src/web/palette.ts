@@ -11,7 +11,71 @@ export const TYRE_COLOURS: Readonly<Record<string, string>> = {
   HARD: "#EBEBEB",
   INTERMEDIATE: "#43B02A",
   WET: "#0067AD",
+  // Historic/test compounds still appear in some OpenF1 datasets.
+  HYPERSOFT: "#FEB1C1",
+  ULTRASOFT: "#B24BA7",
+  SUPERSOFT: "#DA291C",
+  SUPERHARD: "#F97350",
+  UNKNOWN: "#6b7280",
 };
+
+/** Neutral fallback (Tailwind gray-500) for an absent tyre or flag colour. */
+const NEUTRAL_HEX = "#6b7280";
+
+/** A tyre compound's brand colour, neutral grey when absent or unknown. */
+export const tyreColour = (compound: string | null): string => {
+  if (compound === null) {
+    return NEUTRAL_HEX;
+  }
+  return TYRE_COLOURS[compound.trim().toUpperCase()] ?? NEUTRAL_HEX;
+};
+
+/**
+ * Race-control flag colours, keyed by OpenF1's upper-case flag string.
+ * DOUBLE YELLOW is a distinct, deeper amber; CLEAR and CHEQUERED get
+ * neutral treatments so the coloured flags stand out on the timeline.
+ */
+export const FLAG_COLOURS: Readonly<Record<string, string>> = {
+  GREEN: "#43B02A",
+  YELLOW: "#FFD12E",
+  "DOUBLE YELLOW": "#E8A500",
+  RED: "#DA291C",
+  BLUE: "#0067AD",
+  CHEQUERED: "#111111",
+  CLEAR: "#9ca3af",
+  "SAFETY CAR": "#F97350",
+};
+
+/** A race-control marker colour: matches the flag, or a neutral default. */
+export const flagColour = (flag: string | null): string => {
+  if (flag === null) {
+    return NEUTRAL_HEX;
+  }
+  return FLAG_COLOURS[flag.trim().toUpperCase()] ?? NEUTRAL_HEX;
+};
+
+/**
+ * A lap or sector time in seconds rendered as "m:ss.mmm" (or "ss.mmm"
+ * under a minute). Returns a dash for a null/negative duration so table
+ * columns stay aligned.
+ */
+export const formatLapTime = (seconds: number | null): string => {
+  if (seconds === null || seconds < 0 || !Number.isFinite(seconds)) {
+    return "-";
+  }
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds - minutes * 60;
+  if (minutes === 0) {
+    return rest.toFixed(3);
+  }
+  return `${minutes}:${rest.toFixed(3).padStart(6, "0")}`;
+};
+
+/** A duration in seconds rendered as a compact "12.345s" secs string. */
+export const formatSeconds = (seconds: number | null): string =>
+  seconds === null || !Number.isFinite(seconds)
+    ? "-"
+    : `${seconds.toFixed(3)}s`;
 
 /** Neutral fallback (Tailwind gray-500) when a team has no colour on file. */
 const NEUTRAL_COLOUR = "#6b7280";

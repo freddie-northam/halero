@@ -5,11 +5,21 @@
 
 import type {
   Board,
+  DriverLaps,
+  DriverPositions,
   DriverStanding,
+  DriverStints,
+  GridSlot,
   NextUp,
+  Overtake,
+  PitStop,
+  RaceControlMessage,
+  RaceSessionRef,
   SeasonSchedule,
   SessionResult,
+  TeamRadioClip,
   TeamStanding,
+  WeatherPoint,
   WidgetInstance,
 } from "../contract";
 
@@ -19,6 +29,11 @@ export type F1Schedule = SeasonSchedule & { readonly homeTimezone: string };
 /** Optional session anchor: standings default to the season-latest when omitted. */
 export interface StandingsQuery {
   readonly sessionKey?: number;
+}
+
+/** A required session anchor for the phase-2 race-detail queries. */
+export interface SessionQuery {
+  readonly sessionKey: number;
 }
 
 /** The board mutations, grouped the way the server router nests them. */
@@ -51,5 +66,18 @@ export interface F1Api {
   readonly constructorStandings: (
     input?: StandingsQuery,
   ) => Promise<TeamStanding[]>;
+  // Phase-2 race explorer: fetch-on-view detail, all keyed by a session.
+  readonly raceSessions: () => Promise<RaceSessionRef[]>;
+  readonly laps: (input: SessionQuery) => Promise<DriverLaps[]>;
+  readonly stints: (input: SessionQuery) => Promise<DriverStints[]>;
+  readonly pits: (input: SessionQuery) => Promise<PitStop[]>;
+  readonly positions: (input: SessionQuery) => Promise<DriverPositions[]>;
+  readonly raceControl: (input: SessionQuery) => Promise<RaceControlMessage[]>;
+  readonly teamRadio: (input: SessionQuery) => Promise<TeamRadioClip[]>;
+  readonly overtakes: (input: SessionQuery) => Promise<Overtake[]>;
+  readonly weather: (input: SessionQuery) => Promise<WeatherPoint[]>;
+  readonly startingGrid: (input: {
+    readonly raceSessionKey: number;
+  }) => Promise<GridSlot[]>;
   readonly boards: F1BoardsApi;
 }
