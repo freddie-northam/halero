@@ -25,6 +25,8 @@ export interface Worktree {
 export interface WorktreeDiff {
   readonly files: readonly string[];
   readonly patch: string;
+  readonly insertions: number;
+  readonly deletions: number;
 }
 
 const BRANCH_PREFIX = "halero/run-";
@@ -34,6 +36,31 @@ interface GitResult {
   readonly stdout: string;
   readonly stderr: string;
 }
+
+/** Parses `git diff --numstat` into file list plus insertion/deletion totals. */
+const parseNumstat = (
+  numstat: string,
+): { files: string[]; insertions: number; deletions: number } => {
+  const files: string[] = [];
+  let insertions = 0;
+  let deletions = 0;
+  for (const line of numstat.split("\n")) {
+    const parts = line.trim().split("\t");
+    if (parts.length < 3) {
+      continue;
+    }
+    const [added, deleted, path] = parts as [string, string, string];
+    files.push(path);
+    // Binary files report "-"; count only numeric line changes.
+    if (added !== "-") {
+      insertions += Number.parseInt(added, 10) || 0;
+    }
+    if (deleted !== "-") {
+      deletions += Number.parseInt(deleted, 10) || 0;
+    }
+  }
+  return { files, insertions, deletions };
+};
 
 export class WorktreeManager {
   readonly #repoPath: string;
@@ -98,14 +125,10 @@ export class WorktreeManager {
   async diff(worktree: Worktree, base: string): Promise<WorktreeDiff> {
     await this.#git(["add", "-A", "-N"], worktree.path);
     const patch = (await this.#git(["diff", base], worktree.path)).stdout;
-    const names = (
-      await this.#git(["diff", base, "--name-only"], worktree.path)
+    const numstat = (
+      await this.#git(["diff", base, "--numstat"], worktree.path)
     ).stdout;
-    const files = names
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    return { files, patch };
+    return { patch, ...parseNumstat(numstat) };
   }
 
   /** Removes the worktree and deletes its branch so the id is reusable. */

@@ -22,6 +22,8 @@ export interface RunInfo {
 export interface RunDiff {
   readonly files: readonly string[];
   readonly patch: string;
+  readonly insertions: number;
+  readonly deletions: number;
 }
 
 export interface RunDetail {

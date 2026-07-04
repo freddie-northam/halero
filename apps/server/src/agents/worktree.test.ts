@@ -63,6 +63,22 @@ describe("WorktreeManager", () => {
     expect(diff.files).toContain("new-file.ts");
     expect(diff.patch).toContain("edited");
     expect(diff.patch).toContain("export const x = 1;");
+    // README gains a line, new-file.ts adds one: two insertions, no deletions.
+    expect(diff.insertions).toBe(2);
+    expect(diff.deletions).toBe(0);
+
+    await manager.remove(worktree);
+  });
+
+  test("diff counts deletions when lines are removed", async () => {
+    const manager = await makeManager();
+    const worktree = await manager.create({ id: "run-del", base: "main" });
+    // Replace the one-line file entirely: one deletion, one insertion.
+    writeFileSync(join(worktree.path, "README.md"), "rewritten\n");
+
+    const diff = await manager.diff(worktree, "main");
+    expect(diff.insertions).toBe(1);
+    expect(diff.deletions).toBe(1);
 
     await manager.remove(worktree);
   });

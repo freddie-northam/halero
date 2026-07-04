@@ -135,8 +135,14 @@ const RunDetail = ({
       </div>
       {run.diff !== null && run.diff.files.length > 0 ? (
         <div>
-          <p className="mb-1 font-medium text-sm">
-            Changed files ({run.diff.files.length})
+          <p className="mb-1 flex items-center gap-2 font-medium text-sm">
+            <span>Changed files ({run.diff.files.length})</span>
+            <span className="font-normal text-emerald-500 text-xs">
+              +{run.diff.insertions}
+            </span>
+            <span className="font-normal text-destructive text-xs">
+              -{run.diff.deletions}
+            </span>
           </p>
           <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-2 text-xs">
             {run.diff.patch}
