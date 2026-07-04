@@ -25,7 +25,9 @@ describe("the notes web module", () => {
   const module = createNotesWebModule(stubApi);
 
   test("contributes the Notes nav entry after Tasks", () => {
-    expect(module.nav).toEqual([{ label: "Notes", path: "/notes", order: 40 }]);
+    expect(module.nav).toEqual([
+      { label: "Notes", path: "/notes", order: 40, icon: "notes" },
+    ]);
   });
 
   test("contributes the list and editor pages", () => {

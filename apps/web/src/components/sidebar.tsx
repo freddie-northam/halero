@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  StickyNote,
 } from "@halero/ui";
 import type { ReactElement } from "react";
 
@@ -40,6 +41,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   home: House,
   calendar: CalendarDays,
   tasks: ListTodo,
+  notes: StickyNote,
   settings: Settings,
 };
 
