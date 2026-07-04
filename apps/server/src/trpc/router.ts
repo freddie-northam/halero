@@ -3,6 +3,7 @@ import { modulesRouter } from "../registry";
 import { authRouter } from "./auth-router";
 import { connectionsRouter } from "./connections-router";
 import { router } from "./init";
+import { linksRouter } from "./links-router";
 import { notificationsRouter } from "./notifications-router";
 import { progressRouter } from "./progress-router";
 import { systemRouter } from "./system-router";
@@ -12,6 +13,7 @@ export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
   connections: connectionsRouter,
+  links: linksRouter,
   f1Live: f1LiveRouter,
   notifications: notificationsRouter,
   progress: progressRouter,

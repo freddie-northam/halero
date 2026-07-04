@@ -4,7 +4,9 @@ import {
   applyUpcasts,
   assertProducedKindSupported,
   buildKindRegistry,
+  buildLinkKindRegistry,
   defineServerModule,
+  type LinkKindContribution,
   type ServerModule,
 } from "./server";
 
@@ -224,5 +226,74 @@ describe("applyUpcasts", () => {
 
     expect(error.message).toContain('"gaps"');
     expect(error.message).toContain("1 to 2");
+  });
+});
+
+const linkKind = (
+  overrides: Partial<LinkKindContribution> & { readonly kind: string },
+): LinkKindContribution => ({
+  label: "Related to",
+  from: "*",
+  to: "*",
+  ...overrides,
+});
+
+describe("buildLinkKindRegistry", () => {
+  test("indexes every contributed link kind by id", () => {
+    const registry = buildLinkKindRegistry([
+      linkKind({ kind: "relates_to", symmetric: true }),
+      linkKind({
+        kind: "task.blocks",
+        label: "Blocks",
+        from: "tasks.task",
+        to: "tasks.task",
+      }),
+    ]);
+
+    expect(registry.get("relates_to")?.symmetric).toBe(true);
+    expect(registry.get("task.blocks")?.from).toBe("tasks.task");
+    expect(registry.get("unknown")).toBeUndefined();
+  });
+
+  test("all() lists the registered kinds", () => {
+    const registry = buildLinkKindRegistry([
+      linkKind({ kind: "relates_to" }),
+      linkKind({ kind: "task.blocks", from: "tasks.task", to: "tasks.task" }),
+    ]);
+
+    expect(
+      registry
+        .all()
+        .map((entry) => entry.kind)
+        .sort(),
+    ).toEqual(["relates_to", "task.blocks"]);
+  });
+
+  test("rejects two contributions sharing a kind id, readably", () => {
+    const error = caught(() =>
+      buildLinkKindRegistry([
+        linkKind({ kind: "relates_to" }),
+        linkKind({ kind: "relates_to", label: "Also related" }),
+      ]),
+    );
+
+    expect(error.message).toContain('"relates_to"');
+    expect(error.message).toContain("unique");
+  });
+
+  test("rejects a malformed contribution missing a label or endpoint", () => {
+    expect(
+      caught(() => buildLinkKindRegistry([linkKind({ kind: "x", label: "" })]))
+        .message,
+    ).toContain("malformed");
+    expect(
+      caught(() => buildLinkKindRegistry([linkKind({ kind: "x", from: "" })]))
+        .message,
+    ).toContain("malformed");
+    expect(
+      caught(() =>
+        buildLinkKindRegistry([{ kind: "", label: "L", from: "*", to: "*" }]),
+      ).message,
+    ).toContain("malformed");
   });
 });

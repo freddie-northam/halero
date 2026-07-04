@@ -49,12 +49,42 @@ export interface EntityKindContribution {
   readonly satelliteWriter?: SatelliteWriter;
 }
 
+/**
+ * A relationship kind an entity graph can hold, e.g. the built-in
+ * symmetric "relates_to" or a typed "task.blocks". Endpoints are entity
+ * kinds, or "*" for "any kind"; a host validates a link's endpoints
+ * against these before storing an edge. Registered like entity kinds so
+ * the graph stays a governed vocabulary, not a free-for-all string field.
+ */
+export interface LinkKindContribution {
+  /** Stable link-kind id, e.g. "relates_to" or "task.blocks". */
+  readonly kind: string;
+  /** Forward-direction label shown on the from-side, e.g. "Blocks". */
+  readonly label: string;
+  /**
+   * Reverse-direction label shown on the to-side, e.g. "Blocked by".
+   * Omitted falls back to `label` (right for symmetric kinds).
+   */
+  readonly inverseLabel?: string;
+  /** Allowed from-endpoint entity kind, or "*" for any. */
+  readonly from: string;
+  /** Allowed to-endpoint entity kind, or "*" for any. */
+  readonly to: string;
+  /**
+   * True when A-rel-B implies B-rel-A (e.g. "relates_to"). Lets a host
+   * present one undirected edge from either endpoint.
+   */
+  readonly symmetric?: boolean;
+}
+
 export interface ServerModule {
   /** Stable module id, e.g. "calendar". Also its tRPC mount name. */
   readonly id: string;
   /** The module package's own semver. */
   readonly version: string;
   readonly entityKinds?: readonly EntityKindContribution[];
+  /** Relationship kinds this module contributes to the host's graph. */
+  readonly linkKinds?: readonly LinkKindContribution[];
   /** Mounted by the host at modules.<id>.*. */
   readonly router?: AnyTRPCRouter;
 }
@@ -284,4 +314,64 @@ export const applyUpcasts = (
     step += 1;
   }
   return current;
+};
+
+/**
+ * Validated link-kind lookup. Private field makes the type nominal, so a
+ * hand-built map cannot pass as one: every registry the host hands the
+ * links router went through buildLinkKindRegistry's validation.
+ */
+class ValidatedLinkKindRegistry {
+  readonly #byKind: ReadonlyMap<string, LinkKindContribution>;
+
+  constructor(byKind: ReadonlyMap<string, LinkKindContribution>) {
+    this.#byKind = byKind;
+  }
+
+  get(kind: string): LinkKindContribution | undefined {
+    return this.#byKind.get(kind);
+  }
+
+  /** Every registered kind, e.g. for a "relate to" picker's options. */
+  all(): readonly LinkKindContribution[] {
+    return [...this.#byKind.values()];
+  }
+}
+
+export type LinkKindRegistry = ValidatedLinkKindRegistry;
+
+const MALFORMED_LINK_KIND_MESSAGE =
+  "A link kind is malformed: kind, label, from, and to must all be " +
+  "non-empty. Update or rebuild the module package.";
+
+const duplicateLinkKindMessage = (kind: string): string =>
+  `Two link kinds in this Halero build both use the id "${kind}". Link ` +
+  "kind ids must be unique; remove or rebuild one of them.";
+
+const isMalformedLinkKind = (contribution: LinkKindContribution): boolean =>
+  contribution.kind.length === 0 ||
+  contribution.label.length === 0 ||
+  contribution.from.length === 0 ||
+  contribution.to.length === 0;
+
+/**
+ * Builds the link-kind index the host's links router validates edges
+ * through. Takes a flat list rather than modules because link kinds have
+ * a host-owned tier (the built-in "relates_to") that no module owns.
+ * Fails loudly at boot on a malformed contribution or a duplicate id.
+ */
+export const buildLinkKindRegistry = (
+  contributions: readonly LinkKindContribution[],
+): LinkKindRegistry => {
+  const registry = new Map<string, LinkKindContribution>();
+  for (const contribution of contributions) {
+    if (isMalformedLinkKind(contribution)) {
+      throw new Error(MALFORMED_LINK_KIND_MESSAGE);
+    }
+    if (registry.has(contribution.kind)) {
+      throw new Error(duplicateLinkKindMessage(contribution.kind));
+    }
+    registry.set(contribution.kind, contribution);
+  }
+  return new ValidatedLinkKindRegistry(registry);
 };
