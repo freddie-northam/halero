@@ -231,6 +231,16 @@ export const AgentsTab = ({
                 >
                   <span className={`text-xs ${statusTone[run.status]}`}>●</span>
                   <span className="truncate">{run.label}</span>
+                  {run.changed === null ? null : (
+                    <span className="ml-auto shrink-0 text-xs tabular-nums">
+                      <span className="text-emerald-500">
+                        +{run.changed.insertions}
+                      </span>{" "}
+                      <span className="text-destructive">
+                        -{run.changed.deletions}
+                      </span>
+                    </span>
+                  )}
                 </button>
                 <Button
                   type="button"

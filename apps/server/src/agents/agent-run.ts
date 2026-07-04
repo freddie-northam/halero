@@ -17,6 +17,12 @@ export interface AgentRunResult {
   readonly diff: WorktreeDiff;
 }
 
+export interface RunChangeSummary {
+  readonly files: number;
+  readonly insertions: number;
+  readonly deletions: number;
+}
+
 export interface AgentRunInfo {
   readonly id: string;
   /** Which agent this run is (e.g. "claude"), for display. */
@@ -25,6 +31,8 @@ export interface AgentRunInfo {
   readonly status: RunStatus;
   readonly createdAt: number;
   readonly exitCode: number | null;
+  /** Change totals once the run has settled; null while running. */
+  readonly changed: RunChangeSummary | null;
 }
 
 export interface StartRunOptions {
@@ -117,6 +125,7 @@ export class AgentRun {
   }
 
   info(): AgentRunInfo {
+    const diff = this.#result?.diff ?? null;
     return {
       id: this.id,
       label: this.label,
@@ -124,6 +133,14 @@ export class AgentRun {
       status: this.#status,
       createdAt: this.createdAt,
       exitCode: this.#exitCode,
+      changed:
+        diff === null
+          ? null
+          : {
+              files: diff.files.length,
+              insertions: diff.insertions,
+              deletions: diff.deletions,
+            },
     };
   }
 }

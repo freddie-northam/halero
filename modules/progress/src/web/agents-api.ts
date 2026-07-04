@@ -10,6 +10,12 @@ export interface AgentInfo {
 
 export type RunStatus = "running" | "succeeded" | "failed";
 
+export interface RunChangeSummary {
+  readonly files: number;
+  readonly insertions: number;
+  readonly deletions: number;
+}
+
 export interface RunInfo {
   readonly id: string;
   readonly label: string;
@@ -17,6 +23,7 @@ export interface RunInfo {
   readonly status: RunStatus;
   readonly createdAt: number;
   readonly exitCode: number | null;
+  readonly changed: RunChangeSummary | null;
 }
 
 export interface RunDiff {
