@@ -21,7 +21,7 @@ export const PageContainer = ({
   children,
 }: {
   readonly children: ReactNode;
-}): ReactElement => <div className="w-full px-6 py-8">{children}</div>;
+}): ReactElement => <div className="w-full px-8 py-8">{children}</div>;
 
 export interface PageHeaderProps {
   /** The one page title (rendered at 18px semibold, the page-title role). */

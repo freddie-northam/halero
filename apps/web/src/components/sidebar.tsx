@@ -8,6 +8,7 @@ import {
   type LucideIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Settings,
   Sidebar,
   SidebarContent,
@@ -42,6 +43,8 @@ export interface AppSidebarProps {
   readonly items: readonly SidebarNavItem[];
   readonly activePath: string;
   readonly onNavigate: (path: string) => void;
+  /** Opens the command palette; the search lives at the top of the sidebar. */
+  readonly onSearchClick: () => void;
 }
 
 /** Maps a nav item's semantic icon key to its rail glyph. */
@@ -80,6 +83,44 @@ const SidebarToggle = (): ReactElement => {
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">Toggle sidebar ⌘B</TooltipContent>
+    </Tooltip>
+  );
+};
+
+/**
+ * The universal-search trigger, at the top of the sidebar (under the logo).
+ * A full-width pill when expanded; a search-icon button on the collapsed rail,
+ * with a tooltip like the nav rows. Opens the same command palette as ⌘K.
+ */
+const SidebarSearch = ({
+  onSearchClick,
+}: {
+  readonly onSearchClick: () => void;
+}): ReactElement => {
+  const { state } = useSidebar();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-slot="command-bar"
+          aria-label="Search Halero"
+          onClick={onSearchClick}
+          className="flex h-9 w-full items-center gap-2 rounded-lg border bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+        >
+          <Search className="size-4 shrink-0" />
+          <span className="truncate group-data-[collapsible=icon]:hidden">
+            Search Halero...
+          </span>
+          <kbd className="pointer-events-none ml-auto rounded-sm border px-1 font-sans text-[10px] leading-4 text-muted-foreground group-data-[collapsible=icon]:hidden">
+            ⌘K
+          </kbd>
+        </button>
+      </TooltipTrigger>
+      {/* Only useful on the collapsed rail; the expanded pill already labels itself. */}
+      <TooltipContent side="right" hidden={state !== "collapsed"}>
+        Search ⌘K
+      </TooltipContent>
     </Tooltip>
   );
 };
@@ -144,6 +185,7 @@ export const AppSidebar = ({
   items,
   activePath,
   onNavigate,
+  onSearchClick,
 }: AppSidebarProps): ReactElement => {
   const primary = items.filter((item) => item.group !== "secondary");
   const secondary = items.filter((item) => item.group === "secondary");
@@ -163,6 +205,9 @@ export const AppSidebar = ({
         />
       </SidebarHeader>
       <SidebarContent>
+        <div className="px-2 pt-1">
+          <SidebarSearch onSearchClick={onSearchClick} />
+        </div>
         <nav aria-label="Primary" className="p-2">
           <SidebarMenu className="gap-1">
             {primary.map((item) => (

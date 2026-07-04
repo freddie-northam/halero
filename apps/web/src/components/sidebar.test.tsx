@@ -26,10 +26,15 @@ const NAV_ITEMS = [
 
 // The sidebar components read shadcn's sidebar context, so the tests
 // render them inside the provider just like the shell does.
-const renderSidebar = (props: AppSidebarProps): RenderResult =>
+// onSearchClick defaults to a no-op so the nav tests stay focused; the search
+// test overrides it.
+const renderSidebar = (
+  props: Omit<AppSidebarProps, "onSearchClick"> &
+    Partial<Pick<AppSidebarProps, "onSearchClick">>,
+): RenderResult =>
   render(
     <SidebarProvider>
-      <AppSidebar {...props} />
+      <AppSidebar onSearchClick={() => undefined} {...props} />
     </SidebarProvider>,
   );
 
@@ -58,6 +63,20 @@ test("marks a module-contributed item active on its own path", () => {
   const today = view.getByRole("button", { name: "Today" });
   expect(calendar.getAttribute("aria-current")).toBe("page");
   expect(today.getAttribute("aria-current")).toBeNull();
+});
+
+test("opens the command palette from the sidebar search", () => {
+  let opened = 0;
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: () => undefined,
+    onSearchClick: () => {
+      opened += 1;
+    },
+  });
+  fireEvent.click(view.getByRole("button", { name: "Search Halero" }));
+  expect(opened).toBe(1);
 });
 
 test("reports the path a click asks to navigate to", () => {
