@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEntityStore } from "@halero/core";
 import {
+  agentRuns,
   coreMigrations,
   entities,
   openDatabase,
@@ -84,6 +85,53 @@ describe("AgentRunManager persistence", () => {
     expect(run.info().entityId).toBe(run.entityId);
 
     await run.completion;
+    await manager.remove(run.id);
+  });
+
+  test("writes the agent_runs satellite on start and updates it on settle", async () => {
+    const worktrees = await makeWorktrees();
+    const database = makeDb();
+    const manager = new AgentRunManager({
+      worktrees,
+      base: "main",
+      env: GIT_ENV,
+      now: () => 2000,
+      entities: createEntityStore(database),
+      db: database.db,
+      repo: "/repos/demo",
+    });
+
+    const run = await manager.start({
+      label: "claude",
+      title: "claude: add a file",
+      command: "/bin/sh",
+      args: ["-c", "printf 'hi\\n' > added.txt"],
+    });
+
+    const started = database.db
+      .select()
+      .from(agentRuns)
+      .where(eq(agentRuns.entityId, run.entityId ?? ""))
+      .get();
+    expect(started?.status).toBe("running");
+    expect(started?.runId).toBe(run.id);
+    expect(started?.agentId).toBe("claude");
+    expect(started?.repo).toBe("/repos/demo");
+    expect(started?.branch).toBe(run.branch);
+
+    await run.completion;
+    await Bun.sleep(30);
+    const settled = database.db
+      .select()
+      .from(agentRuns)
+      .where(eq(agentRuns.entityId, run.entityId ?? ""))
+      .get();
+    expect(settled?.status).toBe("succeeded");
+    expect(settled?.exitCode).toBe(0);
+    expect(settled?.files).toBe(1);
+    expect(settled?.insertions).toBe(1);
+    expect(settled?.endedAt).not.toBeNull();
+
     await manager.remove(run.id);
   });
 

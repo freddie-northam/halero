@@ -6,9 +6,13 @@
 // for isolation. Arbitrary command execution: the host route gates it.
 
 import { type EntityStore, ulid } from "@halero/core";
+import { agentRuns, type HaleroDatabase } from "@halero/db";
 import { AGENT_RUN_KIND } from "@halero/schemas";
+import { eq } from "drizzle-orm";
 import { PtySession } from "../terminal/session";
 import type { Worktree, WorktreeDiff, WorktreeManager } from "./worktree";
+
+type Db = HaleroDatabase["db"];
 
 export type RunStatus = "running" | "succeeded" | "failed";
 
@@ -168,6 +172,14 @@ export interface AgentRunManagerOptions {
    * only (tests that do not exercise persistence).
    */
   readonly entities?: EntityStore;
+  /**
+   * When set alongside `entities`, each run's durable fields are written to
+   * the agent_runs satellite (status + diff stats), atomically with the
+   * spine entity, so a run's outcome survives a restart.
+   */
+  readonly db?: Db;
+  /** The repository runs operate on, recorded on each run's satellite row. */
+  readonly repo?: string;
 }
 
 const DEFAULT_MAX_RUNS = 4;
@@ -182,6 +194,8 @@ export class AgentRunManager {
   readonly #now: () => number;
   readonly #env: Record<string, string> | undefined;
   readonly #entities: EntityStore | undefined;
+  readonly #db: Db | undefined;
+  readonly #repo: string;
 
   constructor(options: AgentRunManagerOptions) {
     this.#worktrees = options.worktrees;
@@ -190,6 +204,8 @@ export class AgentRunManager {
     this.#now = options.now ?? (() => Date.now());
     this.#env = options.env;
     this.#entities = options.entities;
+    this.#db = options.db;
+    this.#repo = options.repo ?? "";
   }
 
   async start(options: StartRunOptions): Promise<AgentRun> {
@@ -198,18 +214,10 @@ export class AgentRunManager {
     }
     const id = options.id ?? ulid();
     const createdAt = this.#now();
-    // Record the run on the spine before spawning, so a run always has its
-    // durable object even if the process is short-lived.
-    const entityId =
-      this.#entities === undefined
-        ? null
-        : this.#entities.createUserEntity({
-            kind: AGENT_RUN_KIND,
-            schemaVersion: 1,
-            title: options.title ?? options.label ?? options.command,
-            occurredStart: createdAt,
-          }).entityId;
     const worktree = await this.#worktrees.create({ id, base: this.#base });
+    // Record the run on the spine (and satellite, if a db is set) before
+    // spawning, so a run always has its durable object even if short-lived.
+    const entityId = this.#persistStart(id, worktree, options, createdAt);
     const session = PtySession.start({
       command: options.command,
       args: options.args,
@@ -229,7 +237,76 @@ export class AgentRunManager {
       worktrees: this.#worktrees,
     });
     this.#runs.set(id, run);
+    if (entityId !== null) {
+      this.#recordSettle(run, entityId);
+    }
     return run;
+  }
+
+  /**
+   * Creates the run's spine entity, and (when a db is set) its satellite row
+   * atomically, returning the entity id. Null when persistence is off.
+   */
+  #persistStart(
+    id: string,
+    worktree: Worktree,
+    options: StartRunOptions,
+    createdAt: number,
+  ): string | null {
+    const entities = this.#entities;
+    if (entities === undefined) {
+      return null;
+    }
+    const title = options.title ?? options.label ?? options.command;
+    const create = () =>
+      entities.createUserEntity({
+        kind: AGENT_RUN_KIND,
+        schemaVersion: 1,
+        title,
+        occurredStart: createdAt,
+      }).entityId;
+    const db = this.#db;
+    if (db === undefined) {
+      return create();
+    }
+    return entities.withTransaction(() => {
+      const entityId = create();
+      db.insert(agentRuns)
+        .values({
+          entityId,
+          runId: id,
+          agentId: options.label ?? "agent",
+          repo: this.#repo,
+          branch: worktree.branch,
+          status: "running",
+          createdAt,
+        })
+        .run();
+      return entityId;
+    });
+  }
+
+  /** Writes the run's outcome to its satellite once it settles. */
+  #recordSettle(run: AgentRun, entityId: string): void {
+    const db = this.#db;
+    if (db === undefined) {
+      return;
+    }
+    void run.completion
+      .then((result) => {
+        db.update(agentRuns)
+          .set({
+            status: result.status,
+            exitCode: result.exitCode,
+            files: result.diff.files.length,
+            insertions: result.diff.insertions,
+            deletions: result.diff.deletions,
+            endedAt: this.#now(),
+          })
+          .where(eq(agentRuns.entityId, entityId))
+          .run();
+      })
+      .catch(() => undefined);
   }
 
   get(id: string): AgentRun | undefined {

@@ -32,6 +32,9 @@ import migration0010F1 from "../migrations/0010_f1.sql" with { type: "text" };
 import migration0011F1Detail from "../migrations/0011_f1_detail.sql" with {
   type: "text",
 };
+import migration0012AgentRuns from "../migrations/0012_agent_runs.sql" with {
+  type: "text",
+};
 
 export interface Migration {
   readonly name: string;
@@ -56,4 +59,5 @@ export const coreMigrations: readonly Migration[] = [
   { name: "0009_activity", sql: migration0009Activity },
   { name: "0010_f1", sql: migration0010F1 },
   { name: "0011_f1_detail", sql: migration0011F1Detail },
+  { name: "0012_agent_runs", sql: migration0012AgentRuns },
 ];
