@@ -63,7 +63,10 @@ export const createTerminalRoutes = (
           403,
         );
       }
-      if (c.get("session") === null) {
+      // Fail closed: require a truthy principal, so a missing session
+      // (e.g. middleware not applied to this path) denies rather than
+      // slips through a `=== null` check that undefined would pass.
+      if (!c.get("session")) {
         return c.text("You need to sign in to open a terminal.", 401);
       }
       return next();

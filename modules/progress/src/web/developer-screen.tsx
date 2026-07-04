@@ -11,6 +11,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Terminal,
 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
@@ -48,6 +49,7 @@ export const createDeveloperScreen = (api: ProgressApi) => {
             <TabsTrigger value="work">Work</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="repositories">Repositories</TabsTrigger>
+            <TabsTrigger value="terminal">Terminal</TabsTrigger>
           </TabsList>
           <TabsContent value="work" className="mt-6">
             <WorkTab api={api} githubConnected={githubConnected} />
@@ -57,6 +59,9 @@ export const createDeveloperScreen = (api: ProgressApi) => {
           </TabsContent>
           <TabsContent value="repositories" className="mt-6">
             <RepositoriesTab api={api} githubConnected={githubConnected} />
+          </TabsContent>
+          <TabsContent value="terminal" className="mt-6">
+            <Terminal />
           </TabsContent>
         </Tabs>
       );

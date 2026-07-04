@@ -46,6 +46,7 @@ export {
 export { ConnectorLogo } from "./brand/connector-logo";
 export { InterestedAvatars } from "./brand/interested-avatars";
 export { DatePicker } from "./components/date-picker";
+export { Terminal } from "./components/terminal";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
 export { Button, buttonVariants } from "./components/ui/button";
