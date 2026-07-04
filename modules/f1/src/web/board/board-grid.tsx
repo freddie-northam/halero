@@ -21,7 +21,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Button, cn, Trash2 } from "@halero/ui";
+import { Button, ChevronsLeftRight, cn, Trash2 } from "@halero/ui";
 import type { CSSProperties, ReactElement } from "react";
 import type { WidgetInstance, WidgetSize } from "../../contract";
 import type { F1Api } from "../api";
@@ -42,11 +42,8 @@ const SPAN_CLASS: Readonly<Record<WidgetSize, string>> = {
   l: "md:col-span-2",
 };
 
-const NEXT_SIZE: Readonly<Record<WidgetSize, WidgetSize>> = {
-  s: "m",
-  m: "l",
-  l: "s",
-};
+/** A widget is "wide" when it spans both desktop columns. */
+const isWide = (size: WidgetSize): boolean => size === "l";
 
 /** The six-dot grip glyph shared by every drag handle. */
 const GRIP_DOTS = ["tl", "tr", "ml", "mr", "bl", "br"] as const;
@@ -88,12 +85,7 @@ const WidgetBody = ({
   }
   const { Component } = def;
   return (
-    <WidgetChrome
-      title={def.title}
-      subtitle={def.category}
-      handle={handle}
-      actions={actions}
-    >
+    <WidgetChrome title={def.title} handle={handle} actions={actions}>
       <Component api={api} config={instance.config} />
     </WidgetChrome>
   );
@@ -101,47 +93,51 @@ const WidgetBody = ({
 
 const EditActions = ({
   instance,
-  onCycleSize,
+  onToggleWide,
   onRemove,
 }: {
   readonly instance: WidgetInstance;
-  readonly onCycleSize: () => void;
+  readonly onToggleWide: () => void;
   readonly onRemove: () => void;
-}): ReactElement => (
-  <>
-    <Button
-      type="button"
-      variant="outline"
-      size="icon-xs"
-      aria-label={`Resize widget (currently ${instance.size.toUpperCase()})`}
-      onClick={onCycleSize}
-    >
-      <span className="text-xs font-semibold">
-        {instance.size.toUpperCase()}
-      </span>
-    </Button>
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      aria-label="Remove widget"
-      onClick={onRemove}
-    >
-      <Trash2 />
-    </Button>
-  </>
-);
+}): ReactElement => {
+  const wide = isWide(instance.size);
+  return (
+    <>
+      <Button
+        type="button"
+        variant={wide ? "default" : "outline"}
+        size="icon-xs"
+        aria-pressed={wide}
+        aria-label={wide ? "Make this widget narrow" : "Make this widget wide"}
+        title={wide ? "Make narrow" : "Make wide"}
+        onClick={onToggleWide}
+      >
+        <ChevronsLeftRight />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Remove widget"
+        title="Remove"
+        onClick={onRemove}
+      >
+        <Trash2 />
+      </Button>
+    </>
+  );
+};
 
 /** An editable, draggable cell wrapping WidgetBody with its dnd hooks. */
 const SortableCell = ({
   instance,
   api,
-  onCycleSize,
+  onToggleWide,
   onRemove,
 }: {
   readonly instance: WidgetInstance;
   readonly api: F1Api;
-  readonly onCycleSize: () => void;
+  readonly onToggleWide: () => void;
   readonly onRemove: () => void;
 }): ReactElement => {
   const {
@@ -169,6 +165,7 @@ const SortableCell = ({
           <button
             type="button"
             aria-label="Drag to reorder"
+            title="Drag to reorder"
             className={HANDLE_CLASS}
             {...attributes}
             {...listeners}
@@ -179,7 +176,7 @@ const SortableCell = ({
         actions={
           <EditActions
             instance={instance}
-            onCycleSize={onCycleSize}
+            onToggleWide={onToggleWide}
             onRemove={onRemove}
           />
         }
@@ -215,11 +212,11 @@ export const BoardGrid = ({
     );
   }
 
-  const cycleSize = (instanceId: string): void => {
+  const toggleWide = (instanceId: string): void => {
     onLayoutChange(
       layout.map((instance) =>
         instance.instanceId === instanceId
-          ? { ...instance, size: NEXT_SIZE[instance.size] }
+          ? { ...instance, size: isWide(instance.size) ? "m" : "l" }
           : instance,
       ),
     );
@@ -260,7 +257,7 @@ export const BoardGrid = ({
               key={instance.instanceId}
               instance={instance}
               api={api}
-              onCycleSize={() => cycleSize(instance.instanceId)}
+              onToggleWide={() => toggleWide(instance.instanceId)}
               onRemove={() => remove(instance.instanceId)}
             />
           ))}
