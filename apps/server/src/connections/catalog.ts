@@ -140,13 +140,22 @@ export const providerCatalog: readonly ProviderCatalogEntry[] = [
     "oauth2",
     "Follow your Vinted sales and listings.",
   ),
-  comingSoon(
-    "f1",
-    "F1",
-    "lifestyle",
-    "apiKey",
-    "Keep the race calendar next to your own.",
-  ),
+  {
+    id: "f1",
+    displayName: "F1",
+    description:
+      "Follow the Formula 1 season: schedule, results, standings, and live " +
+      "timing, on your own customizable boards.",
+    category: "lifestyle",
+    iconId: "f1",
+    // Free historical data needs no credential: connect with connectLocal.
+    // The paid live tier's credential is added later (phase 3).
+    authKind: "none",
+    consumer: "sync-engine",
+    availability: "available",
+    implemented: true,
+    featured: true,
+  },
   comingSoon(
     "revolut",
     "Revolut",

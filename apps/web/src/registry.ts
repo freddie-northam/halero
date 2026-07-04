@@ -10,6 +10,11 @@ import {
   withCalendarInvalidation,
 } from "@halero/module-calendar/web";
 import {
+  createF1WebModule,
+  type F1Api,
+  withF1Invalidation,
+} from "@halero/module-f1/web";
+import {
   createNotesWebModule,
   type NotesApi,
   withNotesInvalidation,
@@ -163,6 +168,60 @@ export const buildNotesApi = (
     queryClient,
   );
 
+/**
+ * The F1 seam: the module's procedures off the tRPC client, wrapped with
+ * its own invalidation helper so board edits refresh the board list. The
+ * board layout is copied to a mutable array at the boundary, since the
+ * tRPC input schema wants a mutable array while the module keeps it
+ * readonly.
+ */
+export const buildF1Api = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): F1Api =>
+  withF1Invalidation(
+    {
+      schedule: () => client.modules.f1.schedule.query(),
+      nextUp: () => client.modules.f1.nextUp.query(),
+      sessionResult: (input) => client.modules.f1.sessionResult.query(input),
+      latestResult: () => client.modules.f1.latestResult.query(),
+      driverStandings: (input) =>
+        client.modules.f1.driverStandings.query(input),
+      constructorStandings: (input) =>
+        client.modules.f1.constructorStandings.query(input),
+      raceSessions: () => client.modules.f1.raceSessions.query(),
+      laps: (input) => client.modules.f1.laps.query(input),
+      stints: (input) => client.modules.f1.stints.query(input),
+      pits: (input) => client.modules.f1.pits.query(input),
+      positions: (input) => client.modules.f1.positions.query(input),
+      raceControl: (input) => client.modules.f1.raceControl.query(input),
+      teamRadio: (input) => client.modules.f1.teamRadio.query(input),
+      overtakes: (input) => client.modules.f1.overtakes.query(input),
+      weather: (input) => client.modules.f1.weather.query(input),
+      startingGrid: (input) => client.modules.f1.startingGrid.query(input),
+      live: {
+        status: () => client.f1Live.status.query(),
+        connect: (input) => client.f1Live.connect.mutate(input),
+        disconnect: () => client.f1Live.disconnect.mutate(),
+        session: () => client.f1Live.session.query(),
+        timing: () => client.f1Live.timing.query(),
+        weather: () => client.f1Live.weather.query(),
+      },
+      boards: {
+        list: () => client.modules.f1.boards.list.query(),
+        create: (input) => client.modules.f1.boards.create.mutate(input),
+        rename: (input) => client.modules.f1.boards.rename.mutate(input),
+        remove: (input) => client.modules.f1.boards.remove.mutate(input),
+        saveLayout: (input) =>
+          client.modules.f1.boards.saveLayout.mutate({
+            id: input.id,
+            layout: [...input.layout],
+          }),
+      },
+    },
+    queryClient,
+  );
+
 /** The web modules this build ships with, wired to the server clients. */
 export const buildWebModules = (
   client: TrpcClient,
@@ -173,6 +232,7 @@ export const buildWebModules = (
   const tasksApi = buildTasksApi(client, queryClient);
   const notesApi = buildNotesApi(client, queryClient);
   const progressApi = buildProgressApi(client, queryClient);
+  const f1Api = buildF1Api(client, queryClient);
   return [
     createTodayWebModule({
       api: {
@@ -202,6 +262,7 @@ export const buildWebModules = (
     createTasksWebModule(tasksApi),
     createNotesWebModule(notesApi),
     createProgressWebModule(progressApi),
+    createF1WebModule(f1Api),
   ];
 };
 

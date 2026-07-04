@@ -277,6 +277,7 @@ describe("buildNav", () => {
       "Tasks",
       "Notes",
       "Developer",
+      "Formula 1",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
@@ -284,6 +285,7 @@ describe("buildNav", () => {
       "/tasks",
       "/notes",
       "/developer",
+      "/f1",
     ]);
   });
 
@@ -315,6 +317,7 @@ describe("buildCommands", () => {
     expect(commands.map((entry) => entry.id)).toEqual([
       "tasks.new",
       "notes.new",
+      "f1.next",
     ]);
   });
 

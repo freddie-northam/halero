@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@halero/connector-google-calendar": "workspace:*",
+    "@halero/connector-openf1": "workspace:*",
     "@halero/connector-sdk": "workspace:*",
     "@halero/core": "workspace:*",
     "@halero/db": "workspace:*",
     "@halero/module-calendar": "workspace:*",
+    "@halero/module-f1": "workspace:*",
     "@halero/module-notes": "workspace:*",
     "@halero/module-sdk": "workspace:*",
     "@halero/module-tasks": "workspace:*",
