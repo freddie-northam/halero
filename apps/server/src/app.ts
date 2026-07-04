@@ -1,4 +1,5 @@
 import type { FetchLike } from "@halero/connector-sdk";
+import { createEntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
 import { Hono } from "hono";
 import { createAgentRunManager } from "./agents/create-manager";
@@ -91,8 +92,13 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   );
   // One agent-run registry, shared by the tRPC API and the per-run
   // terminal WebSocket, so both see the same live runs. Null unless
-  // agent orchestration is enabled.
-  const agentRunManager = createAgentRunManager(config, now);
+  // agent orchestration is enabled. Its EntityStore records each run on the
+  // spine (stateless closures over the shared db, so a second one is fine).
+  const agentRunManager = createAgentRunManager(
+    config,
+    now,
+    createEntityStore(database),
+  );
   app.all(
     "/api/trpc/*",
     createTrpcHandler({

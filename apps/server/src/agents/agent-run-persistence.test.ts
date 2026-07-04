@@ -1,0 +1,107 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createEntityStore } from "@halero/core";
+import {
+  coreMigrations,
+  entities,
+  openDatabase,
+  runMigrations,
+} from "@halero/db";
+import { AGENT_RUN_KIND } from "@halero/schemas";
+import { eq } from "drizzle-orm";
+import { AgentRunManager } from "./agent-run";
+import { WorktreeManager } from "./worktree";
+
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Test",
+  GIT_AUTHOR_EMAIL: "test@halero.local",
+  GIT_COMMITTER_NAME: "Test",
+  GIT_COMMITTER_EMAIL: "test@halero.local",
+} as Record<string, string>;
+
+const git = async (args: readonly string[], cwd: string): Promise<void> => {
+  const proc = Bun.spawn(["git", ...args], {
+    cwd,
+    env: GIT_ENV,
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  if ((await proc.exited) !== 0) {
+    throw new Error(`git ${args.join(" ")} failed`);
+  }
+};
+
+const makeWorktrees = async (): Promise<WorktreeManager> => {
+  const repoPath = mkdtempSync(join(tmpdir(), "halero-persist-repo-"));
+  await git(["init", "-b", "main"], repoPath);
+  writeFileSync(join(repoPath, "README.md"), "base\n");
+  await git(["add", "-A"], repoPath);
+  await git(["commit", "-m", "base"], repoPath);
+  const worktreesDir = mkdtempSync(join(tmpdir(), "halero-persist-trees-"));
+  return new WorktreeManager({ repoPath, worktreesDir, env: GIT_ENV });
+};
+
+const makeDb = () => {
+  const dir = mkdtempSync(join(tmpdir(), "halero-persist-db-"));
+  const database = openDatabase(join(dir, "halero.db"));
+  runMigrations(database.sqlite, {
+    migrations: coreMigrations,
+    backupsDir: join(dir, "backups"),
+  });
+  return database;
+};
+
+describe("AgentRunManager persistence", () => {
+  test("records each run as an agent.run entity titled with the prompt", async () => {
+    const worktrees = await makeWorktrees();
+    const database = makeDb();
+    const manager = new AgentRunManager({
+      worktrees,
+      base: "main",
+      env: GIT_ENV,
+      now: () => 1000,
+      entities: createEntityStore(database),
+    });
+
+    const run = await manager.start({
+      title: "claude: fix the flaky test",
+      command: "/bin/sh",
+      args: ["-c", "true"],
+    });
+
+    expect(run.entityId).not.toBeNull();
+    const row = database.db
+      .select()
+      .from(entities)
+      .where(eq(entities.id, run.entityId ?? ""))
+      .get();
+    expect(row?.kind).toBe(AGENT_RUN_KIND);
+    expect(row?.title).toBe("claude: fix the flaky test");
+    expect(row?.occurredStart).toBe(1000);
+    expect(run.info().entityId).toBe(run.entityId);
+
+    await run.completion;
+    await manager.remove(run.id);
+  });
+
+  test("skips persistence (entityId null) when no entity store is given", async () => {
+    const worktrees = await makeWorktrees();
+    const manager = new AgentRunManager({
+      worktrees,
+      base: "main",
+      env: GIT_ENV,
+    });
+
+    const run = await manager.start({
+      command: "/bin/sh",
+      args: ["-c", "true"],
+    });
+    expect(run.entityId).toBeNull();
+
+    await run.completion;
+    await manager.remove(run.id);
+  });
+});

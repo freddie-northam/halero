@@ -54,10 +54,12 @@ export const agentsRouter = router({
           message: error instanceof Error ? error.message : "Invalid run.",
         });
       }
+      const promptTitle = input.prompt.trim().slice(0, 120);
       const runs = [];
       for (const spec of specs) {
         const run = await manager.start({
           label: spec.agentId,
+          title: `${spec.agentId}: ${promptTitle}`,
           command: spec.command,
           args: spec.args,
         });

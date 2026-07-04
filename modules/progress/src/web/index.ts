@@ -6,6 +6,7 @@
 // the page presents as the "Developer" command center.
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
+import { AGENT_RUN_KIND } from "@halero/schemas";
 import type { AgentsApi } from "./agents-api";
 import type { ProgressApi } from "./api";
 import { createDeveloperScreen } from "./developer-screen";
@@ -36,5 +37,13 @@ export const createProgressWebModule = (
     nav: [{ label: "Developer", path: "/developer", order: 40 }],
     pages: [
       { path: "/developer", component: createDeveloperScreen(api, agentsApi) },
+    ],
+    entityLinks: [
+      {
+        kind: AGENT_RUN_KIND,
+        label: "Agent run",
+        // Runs live on the Developer page's Agents tab; a hit lands there.
+        buildLink: () => ({ path: "/developer" }),
+      },
     ],
   });

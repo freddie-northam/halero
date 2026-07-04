@@ -5,7 +5,8 @@
 // best. Reuses the terminal's PtySession for I/O and the WorktreeManager
 // for isolation. Arbitrary command execution: the host route gates it.
 
-import { ulid } from "@halero/core";
+import { type EntityStore, ulid } from "@halero/core";
+import { AGENT_RUN_KIND } from "@halero/schemas";
 import { PtySession } from "../terminal/session";
 import type { Worktree, WorktreeDiff, WorktreeManager } from "./worktree";
 
@@ -33,12 +34,16 @@ export interface AgentRunInfo {
   readonly exitCode: number | null;
   /** Change totals once the run has settled; null while running. */
   readonly changed: RunChangeSummary | null;
+  /** The agent.run spine entity id, or null when persistence is off. */
+  readonly entityId: string | null;
 }
 
 export interface StartRunOptions {
   readonly id?: string;
   /** Display label for the run, e.g. the agent id. */
   readonly label?: string;
+  /** Title for the run's spine entity (e.g. the prompt); persisted if set. */
+  readonly title?: string;
   readonly command: string;
   readonly args?: readonly string[];
   readonly cols?: number;
@@ -48,6 +53,7 @@ export interface StartRunOptions {
 interface AgentRunDeps {
   readonly id: string;
   readonly label: string;
+  readonly entityId: string | null;
   readonly worktree: Worktree;
   readonly session: PtySession;
   readonly createdAt: number;
@@ -58,6 +64,8 @@ interface AgentRunDeps {
 export class AgentRun {
   readonly id: string;
   readonly label: string;
+  /** The agent.run spine entity id, or null when persistence is off. */
+  readonly entityId: string | null;
   readonly branch: string;
   readonly path: string;
   readonly createdAt: number;
@@ -72,6 +80,7 @@ export class AgentRun {
   constructor(deps: AgentRunDeps) {
     this.id = deps.id;
     this.label = deps.label;
+    this.entityId = deps.entityId;
     this.branch = deps.worktree.branch;
     this.path = deps.worktree.path;
     this.createdAt = deps.createdAt;
@@ -141,6 +150,7 @@ export class AgentRun {
               insertions: diff.insertions,
               deletions: diff.deletions,
             },
+      entityId: this.entityId,
     };
   }
 }
@@ -152,6 +162,12 @@ export interface AgentRunManagerOptions {
   readonly maxRuns?: number;
   readonly now?: () => number;
   readonly env?: Record<string, string>;
+  /**
+   * When set, each run is recorded as an `agent.run` spine entity so it is
+   * searchable, linkable, and timeline-able. Omit to keep runs in-memory
+   * only (tests that do not exercise persistence).
+   */
+  readonly entities?: EntityStore;
 }
 
 const DEFAULT_MAX_RUNS = 4;
@@ -165,6 +181,7 @@ export class AgentRunManager {
   readonly #maxRuns: number;
   readonly #now: () => number;
   readonly #env: Record<string, string> | undefined;
+  readonly #entities: EntityStore | undefined;
 
   constructor(options: AgentRunManagerOptions) {
     this.#worktrees = options.worktrees;
@@ -172,6 +189,7 @@ export class AgentRunManager {
     this.#maxRuns = options.maxRuns ?? DEFAULT_MAX_RUNS;
     this.#now = options.now ?? (() => Date.now());
     this.#env = options.env;
+    this.#entities = options.entities;
   }
 
   async start(options: StartRunOptions): Promise<AgentRun> {
@@ -179,6 +197,18 @@ export class AgentRunManager {
       throw new Error(TOO_MANY_MESSAGE);
     }
     const id = options.id ?? ulid();
+    const createdAt = this.#now();
+    // Record the run on the spine before spawning, so a run always has its
+    // durable object even if the process is short-lived.
+    const entityId =
+      this.#entities === undefined
+        ? null
+        : this.#entities.createUserEntity({
+            kind: AGENT_RUN_KIND,
+            schemaVersion: 1,
+            title: options.title ?? options.label ?? options.command,
+            occurredStart: createdAt,
+          }).entityId;
     const worktree = await this.#worktrees.create({ id, base: this.#base });
     const session = PtySession.start({
       command: options.command,
@@ -191,9 +221,10 @@ export class AgentRunManager {
     const run = new AgentRun({
       id,
       label: options.label ?? options.command,
+      entityId,
       worktree,
       session,
-      createdAt: this.#now(),
+      createdAt,
       base: this.#base,
       worktrees: this.#worktrees,
     });
