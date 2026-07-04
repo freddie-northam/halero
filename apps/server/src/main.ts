@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { websocket } from "hono/bun";
 import { createApp } from "./app";
 import { boot } from "./boot";
 import { loadConfig } from "./config";
@@ -61,7 +62,9 @@ const scheduler = createScheduler(
   { maintenance, jobs: [f1Notifications] },
 );
 
-Bun.serve({ port: config.port, fetch: app.fetch });
+// websocket handler drives the Developer terminal's PTY sockets; it is
+// inert unless HALERO_DEVELOPER_TERMINAL opted the route in.
+Bun.serve({ port: config.port, fetch: app.fetch, websocket });
 scheduler.start();
 
 console.log(

@@ -20,6 +20,8 @@ import { createNotifier, type Notifier } from "./notifier";
 import { createSpaHandler, defaultWebDistDir } from "./spa";
 import { createOauthRoutes } from "./sync/oauth-routes";
 import { createSyncRunner, type SyncRunner } from "./sync/runner";
+import { TerminalSessionManager } from "./terminal/manager";
+import { createTerminalRoutes } from "./terminal/routes";
 import { createTrpcHandler } from "./trpc/handler";
 
 export interface CreateAppOptions {
@@ -109,6 +111,15 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   app.route(
     "/api/oauth",
     createOauthRoutes({ config, database, key, now, outboundFetch }),
+  );
+  // Arbitrary command execution: only instantiated when opted in, and the
+  // route guards loopback + session on top of that.
+  const terminalManager = config.developerTerminal
+    ? new TerminalSessionManager({ now })
+    : null;
+  app.route(
+    "/api/terminal",
+    createTerminalRoutes({ config, manager: terminalManager }),
   );
   app.get("*", createSpaHandler(options.webDistDir ?? defaultWebDistDir()));
 

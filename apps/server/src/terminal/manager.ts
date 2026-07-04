@@ -25,6 +25,7 @@ export interface CreateTerminalOptions {
   readonly cols?: number;
   readonly rows?: number;
   readonly cwd?: string;
+  readonly env?: Record<string, string>;
 }
 
 export interface TerminalInfo {
@@ -69,6 +70,7 @@ export class TerminalSessionManager {
       cols: options.cols,
       rows: options.rows,
       cwd: options.cwd ?? this.#cwd,
+      env: options.env,
     });
     this.#sessions.set(id, { session, createdAt: this.#now() });
     // A session that ends (exit, kill, crash) drops out of the registry.
