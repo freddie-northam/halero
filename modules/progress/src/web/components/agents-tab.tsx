@@ -134,20 +134,27 @@ const RunDetail = ({
         <span className={statusTone[run.status]}>{run.status}</span>
         <code className="text-muted-foreground text-xs">{run.branch}</code>
       </div>
-      {run.diff !== null && run.diff.files.length > 0 ? (
+      {run.changed !== null && run.changed.files > 0 ? (
         <div>
           <p className="mb-1 flex items-center gap-2 font-medium text-sm">
-            <span>Changed files ({run.diff.files.length})</span>
+            <span>Changed files ({run.changed.files})</span>
             <span className="font-normal text-emerald-500 text-xs">
-              +{run.diff.insertions}
+              +{run.changed.insertions}
             </span>
             <span className="font-normal text-destructive text-xs">
-              -{run.diff.deletions}
+              -{run.changed.deletions}
             </span>
           </p>
-          <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-2 text-xs">
-            {run.diff.patch}
-          </pre>
+          {run.diff !== null ? (
+            <pre className="max-h-72 overflow-auto rounded-md border bg-muted/40 p-2 text-xs">
+              {run.diff.patch}
+            </pre>
+          ) : (
+            <p className="text-muted-foreground text-xs">
+              Full diff not retained (historical run). Changes are on branch{" "}
+              <code>{run.branch}</code>.
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-muted-foreground text-sm">

@@ -42,6 +42,44 @@ export interface AgentRunInfo {
   readonly entityId: string | null;
 }
 
+/**
+ * A run's detail, unified across a live run (full output + diff patch) and
+ * a persisted historical one (stats only; the worktree and PTY are gone).
+ */
+export interface RunDetailSnapshot {
+  readonly id: string;
+  readonly label: string;
+  readonly branch: string;
+  readonly status: RunStatus;
+  readonly exitCode: number | null;
+  readonly output: string;
+  readonly changed: RunChangeSummary | null;
+  /** The full diff for a live run; null for a persisted historical run. */
+  readonly diff: WorktreeDiff | null;
+}
+
+interface PersistedRun {
+  readonly runId: string;
+  readonly entityId: string;
+  readonly label: string;
+  readonly branch: string;
+  readonly status: RunStatus;
+  readonly exitCode: number | null;
+  readonly createdAt: number;
+  readonly changed: RunChangeSummary | null;
+}
+
+const persistedInfo = (run: PersistedRun): AgentRunInfo => ({
+  id: run.runId,
+  label: run.label,
+  branch: run.branch,
+  status: run.status,
+  createdAt: run.createdAt,
+  exitCode: run.exitCode,
+  changed: run.changed,
+  entityId: run.entityId,
+});
+
 export interface StartRunOptions {
   readonly id?: string;
   /** Display label for the run, e.g. the agent id. */
@@ -196,6 +234,8 @@ export class AgentRunManager {
   readonly #entities: EntityStore | undefined;
   readonly #db: Db | undefined;
   readonly #repo: string;
+  /** Runs persisted by an earlier process, surfaced as historical entries. */
+  readonly #persisted = new Map<string, PersistedRun>();
 
   constructor(options: AgentRunManagerOptions) {
     this.#worktrees = options.worktrees;
@@ -206,6 +246,33 @@ export class AgentRunManager {
     this.#entities = options.entities;
     this.#db = options.db;
     this.#repo = options.repo ?? "";
+    this.#loadPersisted();
+  }
+
+  #loadPersisted(): void {
+    const db = this.#db;
+    if (db === undefined) {
+      return;
+    }
+    for (const row of db.select().from(agentRuns).all()) {
+      this.#persisted.set(row.runId, {
+        runId: row.runId,
+        entityId: row.entityId,
+        label: row.agentId,
+        branch: row.branch,
+        status: row.status,
+        exitCode: row.exitCode,
+        createdAt: row.createdAt,
+        changed:
+          row.files === null
+            ? null
+            : {
+                files: row.files,
+                insertions: row.insertions ?? 0,
+                deletions: row.deletions ?? 0,
+              },
+      });
+    }
   }
 
   async start(options: StartRunOptions): Promise<AgentRun> {
@@ -309,12 +376,53 @@ export class AgentRunManager {
       .catch(() => undefined);
   }
 
+  /** The LIVE run (with its PTY), for the streaming WS. Historical runs
+   * are not live and are reached through detail(). */
   get(id: string): AgentRun | undefined {
     return this.#runs.get(id);
   }
 
+  /** Every run, newest state wins: live runs override persisted history. */
   list(): AgentRunInfo[] {
-    return [...this.#runs.values()].map((run) => run.info());
+    const byId = new Map<string, AgentRunInfo>();
+    for (const persisted of this.#persisted.values()) {
+      byId.set(persisted.runId, persistedInfo(persisted));
+    }
+    for (const run of this.#runs.values()) {
+      byId.set(run.id, run.info());
+    }
+    return [...byId.values()];
+  }
+
+  /** A run's detail, live if in-process else the persisted historical view. */
+  detail(id: string): RunDetailSnapshot | null {
+    const live = this.#runs.get(id);
+    if (live !== undefined) {
+      return {
+        id: live.id,
+        label: live.label,
+        branch: live.branch,
+        status: live.status,
+        exitCode: live.exitCode,
+        output: live.output(),
+        changed: live.info().changed,
+        diff: live.result()?.diff ?? null,
+      };
+    }
+    const persisted = this.#persisted.get(id);
+    if (persisted === undefined) {
+      return null;
+    }
+    return {
+      id: persisted.runId,
+      label: persisted.label,
+      branch: persisted.branch,
+      status: persisted.status,
+      exitCode: persisted.exitCode,
+      output: "",
+      changed: persisted.changed,
+      diff: null,
+    };
   }
 
   /** Kills the run (if live), waits for it to settle, and drops its worktree. */

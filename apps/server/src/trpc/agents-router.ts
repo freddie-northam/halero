@@ -74,23 +74,16 @@ export const agentsRouter = router({
   })),
 
   get: protectedProcedure.input(idInput).query(({ ctx, input }) => {
-    const run = ctx.agents?.get(input.id);
-    if (run === undefined) {
+    // detail() unifies live runs (full output + diff patch) and persisted
+    // historical ones (stats only), so a run survives a restart.
+    const detail = ctx.agents?.detail(input.id) ?? null;
+    if (detail === null) {
       throw new TRPCError({
         code: "NOT_FOUND",
         message: "That run could not be found.",
       });
     }
-    const result = run.result();
-    return {
-      id: run.id,
-      label: run.label,
-      branch: run.branch,
-      status: run.status,
-      exitCode: run.exitCode,
-      output: run.output(),
-      diff: result?.diff ?? null,
-    };
+    return detail;
   }),
 
   remove: protectedProcedure.input(idInput).mutation(async ({ ctx, input }) => {

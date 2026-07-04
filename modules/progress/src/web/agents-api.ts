@@ -40,6 +40,9 @@ export interface RunDetail {
   readonly status: RunStatus;
   readonly exitCode: number | null;
   readonly output: string;
+  /** Change totals, available even for a persisted historical run. */
+  readonly changed: RunChangeSummary | null;
+  /** The full diff patch for a live run; null once it is historical. */
   readonly diff: RunDiff | null;
 }
 

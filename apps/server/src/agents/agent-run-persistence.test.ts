@@ -135,6 +135,58 @@ describe("AgentRunManager persistence", () => {
     await manager.remove(run.id);
   });
 
+  test("surfaces a prior-process run from the satellite on construction", async () => {
+    const worktrees = await makeWorktrees();
+    const database = makeDb();
+    const entities = createEntityStore(database);
+    // Simulate a run persisted by a previous process, now settled.
+    const { entityId } = entities.createUserEntity({
+      kind: AGENT_RUN_KIND,
+      schemaVersion: 1,
+      title: "claude: an old run",
+      occurredStart: 500,
+    });
+    database.db
+      .insert(agentRuns)
+      .values({
+        entityId,
+        runId: "old-run-1",
+        agentId: "claude",
+        repo: "/repos/demo",
+        branch: "halero/run-old-run-1",
+        status: "succeeded",
+        exitCode: 0,
+        files: 3,
+        insertions: 10,
+        deletions: 2,
+        createdAt: 500,
+        endedAt: 600,
+      })
+      .run();
+
+    // A fresh manager (a new process) loads and surfaces it.
+    const manager = new AgentRunManager({
+      worktrees,
+      base: "main",
+      env: GIT_ENV,
+      entities,
+      db: database.db,
+      repo: "/repos/demo",
+    });
+
+    const old = manager.list().find((run) => run.id === "old-run-1");
+    expect(old?.status).toBe("succeeded");
+    expect(old?.label).toBe("claude");
+    expect(old?.entityId).toBe(entityId);
+    expect(old?.changed).toEqual({ files: 3, insertions: 10, deletions: 2 });
+
+    const detail = manager.detail("old-run-1");
+    expect(detail?.status).toBe("succeeded");
+    expect(detail?.output).toBe("");
+    expect(detail?.diff).toBeNull();
+    expect(detail?.changed).toEqual({ files: 3, insertions: 10, deletions: 2 });
+  });
+
   test("skips persistence (entityId null) when no entity store is given", async () => {
     const worktrees = await makeWorktrees();
     const manager = new AgentRunManager({
