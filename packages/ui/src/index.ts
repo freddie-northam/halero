@@ -4,22 +4,34 @@
  * src/components/ui are not part of the contract.
  */
 
+export type { LucideIcon } from "lucide-react";
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
-// indicator; the chevrons drive prev/next navigation; Eye/EyeOff toggle
-// password visibility on the auth screens; Pencil is the edit affordance
-// (opens the task detail dialog); Plus marks an inline add affordance (the
-// board's per-column "+ Add task" row); Repeat marks recurring calendar
-// items; StickyNote marks tasks carrying notes; X is the inline
-// delete/dismiss affordance.
+// indicator; the chevrons drive prev/next navigation; House/CalendarDays/
+// ListTodo/Settings are the primary nav-rail glyphs, with Circle the
+// fallback when a module declares no icon; PanelLeftClose/PanelLeftOpen are
+// the stateful sidebar-toggle icons and LogOut the footer sign-out;
+// Eye/EyeOff toggle password visibility on the auth screens; Pencil is the
+// edit affordance (opens the task detail dialog); Plus marks an inline add
+// affordance (the board's per-column "+ Add task" row); Repeat marks
+// recurring calendar items; StickyNote marks tasks carrying notes; X is the
+// inline delete/dismiss affordance.
 export {
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Circle,
   Eye,
   EyeOff,
+  House,
+  ListTodo,
   Loader2,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   Repeat,
+  Settings,
   StickyNote,
   X,
 } from "lucide-react";

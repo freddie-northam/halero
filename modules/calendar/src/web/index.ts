@@ -29,7 +29,9 @@ export { createTodayAgendaSection } from "./today-agenda-section";
 export const createCalendarWebModule = (api: CalendarApi): WebModule =>
   defineWebModule({
     id: "calendar",
-    nav: [{ label: "Calendar", path: "/calendar", order: 20 }],
+    nav: [
+      { label: "Calendar", path: "/calendar", order: 20, icon: "calendar" },
+    ],
     pages: [
       {
         path: "/calendar",

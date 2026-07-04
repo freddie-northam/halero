@@ -6,10 +6,13 @@ import type { ComponentType } from "react";
 
 export interface NavContribution {
   readonly label: string;
+  /** Semantic icon key (e.g. "home", "calendar"); the app maps it to a glyph. */
   readonly icon?: string;
   readonly path: string;
   /** Nav renders sorted ascending; Today ships at 10, core Settings at 100. */
   readonly order: number;
+  /** "secondary" pins the item to the sidebar footer; defaults to "primary". */
+  readonly group?: "primary" | "secondary";
 }
 
 /**

@@ -33,7 +33,7 @@ export { createTasksTodaySection } from "./today-due-section";
 export const createTasksWebModule = (api: TasksApi): WebModule =>
   defineWebModule({
     id: "tasks",
-    nav: [{ label: "Tasks", path: "/tasks", order: 30 }],
+    nav: [{ label: "Tasks", path: "/tasks", order: 30, icon: "tasks" }],
     pages: [
       {
         path: "/tasks",
