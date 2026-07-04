@@ -2,13 +2,13 @@ import {
   CalendarDays,
   Circle,
   CircleHelp,
-  F1Car,
   Gift,
   House,
   ListTodo,
   type LucideIcon,
   PanelLeftClose,
   PanelLeftOpen,
+  RacingTyre,
   Search,
   Settings,
   Sidebar,
@@ -62,7 +62,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   calendar: CalendarDays,
   tasks: ListTodo,
   notes: StickyNote,
-  f1: F1Car,
+  f1: RacingTyre,
   settings: Settings,
 };
 

@@ -1,4 +1,4 @@
-import { Tabs, TabsList, TabsTrigger } from "@halero/ui";
+import { Switcher, type SwitcherOption } from "@halero/ui";
 import type { ReactElement } from "react";
 import type { CalendarView } from "../helpers/calendar-search";
 
@@ -13,28 +13,30 @@ const isCalendarView = (value: string): value is CalendarView =>
   value === "agenda" ||
   value === "list";
 
+const OPTIONS: readonly SwitcherOption[] = [
+  { value: "month", label: "Month" },
+  { value: "week", label: "Week" },
+  { value: "agenda", label: "Agenda" },
+  { value: "list", label: "List" },
+];
+
 /**
- * The month/week/agenda switcher. Radix tabs give the keyboard model
- * (roving focus, arrow keys) and correct aria-selected for free; the
- * value is controlled by the URL, so switching is a navigation.
+ * The month/week/agenda/list switcher, on the shared underline Switcher so
+ * every switcher in the app looks the same. The value is controlled by the
+ * URL, so switching is a navigation.
  */
 export const ViewSwitcher = ({
   view,
   onViewChange,
 }: ViewSwitcherProps): ReactElement => (
-  <Tabs
+  <Switcher
+    ariaLabel="Calendar view"
     value={view}
     onValueChange={(value) => {
       if (isCalendarView(value)) {
         onViewChange(value);
       }
     }}
-  >
-    <TabsList aria-label="Calendar view">
-      <TabsTrigger value="month">Month</TabsTrigger>
-      <TabsTrigger value="week">Week</TabsTrigger>
-      <TabsTrigger value="agenda">Agenda</TabsTrigger>
-      <TabsTrigger value="list">List</TabsTrigger>
-    </TabsList>
-  </Tabs>
+    options={OPTIONS}
+  />
 );

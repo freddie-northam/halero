@@ -1,8 +1,9 @@
 // The shared shell every F1 widget renders inside: a Card with a header
-// row (an optional drag-handle slot on the left, the title and optional
-// subtitle, and a right-aligned action slot the board fills with remove
-// and resize controls in edit mode) over a CardContent body. The three
-// state helpers (skeleton, empty, error) give every widget the same
+// row (an optional drag-handle slot on the left, the title, and a
+// right-aligned action slot the board fills with remove and resize controls
+// in edit mode) over a CardContent body. The header shows the title only:
+// the widget's own name already says what it is, so no second line. The
+// three state helpers (skeleton, empty, error) give every widget the same
 // loading, empty, and failure look without each re-inventing it.
 
 import {
@@ -17,8 +18,6 @@ import type { ReactElement, ReactNode } from "react";
 
 export interface WidgetChromeProps {
   readonly title: string;
-  /** A short context line under the title, e.g. a circuit or round. */
-  readonly subtitle?: string;
   /** The board's drag handle, shown only in edit mode. */
   readonly handle?: ReactNode;
   /** Edit-mode controls (remove, resize) pinned to the header's right. */
@@ -29,7 +28,6 @@ export interface WidgetChromeProps {
 
 export const WidgetChrome = ({
   title,
-  subtitle,
   handle,
   actions,
   children,
@@ -38,14 +36,9 @@ export const WidgetChrome = ({
   <Card className={cn("flex h-full flex-col gap-0 overflow-hidden", className)}>
     <CardHeader className="flex flex-row items-center gap-2 space-y-0 border-b py-3">
       {handle ?? null}
-      <div className="min-w-0 flex-1">
-        <h3 className="truncate text-sm font-semibold tracking-tight">
-          {title}
-        </h3>
-        {subtitle === undefined ? null : (
-          <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
-        )}
-      </div>
+      <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+        {title}
+      </h3>
       {actions === undefined ? null : (
         <div className="flex shrink-0 items-center gap-1">{actions}</div>
       )}
@@ -81,14 +74,22 @@ export const WidgetSkeleton = ({
   </div>
 );
 
-/** A friendly empty state, centered in the body. */
+/**
+ * A friendly empty state, centered in the body. An optional action (e.g. a
+ * Connect button) renders centered below the message, so every "nothing
+ * here yet" and "connect to see this" state across the widgets looks the
+ * same.
+ */
 export const WidgetEmpty = ({
   message,
+  action,
 }: {
   readonly message: string;
+  readonly action?: ReactNode;
 }): ReactElement => (
-  <div className="flex h-full min-h-24 items-center justify-center px-2 text-center text-sm text-muted-foreground">
-    {message}
+  <div className="flex h-full min-h-24 flex-col items-center justify-center gap-3 px-2 text-center">
+    <p className="text-sm text-muted-foreground">{message}</p>
+    {action ?? null}
   </div>
 );
 
