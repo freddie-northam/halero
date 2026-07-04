@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { AgentsApi } from "./agents-api";
 import type { ProgressApi } from "./api";
 import { createProgressWebModule } from "./index";
 
@@ -15,8 +16,16 @@ const stubApi: ProgressApi = {
   summary: notUnderTest,
 };
 
+const stubAgentsApi: AgentsApi = {
+  catalog: notUnderTest,
+  start: notUnderTest,
+  list: notUnderTest,
+  get: notUnderTest,
+  remove: notUnderTest,
+};
+
 describe("the progress web module", () => {
-  const module = createProgressWebModule(stubApi);
+  const module = createProgressWebModule(stubApi, stubAgentsApi);
 
   test("keeps the progress id (no data migration)", () => {
     expect(module.id).toBe("progress");
