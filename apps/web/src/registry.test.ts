@@ -276,7 +276,7 @@ describe("buildNav", () => {
       "Calendar",
       "Tasks",
       "Notes",
-      "Progress",
+      "Developer",
       "Formula 1",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
@@ -284,7 +284,7 @@ describe("buildNav", () => {
       "/calendar",
       "/tasks",
       "/notes",
-      "/progress",
+      "/developer",
       "/f1",
     ]);
   });

@@ -19,6 +19,8 @@ const refreshResult = {
   sources: [{ id: "github", syncedDays: 3, total: 42, error: null }],
 };
 
+const emptyList = { connected: false, items: [] } as const;
+
 const makeStub = () => {
   const calls: string[] = [];
   const api: ProgressApi = {
@@ -29,6 +31,7 @@ const makeStub = () => {
           {
             id: "github",
             displayName: "GitHub",
+            category: "developer",
             connected: true,
             lastSyncedAt: null,
             lastError: null,
@@ -44,6 +47,17 @@ const makeStub = () => {
       calls.push("refresh");
       return Promise.resolve(refreshResult);
     },
+    reviewRequests: () => Promise.resolve(emptyList),
+    myOpenPullRequests: () => Promise.resolve(emptyList),
+    assignedIssues: () => Promise.resolve(emptyList),
+    repositories: () => Promise.resolve(emptyList),
+    summary: () =>
+      Promise.resolve({
+        total: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        bySource: [],
+      }),
   };
   return { api, calls };
 };

@@ -23,7 +23,9 @@ export const providerCatalog: readonly ProviderCatalogEntry[] = [
   {
     id: "github",
     displayName: "GitHub",
-    description: "Pull your contribution activity into the Progress heatmap.",
+    description:
+      "See your pull requests, issues, and contribution activity on the " +
+      "Developer page.",
     category: "developer",
     iconId: "github",
     authKind: "apiKey",
