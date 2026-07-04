@@ -209,7 +209,9 @@ export const AgentsTab = ({
     );
   }
 
-  const runList = runs.data?.runs ?? [];
+  const runList = [...(runs.data?.runs ?? [])].sort(
+    (a, b) => b.createdAt - a.createdAt,
+  );
   return (
     <div className="flex flex-col gap-4">
       <NewRunForm
