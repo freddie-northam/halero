@@ -1,6 +1,6 @@
 // The tasks page: a Board/List switcher (URL-driven, board default) over
 // either the Kanban board or the due-date triage list, plus a detail
-// sheet for editing a card. Data arrives through the narrow TasksApi
+// dialog for editing a card. Data arrives through the narrow TasksApi
 // seam the host registry wires (and wraps with cache invalidation); the
 // overdue tint and the board's "today" always compare against the
 // server-computed date, so the client does no timezone math anywhere.
@@ -11,7 +11,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
 import type { Task } from "../contract";
 import type { TasksApi } from "./api";
-import { TaskDetailSheet } from "./components/task-detail-sheet";
+import { TaskDetailDialog } from "./components/task-detail-dialog";
 import { TasksViewSwitcher } from "./components/view-switcher";
 import {
   normalizeTasksSearch,
@@ -65,7 +65,9 @@ const BoardBody = ({
     <BoardView
       board={board}
       onMove={(move) => void api.move(move)}
-      onCreate={async (input) => void (await api.create(input))}
+      onCreate={async (status, title) =>
+        void (await api.create({ title, status }))
+      }
       onOpenTask={onOpenTask}
     />
   );
@@ -96,7 +98,7 @@ export const createTasksScreen = (api: TasksApi) => {
             <BoardBody api={api} onOpenTask={setSelectedTask} />
           )}
         </div>
-        <TaskDetailSheet
+        <TaskDetailDialog
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onSave={async (input) => {
@@ -108,7 +110,7 @@ export const createTasksScreen = (api: TasksApi) => {
             setSelectedTask(null);
           }}
           onLogTime={async (entityId, minutes) => {
-            // Keeps the sheet open, unlike save/delete: logging time is a
+            // Keeps the dialog open, unlike save/delete: logging time is a
             // running total, not a one-shot edit that closes the editor.
             setSelectedTask(await api.logTime({ entityId, minutes }));
           }}

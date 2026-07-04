@@ -25,6 +25,7 @@ export type ProgressHeatmap = Awaited<
 
 export interface SetupInput {
   readonly password: string;
+  readonly name: string;
   readonly homeTimezone: string;
   readonly baseUrl?: string;
 }

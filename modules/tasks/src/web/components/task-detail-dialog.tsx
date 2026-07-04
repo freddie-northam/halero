@@ -13,12 +13,12 @@ import {
   AlertDescription,
   Button,
   DatePicker,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   Input,
   Separator,
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
 } from "@halero/ui";
 import {
   type FormEvent,
@@ -34,7 +34,7 @@ import { readableError } from "../readable-error";
 import { PriorityPicker } from "./priority-picker";
 import { TagEditor } from "./tag-editor";
 
-export interface TaskDetailSheetProps {
+export interface TaskDetailDialogProps {
   readonly task: Task | null;
   readonly onClose: () => void;
   readonly onSave: (input: TaskUpdateInput) => Promise<void>;
@@ -109,7 +109,7 @@ const QUICK_LOG_MINUTES: readonly {
  * uncontrolled (the app's established typed-input pattern, see
  * TagEditor's add field) and read through the ref at log time. Enter is
  * intercepted (preventDefault) so it logs time instead of submitting
- * the surrounding form, which would otherwise save and close the sheet.
+ * the surrounding form, which would otherwise save and close the dialog.
  */
 const TimeLogSection = ({
   task,
@@ -180,7 +180,7 @@ const DetailFields = ({
   readonly onLogTime: (minutes?: number) => void;
   readonly busy: boolean;
 }): ReactElement => (
-  <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
+  <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4">
     <Input name="title" aria-label="Title" defaultValue={task.title} />
     <textarea
       name="notes"
@@ -248,7 +248,7 @@ const useLogTimeControl = (
 };
 
 /**
- * Owns the sheet's editable state and both writes. `run` wraps save and
+ * Owns the dialog's editable state and both writes. `run` wraps save and
  * delete the same way ListView's own run() does, so a rejected delete
  * surfaces a readable error instead of an unhandled promise rejection.
  */
@@ -331,10 +331,10 @@ const TaskDetailForm = ({
 }): ReactElement => {
   const form = useTaskDetailForm(task, onSave, onDelete, onLogTime);
   return (
-    <form onSubmit={form.submit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>Edit task</SheetTitle>
-      </SheetHeader>
+    <form onSubmit={form.submit} className="flex h-full min-h-0 flex-col">
+      <DialogHeader className="p-4">
+        <DialogTitle>Edit task</DialogTitle>
+      </DialogHeader>
       <DetailFields
         task={task}
         priority={form.priority}
@@ -370,14 +370,14 @@ const TaskDetailForm = ({
   );
 };
 
-export const TaskDetailSheet = ({
+export const TaskDetailDialog = ({
   task,
   onClose,
   onSave,
   onDelete,
   onLogTime,
-}: TaskDetailSheetProps): ReactElement => (
-  <Sheet
+}: TaskDetailDialogProps): ReactElement => (
+  <Dialog
     open={task !== null}
     onOpenChange={(open) => {
       if (!open) {
@@ -385,7 +385,7 @@ export const TaskDetailSheet = ({
       }
     }}
   >
-    <SheetContent>
+    <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0">
       {task === null ? null : (
         <TaskDetailForm
           key={task.entityId}
@@ -395,6 +395,6 @@ export const TaskDetailSheet = ({
           onLogTime={onLogTime}
         />
       )}
-    </SheetContent>
-  </Sheet>
+    </DialogContent>
+  </Dialog>
 );

@@ -181,6 +181,8 @@ const calendarOp = (externalId: string, occurredStart?: number): SyncOp => ({
     status: "confirmed",
     recurringEventId: null,
     originalStartTime: null,
+    notes: null,
+    url: null,
   },
   raw: { id: externalId },
 });
@@ -651,6 +653,8 @@ describe("syncConnection connector misbehavior", () => {
       status: "confirmed",
       recurringEventId: null,
       originalStartTime: null,
+      notes: null,
+      url: null,
     },
     raw: { id: "evt-ok" },
   };

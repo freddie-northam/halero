@@ -21,6 +21,8 @@ export interface TodayHome {
   readonly homeTimezone: string;
   /** Calendar date ("YYYY-MM-DD") of now in the home timezone. */
   readonly today: string;
+  /** The owner's name for the greeting; absent when none was set. */
+  readonly displayName?: string | null;
 }
 
 /** What the Today page needs from the host. */
@@ -74,7 +76,9 @@ const TodayBody = ({
   <>
     <header>
       <h1 className="text-lg font-semibold tracking-tight">
-        {greetingForHour(hourInZone(now(), home.homeTimezone))}
+        {`${greetingForHour(hourInZone(now(), home.homeTimezone))}${
+          home.displayName ? `, ${home.displayName}` : ""
+        }`}
       </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {formatFullDate(home.today)}

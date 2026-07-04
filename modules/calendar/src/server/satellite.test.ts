@@ -56,6 +56,8 @@ const upsertOp = (overrides: Partial<UpsertSyncOp> = {}): UpsertSyncOp => ({
     status: "confirmed",
     recurringEventId: null,
     originalStartTime: null,
+    notes: null,
+    url: null,
   },
   raw: sourceEvent,
   ...overrides,
@@ -107,6 +109,8 @@ describe("calendar.event satellite writer", () => {
           status: "tentative",
           recurringEventId: null,
           originalStartTime: null,
+          notes: "Bring the slide deck",
+          url: "https://meet.example.com/room",
         },
         raw: moved,
       }),
@@ -116,6 +120,8 @@ describe("calendar.event satellite writer", () => {
     expect(row?.calendarId).toBe("work");
     expect(row?.allDay).toBe(1);
     expect(row?.location).toBe("HQ");
+    expect(row?.notes).toBe("Bring the slide deck");
+    expect(row?.url).toBe("https://meet.example.com/room");
     expect(JSON.parse(row?.raw ?? "null")).toEqual(moved);
   });
 

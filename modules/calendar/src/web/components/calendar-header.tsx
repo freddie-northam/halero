@@ -13,9 +13,11 @@ export interface CalendarHeaderProps {
   readonly onNext: () => void;
   /** Navigation needs an anchor; disabled until the server provides one. */
   readonly navDisabled: boolean;
+  /** Opens the create modal anchored on the currently viewed date. */
+  readonly onNewEvent: () => void;
 }
 
-/** Title row plus the date navigation and view switcher controls. */
+/** Title row plus the date navigation, New event action, and view switcher. */
 export const CalendarHeader = ({
   label,
   view,
@@ -24,9 +26,13 @@ export const CalendarHeader = ({
   onToday,
   onNext,
   navDisabled,
+  onNewEvent,
 }: CalendarHeaderProps): ReactElement => (
   <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
     <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
+    <Button type="button" size="sm" disabled={navDisabled} onClick={onNewEvent}>
+      New event
+    </Button>
     <div className="ml-auto flex items-center gap-1">
       <Button
         type="button"

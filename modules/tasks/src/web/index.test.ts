@@ -25,7 +25,9 @@ describe("the tasks web module", () => {
   const module = createTasksWebModule(stubApi);
 
   test("contributes the Tasks nav entry between Calendar and Settings", () => {
-    expect(module.nav).toEqual([{ label: "Tasks", path: "/tasks", order: 30 }]);
+    expect(module.nav).toEqual([
+      { label: "Tasks", path: "/tasks", order: 30, icon: "tasks" },
+    ]);
   });
 
   test("contributes the /tasks page", () => {

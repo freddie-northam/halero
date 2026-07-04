@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { runMigrations } from "./migration-runner";
 import { coreMigrations } from "./migrations";
 import { type HaleroDatabase, openDatabase } from "./open-database";
@@ -105,6 +106,42 @@ describe("core schema", () => {
         "INSERT INTO calendar_events (entity_id, calendar_id) VALUES ('missing', 'primary')",
       ),
     ).toThrow(/FOREIGN KEY/);
+    sqlite.close();
+  });
+
+  test("calendar_events stores notes and url, including nulls", () => {
+    const handle = openMigrated();
+    const { sqlite, db } = handle;
+    insertEntity(handle, "e1");
+    insertEntity(handle, "e2");
+
+    db.insert(calendarEvents)
+      .values({
+        entityId: "e1",
+        calendarId: "primary",
+        notes: "Bring the slide deck",
+        url: "https://meet.example.com/room",
+      })
+      .run();
+    db.insert(calendarEvents)
+      .values({ entityId: "e2", calendarId: "primary" })
+      .run();
+
+    const withDetails = db
+      .select()
+      .from(calendarEvents)
+      .where(eq(calendarEvents.entityId, "e1"))
+      .get();
+    const withoutDetails = db
+      .select()
+      .from(calendarEvents)
+      .where(eq(calendarEvents.entityId, "e2"))
+      .get();
+
+    expect(withDetails?.notes).toBe("Bring the slide deck");
+    expect(withDetails?.url).toBe("https://meet.example.com/room");
+    expect(withoutDetails?.notes).toBeNull();
+    expect(withoutDetails?.url).toBeNull();
     sqlite.close();
   });
 

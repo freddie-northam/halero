@@ -87,6 +87,16 @@ const buildStubClient = (createTask: CreateTaskStub): TrpcClient =>
         delete: { mutate: () => Promise.reject(new Error("not under test")) },
       },
     },
+    system: {
+      status: {
+        query: () =>
+          Promise.resolve({
+            needsSetup: false,
+            authenticated: true,
+            displayName: null,
+          }),
+      },
+    },
   }) as unknown as TrpcClient;
 
 const stubApi = (overrides: Partial<HaleroApi> = {}): HaleroApi => ({

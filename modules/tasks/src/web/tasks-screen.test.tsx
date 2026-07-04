@@ -14,7 +14,7 @@ import {
   render,
   within,
 } from "@testing-library/react";
-import type { Task } from "../contract";
+import type { Task, TaskStatus } from "../contract";
 import type { TasksApi, TaskUpdateInput } from "./api";
 import { normalizeTasksSearch } from "./helpers/board-search";
 import { withTasksInvalidation } from "./queries";
@@ -75,7 +75,7 @@ const fixtureTasks: readonly Task[] = [
 ];
 
 interface StubCalls {
-  readonly create: { title: string; dueDate?: string }[];
+  readonly create: { title: string; dueDate?: string; status?: TaskStatus }[];
   readonly update: TaskUpdateInput[];
   readonly move: { entityId: string; status: string; sortOrder: number }[];
   readonly toggle: string[];
@@ -136,11 +136,14 @@ const makeStubApi = (initial: readonly Task[]) => {
       }),
     create: (input) => {
       calls.create.push(input);
+      const status = input.status ?? "todo";
       const created = task({
         entityId: `t-new-${calls.create.length}`,
         title: input.title,
+        status,
         dueDate: input.dueDate ?? null,
-        sortOrder: nextSortOrder("todo"),
+        sortOrder: nextSortOrder(status),
+        completedAt: status === "done" ? Date.now() : null,
       });
       tasks = [...tasks, created];
       return Promise.resolve(created);
@@ -407,7 +410,7 @@ test("a garbage ?view= falls back to the board", async () => {
   expect(await view.findByText("Chase invoice")).toBeTruthy();
 });
 
-test("clicking a card opens the detail sheet without dragging", async () => {
+test("clicking a card opens the detail dialog without dragging", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const title = await view.findByText("Water plants");
@@ -422,7 +425,7 @@ test("clicking a card opens the detail sheet without dragging", async () => {
   );
 });
 
-test("the card's Edit button opens the detail sheet (keyboard/SR path)", async () => {
+test("the card's Edit button opens the detail dialog (keyboard/SR path)", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   await view.findByText("Water plants");
@@ -430,14 +433,14 @@ test("the card's Edit button opens the detail sheet (keyboard/SR path)", async (
   // The card's own Space/Enter drive the dnd keyboard sensor, so this
   // explicit button is how keyboard and screen-reader users reach the
   // editor. Activating it (what Enter/Space on the focused button do)
-  // opens the sheet.
+  // opens the dialog.
   fireEvent.click(view.getByRole("button", { name: "Edit Water plants" }));
 
   expect(await view.findByText("Edit task")).toBeTruthy();
   expect(view.getByLabelText("Title")).toHaveProperty("value", "Water plants");
 });
 
-test("the list row's Edit button opens the detail sheet", async () => {
+test("the list row's Edit button opens the detail dialog", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api, "/tasks?view=list");
   await view.findByText("Chase invoice");
@@ -470,7 +473,7 @@ test("saving a priority change calls update with the task's priority", async () 
   expect(view.queryByText("Edit task")).toBeNull();
 });
 
-test("adding a tag in the sheet saves it in the tags list", async () => {
+test("adding a tag in the dialog saves it in the tags list", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -493,7 +496,7 @@ test("adding a tag in the sheet saves it in the tags list", async () => {
   });
 });
 
-test("setting the estimate in the sheet saves it as whole minutes", async () => {
+test("setting the estimate in the dialog saves it as whole minutes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -515,7 +518,7 @@ test("setting the estimate in the sheet saves it as whole minutes", async () => 
   });
 });
 
-test("the sheet shows the running logged total and a log-time control adds to it", async () => {
+test("the dialog shows the running logged total and a log-time control adds to it", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -537,7 +540,7 @@ test("the sheet shows the running logged total and a log-time control adds to it
 
   expect(calls.logTime).toEqual([{ entityId: "t-today", minutes: 50 }]);
   expect(await dialog.findByText("Logged 50m")).toBeTruthy();
-  // Unlike Save/Delete, logging time keeps the sheet open.
+  // Unlike Save/Delete, logging time keeps the dialog open.
   expect(view.getByText("Edit task")).toBeTruthy();
 });
 
@@ -581,7 +584,7 @@ test("logging zero minutes is rejected readably without calling the api", async 
   ).toBeTruthy();
 });
 
-test("a failed log-time surfaces a readable error and keeps the sheet open", async () => {
+test("a failed log-time surfaces a readable error and keeps the dialog open", async () => {
   const { api } = makeStubApi(fixtureTasks);
   const failing: TasksApi = {
     ...api,
@@ -608,7 +611,7 @@ test("a failed log-time surfaces a readable error and keeps the sheet open", asy
   expect(view.getByText("Edit task")).toBeTruthy();
 });
 
-test("picking a due date in the sheet saves it", async () => {
+test("picking a due date in the dialog saves it", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Chase invoice");
@@ -617,7 +620,7 @@ test("picking a due date in the sheet saves it", async () => {
   });
   await view.findByText("Edit task");
   // The board's own To do quick-add also has a "Due date" picker behind
-  // the sheet, so the query is scoped to the dialog to disambiguate.
+  // the dialog, so the query is scoped to the dialog to disambiguate.
   const dialog = within(view.getByRole("dialog"));
 
   await act(async () => {
@@ -639,7 +642,7 @@ test("picking a due date in the sheet saves it", async () => {
   });
 });
 
-test("deleting from the sheet calls delete and closes", async () => {
+test("deleting from the dialog calls delete and closes", async () => {
   const { api, calls } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   const card = await view.findByText("Water plants");
@@ -678,7 +681,7 @@ test("a failed delete surfaces a readable error instead of closing", async () =>
     fireEvent.click(view.getByRole("button", { name: "Delete" }));
   });
 
-  // The sheet stays open with the server's readable message.
+  // The dialog stays open with the server's readable message.
   expect(
     await view.findByText("You need to sign in before doing that."),
   ).toBeTruthy();
@@ -714,25 +717,162 @@ test("the list view's quick-add still creates a task", async () => {
   expect(calls.create).toEqual([{ title: "Pay rent" }]);
 });
 
-// Regression: in the narrow To do board column, the title input rendered
-// on the same row as "Due date" and "Add" and clipped to "Add a tas...".
-// The title now has its own row (see quick-add-form.tsx), so this checks
-// it still renders unclipped in the board and that the form still works.
-test("the board's To do quick-add renders the title input and still creates a task", async () => {
-  const { api, calls } = makeStubApi(fixtureTasks);
+// v0.4: the bulky quick-add form (title + due date + Add button) that
+// used to sit in the To do column header is gone from the board; the
+// List view still has its own full quick-add (checked above).
+test("the board no longer renders the old due-date quick-add form", async () => {
+  const { api } = makeStubApi(fixtureTasks);
   const { view } = await renderTasks(api);
   await view.findByText("Chase invoice");
 
-  const titleInput = await view.findByLabelText("Task title");
-  expect(titleInput).toBeTruthy();
-  expect(titleInput.getAttribute("placeholder")).toBe("Add a task...");
-  expect(view.getByLabelText("Due date")).toBeTruthy();
+  expect(view.queryByLabelText("Due date")).toBeNull();
+  expect(view.queryByPlaceholderText("Add a task...")).toBeNull();
+});
 
-  fireEvent.change(titleInput, { target: { value: "Renew passport" } });
+test("each board column shows a compact + Add task affordance", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+
+  expect(view.getAllByRole("button", { name: "Add task" })).toHaveLength(3);
+});
+
+test("clicking + Add task in a column reveals a title input, and Enter creates a task in that column's status", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const doingColumn = within(view.getByRole("region", { name: "Doing" }));
+
+  fireEvent.click(doingColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = doingColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Review PR" } });
   fireEvent.submit(titleInput);
 
-  expect(await view.findByText("Renew passport")).toBeTruthy();
-  expect(calls.create).toEqual([{ title: "Renew passport" }]);
+  expect(await view.findByText("Review PR")).toBeTruthy();
+  expect(calls.create).toEqual([{ title: "Review PR", status: "doing" }]);
+  // The input hides again once the task is created.
+  expect(doingColumn.queryByLabelText("Task title")).toBeNull();
+});
+
+test("Escape cancels the inline add without creating a task", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Abandoned" } });
+  fireEvent.keyDown(titleInput, { key: "Escape" });
+
+  expect(todoColumn.queryByLabelText("Task title")).toBeNull();
+  expect(todoColumn.getByRole("button", { name: "Add task" })).toBeTruthy();
+  expect(calls.create).toEqual([]);
+});
+
+test("an empty title is a no-op on submit", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const doneColumn = within(view.getByRole("region", { name: "Done" }));
+
+  fireEvent.click(doneColumn.getByRole("button", { name: "Add task" }));
+  fireEvent.submit(doneColumn.getByLabelText("Task title"));
+
+  expect(calls.create).toEqual([]);
+  expect(doneColumn.queryByLabelText("Task title")).toBeNull();
+});
+
+test("a failed create keeps the inline row open and shows a readable error", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  const failing: TasksApi = {
+    ...api,
+    create: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderTasks(failing);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Doomed" } });
+  await act(async () => {
+    fireEvent.submit(titleInput);
+  });
+
+  expect(
+    await todoColumn.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  // The row stays open so the error is visible, not silently swallowed.
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+});
+
+test("blurring the field mid-save does not collapse the row before the error surfaces", async () => {
+  const { api } = makeStubApi(fixtureTasks);
+  let rejectCreate: ((error: Error) => void) | null = null;
+  const failing: TasksApi = {
+    ...api,
+    // Stays pending until the test rejects it, so blur fires while the
+    // create is still in flight (the exact race the gated blur guards).
+    create: () =>
+      new Promise<never>((_, reject) => {
+        rejectCreate = reject;
+      }),
+  };
+  const { view } = await renderTasks(failing);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const titleInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(titleInput, { target: { value: "Doomed" } });
+  fireEvent.submit(titleInput);
+
+  // Click away while the create is still pending: the row must not close,
+  // or the pending rejection would set the error on a hidden input.
+  fireEvent.blur(titleInput);
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+
+  await act(async () => {
+    rejectCreate?.(new Error("You need to sign in before doing that."));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  expect(
+    await todoColumn.findByText("You need to sign in before doing that."),
+  ).toBeTruthy();
+  expect(todoColumn.getByLabelText("Task title")).toBeTruthy();
+});
+
+test("a column creates a second task after the first succeeds", async () => {
+  const { api, calls } = makeStubApi(fixtureTasks);
+  const { view } = await renderTasks(api);
+  await view.findByText("Chase invoice");
+  const todoColumn = within(view.getByRole("region", { name: "To do" }));
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const firstInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(firstInput, { target: { value: "First" } });
+  await act(async () => {
+    fireEvent.submit(firstInput);
+  });
+  await view.findByText("First");
+
+  fireEvent.click(todoColumn.getByRole("button", { name: "Add task" }));
+  const secondInput = todoColumn.getByLabelText("Task title");
+  fireEvent.change(secondInput, { target: { value: "Second" } });
+  await act(async () => {
+    fireEvent.submit(secondInput);
+  });
+
+  // The saving flag reset after the first create, so the second is not
+  // swallowed by the in-flight guard.
+  expect(await view.findByText("Second")).toBeTruthy();
+  expect(calls.create).toEqual([
+    { title: "First", status: "todo" },
+    { title: "Second", status: "todo" },
+  ]);
 });
 
 test("toggling in the list view moves a task from Open to Done", async () => {

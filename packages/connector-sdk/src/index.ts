@@ -21,6 +21,7 @@ export {
   type DayBounds,
   dateStringInZone,
   dayBoundsInZone,
+  instantInZone,
   startOfDayInZone,
 } from "./time";
 export {

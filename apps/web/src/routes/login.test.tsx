@@ -68,6 +68,16 @@ test("renders the password field and the submit button", () => {
   expect(view.getByRole("button", { name: "Sign in" })).toBeTruthy();
 });
 
+test("toggles password visibility with the eye button", () => {
+  const view = renderLogin(stubApi());
+  const input = view.getByLabelText("Password") as HTMLInputElement;
+  expect(input.type).toBe("password");
+  fireEvent.click(view.getByRole("button", { name: "Show password" }));
+  expect(input.type).toBe("text");
+  fireEvent.click(view.getByRole("button", { name: "Hide password" }));
+  expect(input.type).toBe("password");
+});
+
 test("shows the readable error inline when login fails", async () => {
   const view = renderLogin(
     stubApi({

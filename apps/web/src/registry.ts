@@ -7,6 +7,7 @@ import {
   type CalendarApi,
   createCalendarWebModule,
   createTodayAgendaSection,
+  withCalendarInvalidation,
 } from "@halero/module-calendar/web";
 import {
   createNotesWebModule,
@@ -64,6 +65,34 @@ export const buildTodaySections = (
     component: createTasksTodaySection(tasksApi),
   },
 ];
+
+/**
+ * The calendar seam: the module's procedures off the tRPC client,
+ * wrapped with the module's own invalidation helper so every create,
+ * update, or delete refreshes the calendar queries through the
+ * host-held QueryClient. The query keys stay inside the module; core
+ * only holds the client.
+ */
+export const buildCalendarApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): CalendarApi =>
+  withCalendarInvalidation(
+    {
+      today: () => client.modules.calendar.today.query(),
+      range: (from, to) => client.modules.calendar.range.query({ from, to }),
+      events: (from, to) => client.modules.calendar.events.query({ from, to }),
+      upcoming: (limit) =>
+        client.modules.calendar.upcoming.query(
+          limit === undefined ? undefined : { limit },
+        ),
+      createEvent: (input) => client.modules.calendar.createEvent.mutate(input),
+      updateEvent: (input) => client.modules.calendar.updateEvent.mutate(input),
+      deleteEvent: (entityId) =>
+        client.modules.calendar.deleteEvent.mutate({ entityId }),
+    },
+    queryClient,
+  );
 
 /**
  * The tasks seam: the module's procedures off the tRPC client, wrapped
@@ -140,10 +169,7 @@ export const buildWebModules = (
   api: HaleroApi,
   queryClient: QueryClient,
 ): readonly WebModule[] => {
-  const calendarApi: CalendarApi = {
-    today: () => client.modules.calendar.today.query(),
-    range: (from, to) => client.modules.calendar.range.query({ from, to }),
-  };
+  const calendarApi = buildCalendarApi(client, queryClient);
   const tasksApi = buildTasksApi(client, queryClient);
   const notesApi = buildNotesApi(client, queryClient);
   const progressApi = buildProgressApi(client, queryClient);
@@ -151,9 +177,17 @@ export const buildWebModules = (
     createTodayWebModule({
       api: {
         // The greeting and date line reuse the calendar module's today
-        // anchor, which already carries the home timezone and its current
-        // date; no dedicated server endpoint exists for the Today page.
-        home: () => client.modules.calendar.today.query(),
+        // anchor (home timezone + current date); the owner's name for the
+        // greeting comes from system.status, merged in here.
+        home: async () => {
+          const [today, status] = await Promise.all([
+            client.modules.calendar.today.query(),
+            client.system.status.query(),
+          ]);
+          return { ...today, displayName: status.displayName };
+        },
+        // Settings' connection framework replaced api.googleStatus(); the
+        // Today card reads Google's status off the generic catalog now.
         googleConnectionStatus: async () => {
           const catalog = await api.connectionsCatalog();
           return (

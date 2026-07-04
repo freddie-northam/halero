@@ -28,6 +28,6 @@ export const createTodayWebModule = ({
 }: TodayModuleOptions): WebModule =>
   defineWebModule({
     id: "today",
-    nav: [{ label: "Today", path: "/", order: 10 }],
+    nav: [{ label: "Today", path: "/", order: 10, icon: "home" }],
     pages: [{ path: "/", component: createTodayScreen(api, sections, now) }],
   });

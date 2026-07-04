@@ -4,26 +4,39 @@
  * src/components/ui are not part of the contract.
  */
 
+export type { LucideIcon } from "lucide-react";
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
-// indicator; the chevrons drive prev/next navigation; Pencil is the
-// edit affordance (opens the task detail sheet); Repeat marks recurring
-// calendar items; StickyNote marks tasks carrying notes; X is the inline
-// delete/dismiss affordance. The Integrations marketplace adds: Check
-// (connected state), Search (marketplace filter), ExternalLink (docs/OAuth
-// links), AlertCircle (error/warning state), ChevronDown (collapsible
-// disclosure), Plug (connector affordance/fallback), Trash2 (disconnect).
+// indicator; House/CalendarDays/ListTodo/Settings are the primary nav-rail
+// glyphs, with Circle the fallback when a module declares no icon;
+// PanelLeftClose/PanelLeftOpen toggle the sidebar and LogOut signs out;
+// Eye/EyeOff toggle password visibility; the chevrons drive prev/next
+// navigation; Pencil edits; Plus marks an inline add; Repeat marks recurring
+// calendar items; StickyNote marks notes; X dismisses. The Integrations
+// marketplace adds Check, Search, ExternalLink, AlertCircle, ChevronDown,
+// Plug (connector fallback), and Trash2 (disconnect).
 export {
   AlertCircle,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Circle,
   ExternalLink,
+  Eye,
+  EyeOff,
+  House,
+  ListTodo,
   Loader2,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plug,
+  Plus,
   Repeat,
   Search,
+  Settings,
   StickyNote,
   Trash2,
   X,

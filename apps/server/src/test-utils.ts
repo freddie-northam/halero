@@ -167,4 +167,5 @@ export interface TrpcSuccess<T> {
 export interface StatusData {
   readonly needsSetup: boolean;
   readonly authenticated: boolean;
+  readonly displayName: string | null;
 }

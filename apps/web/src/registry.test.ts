@@ -11,6 +11,7 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 import {
+  buildCalendarApi,
   buildCommands,
   buildEntityLinks,
   buildNav,
@@ -34,6 +35,20 @@ const stubTask = {
   completedAt: null,
 };
 
+const stubEvent = {
+  entityId: "ev-1",
+  title: "Standup",
+  allDay: true,
+  start: 0,
+  end: 0,
+  location: null,
+  calendarId: "halero-local",
+  recurring: false,
+  notes: null,
+  url: null,
+  editable: true,
+};
+
 const stubClient = {
   modules: {
     calendar: {
@@ -43,6 +58,21 @@ const stubClient = {
       },
       range: {
         query: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
+      },
+      events: {
+        query: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+      },
+      upcoming: {
+        query: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+      },
+      createEvent: {
+        mutate: () => Promise.resolve(stubEvent),
+      },
+      updateEvent: {
+        mutate: () => Promise.resolve(stubEvent),
+      },
+      deleteEvent: {
+        mutate: () => Promise.resolve({ entityId: stubEvent.entityId }),
       },
     },
     tasks: {
@@ -80,6 +110,11 @@ const stubApi = {
 const stubCalendarApi: CalendarApi = {
   today: () => Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14" }),
   range: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
+  events: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+  upcoming: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+  createEvent: () => Promise.reject(new Error("not under test")),
+  updateEvent: () => Promise.reject(new Error("not under test")),
+  deleteEvent: () => Promise.reject(new Error("not under test")),
 };
 
 const stubTasksApi: TasksApi = {
@@ -110,7 +145,7 @@ describe("the shipped web module registry", () => {
     );
 
     expect(calendar?.nav).toEqual([
-      { label: "Calendar", path: "/calendar", order: 20 },
+      { label: "Calendar", path: "/calendar", order: 20, icon: "calendar" },
     ]);
     expect(calendar?.pages?.map((page) => page.path)).toEqual(["/calendar"]);
   });
@@ -118,14 +153,18 @@ describe("the shipped web module registry", () => {
   test("provides the home page and Today nav entry from the today module", () => {
     const today = modulesUnderTest().find((module) => module.id === "today");
 
-    expect(today?.nav).toEqual([{ label: "Today", path: "/", order: 10 }]);
+    expect(today?.nav).toEqual([
+      { label: "Today", path: "/", order: 10, icon: "home" },
+    ]);
     expect(today?.pages?.map((page) => page.path)).toEqual(["/"]);
   });
 
   test("provides the tasks page and nav entry from the module", () => {
     const tasks = modulesUnderTest().find((module) => module.id === "tasks");
 
-    expect(tasks?.nav).toEqual([{ label: "Tasks", path: "/tasks", order: 30 }]);
+    expect(tasks?.nav).toEqual([
+      { label: "Tasks", path: "/tasks", order: 30, icon: "tasks" },
+    ]);
     expect(tasks?.pages?.map((page) => page.path)).toEqual(["/tasks"]);
   });
 
@@ -136,6 +175,55 @@ describe("the shipped web module registry", () => {
       { id: "calendar.agenda", order: 10 },
       { id: "tasks.dueToday", order: 20 },
     ]);
+  });
+});
+
+describe("buildCalendarApi", () => {
+  test("invalidates through the registry-held QueryClient after each mutation", async () => {
+    const queryClient = new QueryClient();
+    let invalidations = 0;
+    const original = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = ((...args: []) => {
+      invalidations += 1;
+      return original(...args);
+    }) as QueryClient["invalidateQueries"];
+    const api = buildCalendarApi(stubClient, queryClient);
+
+    await api.createEvent({
+      title: "Standup",
+      allDay: true,
+      date: "2023-11-14",
+    });
+    expect(invalidations).toBe(1);
+    await api.updateEvent({
+      entityId: "ev-1",
+      title: "Standup",
+      allDay: true,
+      date: "2023-11-14",
+    });
+    expect(invalidations).toBe(2);
+    await api.deleteEvent("ev-1");
+    expect(invalidations).toBe(3);
+  });
+
+  test("reads pass straight through without invalidating", async () => {
+    const queryClient = new QueryClient();
+    let invalidations = 0;
+    queryClient.invalidateQueries = (() => {
+      invalidations += 1;
+      return Promise.resolve();
+    }) as QueryClient["invalidateQueries"];
+    const api = buildCalendarApi(stubClient, queryClient);
+
+    const today = await api.today();
+    const range = await api.range("2023-11-14", "2023-11-15");
+    const events = await api.events("2023-11-14", "2023-11-15");
+    const upcoming = await api.upcoming(1);
+    expect(today.today).toBe("2023-11-14");
+    expect(range.days).toEqual([]);
+    expect(events.events).toEqual([]);
+    expect(upcoming.events).toEqual([]);
+    expect(invalidations).toBe(0);
   });
 });
 

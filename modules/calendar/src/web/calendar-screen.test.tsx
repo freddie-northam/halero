@@ -7,9 +7,21 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import type { AgendaDay, AgendaEvent, CalendarRange } from "../contract";
-import { type CalendarApi, createCalendarScreen } from "./calendar-screen";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  within,
+} from "@testing-library/react";
+import type {
+  AgendaDay,
+  AgendaEvent,
+  CalendarEventList,
+  CalendarRange,
+} from "../contract";
+import type { CalendarApi, CalendarEventInput } from "./api";
+import { createCalendarScreen } from "./calendar-screen";
 import { normalizeCalendarSearch } from "./helpers/calendar-search";
 import { registerHappyDom, unregisterHappyDom } from "./test/happy-dom";
 
@@ -44,6 +56,9 @@ const event = (seed: EventSeed): AgendaEvent => ({
   location: seed.location ?? null,
   calendarId: "primary",
   recurring: seed.recurring ?? false,
+  notes: null,
+  url: null,
+  editable: false,
 });
 
 // 2025-07-02 is a Wednesday; London is on BST (UTC+1) in July.
@@ -81,6 +96,11 @@ const fixtureDays: readonly AgendaDay[] = [
   },
 ];
 
+/** The flat, deduplicated feed the list view fetches instead of `range`. */
+const fixtureEvents: readonly AgendaEvent[] = fixtureDays.flatMap(
+  (day) => day.events,
+);
+
 /** Serves any requested window from the fixture, like the server would. */
 const fixtureApi: CalendarApi = {
   today: () => Promise.resolve({ homeTimezone: HOME_TZ, today: TODAY }),
@@ -89,6 +109,15 @@ const fixtureApi: CalendarApi = {
       homeTimezone: HOME_TZ,
       days: fixtureDays.filter((day) => day.date >= from && day.date < to),
     }),
+  events: () =>
+    Promise.resolve<CalendarEventList>({
+      homeTimezone: HOME_TZ,
+      events: fixtureEvents,
+    }),
+  upcoming: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
+  createEvent: () => Promise.reject(new Error("not under test")),
+  updateEvent: () => Promise.reject(new Error("not under test")),
+  deleteEvent: () => Promise.reject(new Error("not under test")),
 };
 
 const renderCalendar = async (api: CalendarApi, url: string) => {
@@ -116,6 +145,10 @@ const renderCalendar = async (api: CalendarApi, url: string) => {
 
 const searchOf = (router: { state: { location: { search: unknown } } }) =>
   normalizeCalendarSearch(router.state.location.search);
+
+/** The context panel is the page's one "Event details" landmark. */
+const contextPanel = (view: ReturnType<typeof render>) =>
+  within(view.getByRole("complementary", { name: "Event details" }));
 
 test("defaults to the agenda anchored on the server's today", async () => {
   const { view } = await renderCalendar(fixtureApi, "/calendar");
@@ -201,7 +234,7 @@ test("week view puts all-day events above timed ones and marks recurrence", asyn
 
 test("shows the empty state when the window has no events", async () => {
   const emptyApi: CalendarApi = {
-    today: fixtureApi.today,
+    ...fixtureApi,
     range: () => Promise.resolve({ homeTimezone: HOME_TZ, days: [] }),
   };
   const { view } = await renderCalendar(emptyApi, "/calendar");
@@ -211,7 +244,7 @@ test("shows the empty state when the window has no events", async () => {
 
 test("shows a readable error when the range cannot load", async () => {
   const failingApi: CalendarApi = {
-    today: fixtureApi.today,
+    ...fixtureApi,
     range: () =>
       Promise.reject(new Error("You need to sign in before doing that.")),
   };
@@ -220,4 +253,485 @@ test("shows a readable error when the range cannot load", async () => {
   expect(
     await view.findByText("You need to sign in before doing that."),
   ).toBeTruthy();
+});
+
+test("a failed range does not strand the list view behind a stale error", async () => {
+  const failingRangeApi: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.reject(new Error("You need to sign in before doing that.")),
+  };
+  const { view } = await renderCalendar(
+    failingRangeApi,
+    "/calendar?view=month",
+  );
+  await view.findByText("You need to sign in before doing that.");
+
+  const listTab = view.getByRole("tab", { name: "List" });
+  fireEvent.mouseDown(listTab, { button: 0 });
+  fireEvent.click(listTab);
+
+  // The list feed loads fine; the disabled range query's frozen error
+  // must not keep blocking the view it no longer drives.
+  expect(await view.findByRole("table")).toBeTruthy();
+  expect(view.queryByText("You need to sign in before doing that.")).toBeNull();
+});
+
+test("the New event button opens the create modal at the anchor and closes on success", async () => {
+  const calls: CalendarEventInput[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    createEvent: (input) => {
+      calls.push(input);
+      return Promise.resolve({
+        entityId: "ev-new",
+        title: input.title,
+        allDay: input.allDay,
+        start: 0,
+        end: 0,
+        location: null,
+        calendarId: "halero-local",
+        recurring: false,
+        notes: null,
+        url: null,
+        editable: true,
+      });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  await act(async () => {
+    fireEvent.click(view.getByRole("button", { name: "New event" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("New event")).toBeTruthy();
+
+  fireEvent.change(view.getByLabelText("Title"), {
+    target: { value: "Team sync" },
+  });
+  await act(async () => {
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toEqual([
+    { title: "Team sync", allDay: true, date: "2025-07-02" },
+  ]);
+  // Flushes the dialog's exit-animation state update (Radix Presence),
+  // which lands a tick after the click's own act() settles.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByRole("dialog")).toBeNull();
+});
+
+test("clicking a user event's chip selects it into the panel; its Edit button opens the modal", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+  expect(panel.getAllByText("1:1 with Sam").length).toBeGreaterThan(0);
+  expect(view.queryByRole("dialog")).toBeNull();
+
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+});
+
+test("saving an edit opened from the panel calls updateEvent and closes the modal", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const calls: unknown[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+    updateEvent: (input) => {
+      calls.push(input);
+      return Promise.resolve({ ...editableEvent, editable: true });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  await act(async () => {
+    fireEvent.click(contextPanel(view).getByRole("button", { name: "Edit" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toHaveLength(1);
+  // Flushes the dialog's exit-animation state update (Radix Presence),
+  // which lands a tick after the click's own act() settles.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByRole("dialog")).toBeNull();
+});
+
+test("a second edit from the panel prefills from the saved state, not a stale snapshot", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const calls: { readonly title?: string }[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+    // Echo the submitted title back as the server would, so the refreshed
+    // selection reflects the save.
+    updateEvent: (input) => {
+      calls.push({ title: input.title });
+      return Promise.resolve({
+        ...editableEvent,
+        editable: true,
+        title: input.title ?? editableEvent.title,
+      });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const firstDialog = within(await view.findByRole("dialog"));
+  fireEvent.change(firstDialog.getByLabelText("Title"), {
+    target: { value: "1:1 with Sam (moved)" },
+  });
+  await act(async () => {
+    fireEvent.click(firstDialog.getByRole("button", { name: "Save" }));
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  // The panel snapshot refreshed to the saved title.
+  expect(panel.getAllByText("1:1 with Sam (moved)").length).toBeGreaterThan(0);
+
+  // Editing again and saving unchanged must preserve the renamed title,
+  // not revert it (full-replace over a stale snapshot would drop it).
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const secondDialog = within(await view.findByRole("dialog"));
+  expect(secondDialog.getByLabelText("Title").getAttribute("value")).toBe(
+    "1:1 with Sam (moved)",
+  );
+  await act(async () => {
+    fireEvent.click(secondDialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.title).toBe("1:1 with Sam (moved)");
+});
+
+test("deleting from an edit modal opened from the panel calls deleteEvent, closes it, and clears the selection", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const deletes: string[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+    deleteEvent: (entityId) => {
+      deletes.push(entityId);
+      return Promise.resolve({ entityId });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(dialog.getByRole("button", { name: "Delete" }));
+  });
+
+  expect(deletes).toEqual(["ev-user"]);
+  // Flushes the dialog's exit-animation state update (Radix Presence),
+  // which lands a tick after the click's own act() settles.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByRole("dialog")).toBeNull();
+  expect(panel.queryByText("Selected")).toBeNull();
+});
+
+test("clicking a Google event selects it into the panel with no Edit button", async () => {
+  const googleEvent = event({
+    entityId: "ev-google",
+    title: "Dentist",
+    start: Date.UTC(2025, 6, 2, 8, 30, 0),
+    end: Date.UTC(2025, 6, 2, 8, 45, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [googleEvent] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("Dentist"));
+
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+  expect(panel.getAllByText("Dentist").length).toBeGreaterThan(0);
+  expect(panel.queryByRole("button", { name: "Edit" })).toBeNull();
+});
+
+test("clearing the selection removes the Selected section from the panel", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    allDay: true,
+    start: Date.UTC(2025, 6, 2, 23, 0, 0),
+    end: Date.UTC(2025, 6, 3, 23, 0, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: () =>
+      Promise.resolve<CalendarRange>({
+        homeTimezone: HOME_TZ,
+        days: [{ date: TODAY, events: [{ ...editableEvent, editable: true }] }],
+      }),
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  fireEvent.click(view.getByTitle("1:1 with Sam"));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
+  fireEvent.click(panel.getByRole("button", { name: "Clear selection" }));
+
+  expect(panel.queryByText("Selected")).toBeNull();
+});
+
+test("the panel's Next up card shows the soonest upcoming event", async () => {
+  const upcomingEvent = event({
+    entityId: "ev-upcoming",
+    title: "Board sync",
+    start: Date.UTC(2025, 6, 4, 9, 0, 0),
+    end: Date.UTC(2025, 6, 4, 9, 30, 0),
+  });
+  const api: CalendarApi = {
+    ...fixtureApi,
+    upcoming: () =>
+      Promise.resolve({ homeTimezone: HOME_TZ, events: [upcomingEvent] }),
+  };
+  const { view } = await renderCalendar(api, "/calendar");
+  await view.findByText("Wednesday 2 July");
+
+  const panel = contextPanel(view);
+  expect(await panel.findByText("Board sync")).toBeTruthy();
+});
+
+test("the panel shows Nothing coming up when there is no upcoming event", async () => {
+  const { view } = await renderCalendar(fixtureApi, "/calendar");
+  await view.findByText("Wednesday 2 July");
+
+  expect(
+    await contextPanel(view).findByText("Nothing coming up."),
+  ).toBeTruthy();
+});
+
+test("an upcoming fetch error does not hide the calendar", async () => {
+  const api: CalendarApi = {
+    ...fixtureApi,
+    upcoming: () => Promise.reject(new Error("boom")),
+  };
+  const { view } = await renderCalendar(api, "/calendar");
+
+  expect(await view.findByText("Wednesday 2 July")).toBeTruthy();
+  expect(
+    await contextPanel(view).findByText("Nothing coming up."),
+  ).toBeTruthy();
+});
+
+test("the list view fetches via api.events and renders the table; range is not fetched", async () => {
+  let rangeCalls = 0;
+  let eventsCalls = 0;
+  const api: CalendarApi = {
+    ...fixtureApi,
+    range: (from, to) => {
+      rangeCalls += 1;
+      return fixtureApi.range(from, to);
+    },
+    events: (from, to) => {
+      eventsCalls += 1;
+      return fixtureApi.events(from, to);
+    },
+  };
+  const { view, router } = await renderCalendar(
+    api,
+    "/calendar?view=list&date=2025-07-02",
+  );
+
+  expect(await view.findByRole("table")).toBeTruthy();
+  expect(view.getByText("Standup")).toBeTruthy();
+  expect(searchOf(router)).toEqual({ view: "list", date: "2025-07-02" });
+  const listTab = view.getByRole("tab", { name: "List" });
+  expect(listTab.getAttribute("aria-selected")).toBe("true");
+  expect(rangeCalls).toBe(0);
+  expect(eventsCalls).toBeGreaterThan(0);
+});
+
+test("the other views never fetch the flat events feed", async () => {
+  let eventsCalls = 0;
+  const api: CalendarApi = {
+    ...fixtureApi,
+    events: (from, to) => {
+      eventsCalls += 1;
+      return fixtureApi.events(from, to);
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=month&date=2025-07-02",
+  );
+  await view.findByText("July 2025");
+
+  expect(eventsCalls).toBe(0);
+});
+
+test("the list view's empty state renders when the feed has no events", async () => {
+  const emptyApi: CalendarApi = {
+    ...fixtureApi,
+    events: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
+  };
+  const { view } = await renderCalendar(emptyApi, "/calendar?view=list");
+
+  expect(await view.findByText("No events this month.")).toBeTruthy();
+});
+
+test("selecting a user event from the list view and clicking Edit opens the modal and saves", async () => {
+  const editableEvent = event({
+    entityId: "ev-user",
+    title: "1:1 with Sam",
+    start: Date.UTC(2025, 6, 2, 8, 0, 0),
+    end: Date.UTC(2025, 6, 2, 9, 0, 0),
+  });
+  const calls: unknown[] = [];
+  const api: CalendarApi = {
+    ...fixtureApi,
+    events: () =>
+      Promise.resolve<CalendarEventList>({
+        homeTimezone: HOME_TZ,
+        events: [{ ...editableEvent, editable: true }],
+      }),
+    updateEvent: (input) => {
+      calls.push(input);
+      return Promise.resolve({ ...editableEvent, editable: true });
+    },
+  };
+  const { view } = await renderCalendar(
+    api,
+    "/calendar?view=list&date=2025-07-02",
+  );
+
+  fireEvent.click(await view.findByRole("button", { name: /1:1 with Sam/ }));
+  const panel = contextPanel(view);
+  expect(panel.getByText("Selected")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(panel.getByRole("button", { name: "Edit" }));
+  });
+  const dialog = within(await view.findByRole("dialog"));
+  expect(dialog.getByText("Edit event")).toBeTruthy();
+
+  await act(async () => {
+    fireEvent.click(dialog.getByRole("button", { name: "Save" }));
+  });
+
+  expect(calls).toHaveLength(1);
+  // Flushes the dialog's exit-animation state update (Radix Presence),
+  // which lands a tick after the click's own act() settles.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(view.queryByRole("dialog")).toBeNull();
 });

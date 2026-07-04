@@ -12,6 +12,12 @@ import "./note-editor.css";
 
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/shadcn";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@halero/ui";
 import { type ReactElement, useEffect, useRef } from "react";
 import type { NoteDocument } from "../../contract";
 import { type Autosaver, createAutosaver } from "../helpers/autosave";
@@ -81,6 +87,12 @@ export const NoteEditor = ({
         // "no external services" design forbids. Disabling it keeps the
         // ":" trigger from ever reaching out.
         emojiPicker={false}
+        // Use Halero's own tooltip so the toolbar matches the rest of the
+        // app (a dark bubble with a matching arrow); BlockNote's bundled
+        // default rendered a coral bubble with a mismatched caret.
+        shadCNComponents={{
+          Tooltip: { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger },
+        }}
         onChange={() => autosaverRef.current?.schedule(editor.document)}
       />
     </div>
