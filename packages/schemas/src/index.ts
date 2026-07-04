@@ -5,6 +5,11 @@ export {
   UNTITLED_EVENT_TITLE,
 } from "./calendar-event";
 export {
+  F1_SESSION_KIND,
+  type F1SessionSatellite,
+  f1SessionSatelliteSchema,
+} from "./f1-session";
+export {
   NOTE_ITEM_KIND,
   type NoteSatellite,
   noteSatelliteSchema,

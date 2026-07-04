@@ -64,6 +64,8 @@ own domain, Tailscale Serve).
   API tokens for non-browser clients.
 - [docs/raycast.md](docs/raycast.md): the Raycast extension, its commands
   and preferences, and running it locally.
+- [docs/f1.md](docs/f1.md): the F1 module, its customizable boards, and
+  connecting your own OpenF1 account for live timing.
 
 ## Development
 

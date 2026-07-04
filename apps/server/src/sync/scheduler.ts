@@ -17,6 +17,12 @@ export interface SchedulerContext {
   readonly health?: SchedulerHealth;
 }
 
+/** Any background job whose lifecycle the scheduler drives. */
+export interface LifecycleJob {
+  readonly start: () => void;
+  readonly stop: () => void;
+}
+
 export interface SchedulerOptions {
   readonly intervalSeconds?: number;
   /**
@@ -24,6 +30,11 @@ export interface SchedulerOptions {
    * switch starts and stops all background work.
    */
   readonly maintenance?: MaintenanceJob;
+  /**
+   * Extra background jobs (e.g. F1 notifications) that start and stop with
+   * the scheduler, so one switch still controls everything.
+   */
+  readonly jobs?: readonly LifecycleJob[];
 }
 
 export interface SyncScheduler {
@@ -106,6 +117,9 @@ export const createScheduler = (
         return;
       }
       options.maintenance?.start();
+      for (const extra of options.jobs ?? []) {
+        extra.start();
+      }
       ctx.health?.markStarted(ctx.now());
       // The every-second pattern gated by `interval` yields one tick per
       // intervalSeconds; `protect` skips a tick while the previous one
@@ -124,6 +138,9 @@ export const createScheduler = (
     },
     stop: () => {
       options.maintenance?.stop();
+      for (const extra of options.jobs ?? []) {
+        extra.stop();
+      }
       ctx.health?.markStopped();
       job?.stop();
       job = null;

@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { createApp } from "./app";
 import { boot } from "./boot";
 import { loadConfig } from "./config";
+import { createF1NotificationJob } from "./f1-live/notifications";
 import { createSchedulerHealth } from "./healthz";
 import { createNotifier } from "./notifier";
 import { createMaintenanceJob } from "./sync/maintenance";
@@ -45,9 +46,19 @@ const maintenance = createMaintenanceJob({
   backupsDir: join(config.dataDir, "backups"),
   now,
 });
+// F1 notifications ride the same lifecycle switch: session-start reminders
+// and (with a live credential) big race-control events, both best-effort
+// through the same notify_url as sync failures.
+const f1Notifications = createF1NotificationJob({
+  db: database.db,
+  key,
+  now,
+  outboundFetch: fetch,
+  notifier,
+});
 const scheduler = createScheduler(
   { db: database.db, now, runner: syncRunner, health: schedulerHealth },
-  { maintenance },
+  { maintenance, jobs: [f1Notifications] },
 );
 
 Bun.serve({ port: config.port, fetch: app.fetch });
