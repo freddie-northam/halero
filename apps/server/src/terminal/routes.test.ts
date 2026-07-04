@@ -26,6 +26,7 @@ const mountedRequest = (
         port: 4253,
         baseUrl: new URL("http://localhost:4253"),
         developerTerminal,
+        agentsRepo: null,
       },
       manager: null,
     }),

@@ -1,6 +1,7 @@
 import type { FetchLike } from "@halero/connector-sdk";
 import type { EntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
+import type { AgentRunManager } from "../agents/agent-run";
 import type { LoginRateLimiter } from "../auth";
 import type { HaleroConfig } from "../config";
 import type { Principal } from "../middleware/session";
@@ -22,6 +23,8 @@ export interface TrpcContext {
   readonly syncRunner: SyncRunner;
   /** Sends failure/test notifications to the configured notify_url. */
   readonly notifier: Notifier;
+  /** Agent-run registry; null unless agent orchestration is enabled. */
+  readonly agents: AgentRunManager | null;
   readonly setSessionCookie: (token: string) => void;
   readonly clearSessionCookie: () => void;
 }

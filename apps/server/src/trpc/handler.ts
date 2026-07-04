@@ -3,6 +3,7 @@ import { createEntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { Handler } from "hono";
+import { createAgentRunManager } from "../agents/create-manager";
 import {
   buildClearSessionCookie,
   buildSessionCookie,
@@ -50,6 +51,9 @@ export const createTrpcHandler = (
   // One store per app, not per request: it is a stateless bundle of
   // closures over the shared database handle.
   const entities = createEntityStore(database);
+  // One agent-run registry per app (null unless enabled): it holds live
+  // run state across requests, so it cannot be per-request.
+  const agents = createAgentRunManager(config, now);
   // Evaluated when a cookie is built, not when the handler is created, so
   // the Secure flag follows the same base-URL authority as everything else
   // (even for the setup request that stores base_url itself).
@@ -69,6 +73,7 @@ export const createTrpcHandler = (
       outboundFetch,
       syncRunner,
       notifier,
+      agents,
       setSessionCookie: (token) =>
         cookies.push(buildSessionCookie(token, secure())),
       clearSessionCookie: () => cookies.push(buildClearSessionCookie(secure())),

@@ -19,6 +19,8 @@ export interface AgentRunResult {
 
 export interface AgentRunInfo {
   readonly id: string;
+  /** Which agent this run is (e.g. "claude"), for display. */
+  readonly label: string;
   readonly branch: string;
   readonly status: RunStatus;
   readonly createdAt: number;
@@ -27,6 +29,8 @@ export interface AgentRunInfo {
 
 export interface StartRunOptions {
   readonly id?: string;
+  /** Display label for the run, e.g. the agent id. */
+  readonly label?: string;
   readonly command: string;
   readonly args?: readonly string[];
   readonly cols?: number;
@@ -35,6 +39,7 @@ export interface StartRunOptions {
 
 interface AgentRunDeps {
   readonly id: string;
+  readonly label: string;
   readonly worktree: Worktree;
   readonly session: PtySession;
   readonly createdAt: number;
@@ -44,6 +49,7 @@ interface AgentRunDeps {
 
 export class AgentRun {
   readonly id: string;
+  readonly label: string;
   readonly branch: string;
   readonly path: string;
   readonly createdAt: number;
@@ -52,18 +58,27 @@ export class AgentRun {
   readonly #session: PtySession;
   #status: RunStatus = "running";
   #exitCode: number | null = null;
+  #output = "";
+  #result: AgentRunResult | null = null;
 
   constructor(deps: AgentRunDeps) {
     this.id = deps.id;
+    this.label = deps.label;
     this.branch = deps.worktree.branch;
     this.path = deps.worktree.path;
     this.createdAt = deps.createdAt;
     this.#session = deps.session;
+    // Accumulate the agent's terminal output so a run's log is fetchable
+    // even by a client that connects after it started.
+    deps.session.onData((chunk) => {
+      this.#output += chunk;
+    });
     this.completion = deps.session.exited.then(async (code) => {
       this.#exitCode = code;
       this.#status = code === 0 ? "succeeded" : "failed";
       const diff = await deps.worktrees.diff(deps.worktree, deps.base);
-      return { status: this.#status, exitCode: code, diff };
+      this.#result = { status: this.#status, exitCode: code, diff };
+      return this.#result;
     });
   }
 
@@ -73,6 +88,16 @@ export class AgentRun {
 
   get exitCode(): number | null {
     return this.#exitCode;
+  }
+
+  /** The agent's terminal output so far. */
+  output(): string {
+    return this.#output;
+  }
+
+  /** The settled result (status, exit code, diff), or null while running. */
+  result(): AgentRunResult | null {
+    return this.#result;
   }
 
   onData(listener: (chunk: string) => void): void {
@@ -94,6 +119,7 @@ export class AgentRun {
   info(): AgentRunInfo {
     return {
       id: this.id,
+      label: this.label,
       branch: this.branch,
       status: this.#status,
       createdAt: this.createdAt,
@@ -147,6 +173,7 @@ export class AgentRunManager {
     });
     const run = new AgentRun({
       id,
+      label: options.label ?? options.command,
       worktree,
       session,
       createdAt: this.#now(),

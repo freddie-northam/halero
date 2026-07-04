@@ -1,5 +1,6 @@
 import { f1LiveRouter } from "../f1-live/router";
 import { modulesRouter } from "../registry";
+import { agentsRouter } from "./agents-router";
 import { authRouter } from "./auth-router";
 import { connectionsRouter } from "./connections-router";
 import { router } from "./init";
@@ -11,6 +12,7 @@ import { tokensRouter } from "./tokens-router";
 export const appRouter = router({
   system: systemRouter,
   auth: authRouter,
+  agents: agentsRouter,
   connections: connectionsRouter,
   f1Live: f1LiveRouter,
   notifications: notificationsRouter,

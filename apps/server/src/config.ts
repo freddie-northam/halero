@@ -10,6 +10,13 @@ export interface HaleroConfig {
    * requests. Never enable on a network-exposed instance.
    */
   readonly developerTerminal: boolean;
+  /**
+   * Absolute path to the git repository agent runs operate on, or null
+   * when unset. Agent orchestration is available only when this is set
+   * AND developerTerminal is on. Runs branch from the repo's HEAD in
+   * isolated worktrees; the user's working tree is never touched.
+   */
+  readonly agentsRepo: string | null;
 }
 
 /**
@@ -55,6 +62,7 @@ const envSchema = z.object({
     .enum(["0", "1", "true", "false"])
     .optional()
     .transform((value) => value === "1" || value === "true"),
+  HALERO_AGENTS_REPO: z.string().min(1).optional(),
 });
 
 export const loadConfig = (
@@ -65,6 +73,7 @@ export const loadConfig = (
     HALERO_PORT: env.HALERO_PORT,
     HALERO_BASE_URL: env.HALERO_BASE_URL,
     HALERO_DEVELOPER_TERMINAL: env.HALERO_DEVELOPER_TERMINAL,
+    HALERO_AGENTS_REPO: env.HALERO_AGENTS_REPO,
   });
   if (!parsed.success) {
     const details = parsed.error.issues.map((issue) => issue.message).join(" ");
@@ -79,5 +88,6 @@ export const loadConfig = (
     port: HALERO_PORT,
     baseUrl,
     developerTerminal: parsed.data.HALERO_DEVELOPER_TERMINAL,
+    agentsRepo: parsed.data.HALERO_AGENTS_REPO ?? null,
   };
 };
