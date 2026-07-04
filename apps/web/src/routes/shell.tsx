@@ -36,6 +36,23 @@ export interface ShellScreenProps {
 const SHELL_STYLE = { "--sidebar-width": "14rem" } as CSSProperties;
 
 /**
+ * The nav entry a route belongs to. A module's detail routes (e.g. the
+ * Notes editor at "/notes/$noteId") are not themselves nav entries, so an
+ * exact match alone leaves them with no active item and no header title;
+ * fall back to the deepest nav entry whose path is a segment-boundary
+ * prefix of the active path. Root ("/") only ever matches exactly, since
+ * it prefixes everything.
+ */
+export const navItemFor = (
+  nav: readonly SidebarNavItem[],
+  activePath: string,
+): SidebarNavItem | undefined =>
+  nav.find((item) => item.path === activePath) ??
+  nav.find(
+    (item) => item.path !== "/" && activePath.startsWith(`${item.path}/`),
+  );
+
+/**
  * The collapse choice the sidebar persisted in the `sidebar_state` cookie, so
  * it survives a reload. The vendored SidebarProvider writes the cookie but
  * defaults to open on mount, so the shell seeds `defaultOpen` from it.
@@ -63,7 +80,8 @@ export const ShellScreen = ({
     mutationFn: () => api.logout(),
     onSuccess: onLoggedOut,
   });
-  const title = nav.find((item) => item.path === activePath)?.label;
+  const activeItem = navItemFor(nav, activePath);
+  const title = activeItem?.label;
 
   return (
     <SidebarProvider
@@ -73,7 +91,7 @@ export const ShellScreen = ({
     >
       <AppSidebar
         items={nav}
-        activePath={activePath}
+        activePath={activeItem?.path ?? activePath}
         onNavigate={onNavigate}
         onLogout={() => logout.mutate()}
         logoutPending={logout.isPending}

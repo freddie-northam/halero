@@ -52,7 +52,7 @@ export const calendarEvents = sqliteTable("calendar_events", {
   recurringEventId: text("recurring_event_id"),
   originalStartTime: text("original_start_time"),
   raw: text("raw"),
-  // Added by migrations/0007_calendar_event_notes_url.sql.
+  // Added by migrations/0008_calendar_event_notes_url.sql.
   notes: text("notes"),
   url: text("url"),
 });
