@@ -14,6 +14,9 @@ import { GridWidget } from "./grid";
 import { HeadToHeadWidget } from "./head-to-head";
 import { LapChartWidget } from "./lap-chart";
 import { LatestResultWidget } from "./latest-result";
+import { LiveControlWidget } from "./live-control";
+import { LiveTimingTowerWidget } from "./live-timing-tower";
+import { LiveWeatherWidget } from "./live-weather";
 import { NextRaceWidget } from "./next-race";
 import { OvertakesWidget } from "./overtakes";
 import { PitStopsWidget } from "./pit-stops";
@@ -152,6 +155,27 @@ export const WIDGETS: Readonly<Record<string, WidgetDef>> = {
     defaultSize: "m",
     Component: HeadToHeadWidget,
   },
+  "live-timing-tower": {
+    type: "live-timing-tower",
+    title: "Live timing",
+    category: "Live",
+    defaultSize: "l",
+    Component: LiveTimingTowerWidget,
+  },
+  "live-control": {
+    type: "live-control",
+    title: "Live timing status",
+    category: "Live",
+    defaultSize: "m",
+    Component: LiveControlWidget,
+  },
+  "live-weather": {
+    type: "live-weather",
+    title: "Live weather",
+    category: "Live",
+    defaultSize: "m",
+    Component: LiveWeatherWidget,
+  },
 };
 
 /** The registry in display order, for the add-widget menu. */
@@ -172,4 +196,7 @@ export const WIDGET_LIST: readonly WidgetDef[] = [
   WIDGETS.weather,
   WIDGETS.grid,
   WIDGETS["head-to-head"],
+  WIDGETS["live-timing-tower"],
+  WIDGETS["live-control"],
+  WIDGETS["live-weather"],
 ].filter((def): def is WidgetDef => def !== undefined);

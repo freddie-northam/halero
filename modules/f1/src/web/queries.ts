@@ -33,6 +33,10 @@ export const f1RaceSessionsKey = [...f1RootKey, "raceSessions"] as const;
 export const f1DetailKey = (name: string, sessionKey: number | null) =>
   [...f1RootKey, name, sessionKey] as const;
 
+/** The live-timing queries (status, session, tower, weather). */
+export const f1LiveKey = [...f1RootKey, "live"] as const;
+export const f1LiveLeafKey = (leaf: string) => [...f1LiveKey, leaf] as const;
+
 /**
  * Wraps an F1Api so every successful board mutation invalidates the
  * board list and resolves only after active queries refetched. Reads and
@@ -45,6 +49,9 @@ export const withF1Invalidation = (
 ): F1Api => {
   const invalidateBoards = async (): Promise<void> => {
     await queryClient.invalidateQueries({ queryKey: f1BoardsKey });
+  };
+  const invalidateLive = async (): Promise<void> => {
+    await queryClient.invalidateQueries({ queryKey: f1LiveKey });
   };
   return {
     schedule: api.schedule,
@@ -64,6 +71,22 @@ export const withF1Invalidation = (
     overtakes: api.overtakes,
     weather: api.weather,
     startingGrid: api.startingGrid,
+    live: {
+      status: api.live.status,
+      session: api.live.session,
+      timing: api.live.timing,
+      weather: api.live.weather,
+      connect: async (input) => {
+        const result = await api.live.connect(input);
+        await invalidateLive();
+        return result;
+      },
+      disconnect: async () => {
+        const result = await api.live.disconnect();
+        await invalidateLive();
+        return result;
+      },
+    },
     boards: {
       list: api.boards.list,
       create: async (input) => {

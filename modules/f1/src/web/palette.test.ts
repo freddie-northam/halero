@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { flagColour, formatLapTime, tyreColour } from "./palette";
+import { flagColour, formatLapTime, tyreColour, windCompass } from "./palette";
 
 describe("tyreColour", () => {
   test("maps known compounds case-insensitively", () => {
@@ -41,5 +41,24 @@ describe("formatLapTime", () => {
   test("returns a dash for null or invalid durations", () => {
     expect(formatLapTime(null)).toBe("-");
     expect(formatLapTime(-1)).toBe("-");
+  });
+});
+
+describe("windCompass", () => {
+  test("maps cardinal and intercardinal bearings", () => {
+    expect(windCompass(0)).toBe("N");
+    expect(windCompass(45)).toBe("NE");
+    expect(windCompass(180)).toBe("S");
+    expect(windCompass(315)).toBe("NW");
+  });
+
+  test("wraps bearings past a full turn back to north", () => {
+    expect(windCompass(350)).toBe("N");
+    expect(windCompass(360)).toBe("N");
+  });
+
+  test("returns an empty string for null or non-finite bearings", () => {
+    expect(windCompass(null)).toBe("");
+    expect(windCompass(Number.NaN)).toBe("");
   });
 });

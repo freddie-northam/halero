@@ -168,6 +168,23 @@ export const formatGap = (gap: string | null): string => {
   return trimmed === "" ? "" : trimmed;
 };
 
+/** The eight-point compass headings, clockwise from due north. */
+const COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+/**
+ * A wind bearing in degrees rendered as an eight-point compass heading,
+ * e.g. 45 becomes "NE". Returns an empty string for a null or non-finite
+ * bearing so the label simply drops out. Bearings wrap, so 350 reads "N".
+ */
+export const windCompass = (degrees: number | null): string => {
+  if (degrees === null || !Number.isFinite(degrees)) {
+    return "";
+  }
+  const normalised = ((degrees % 360) + 360) % 360;
+  const index = Math.round(normalised / 45) % COMPASS_POINTS.length;
+  return COMPASS_POINTS[index] ?? "";
+};
+
 /** Parses an ISO instant into a Date, or null when absent or invalid. */
 const parseIso = (iso: string | null): Date | null => {
   if (iso === null) {

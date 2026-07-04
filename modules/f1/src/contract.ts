@@ -239,3 +239,61 @@ export interface GridSlot {
   readonly teamColour: string | null;
   readonly headshotUrl: string | null;
 }
+
+// --- phase 3: live timing ------------------------------------------------
+
+/** Whether the user's OpenF1 live-timing credential is stored. */
+export interface LiveStatus {
+  readonly connected: boolean;
+}
+
+/** The current/most-recent session, and whether it is live right now. */
+export interface LiveSession {
+  readonly sessionKey: number;
+  readonly sessionName: string;
+  readonly sessionType: string;
+  readonly meetingName: string | null;
+  readonly countryName: string | null;
+  readonly countryFlagUrl: string | null;
+  readonly circuitShortName: string | null;
+  readonly dateStart: string | null;
+  readonly dateEnd: string | null;
+  readonly isLive: boolean;
+}
+
+/** One row of the live timing tower: a driver's current standing. */
+export interface TimingRow {
+  readonly position: number | null;
+  readonly driverNumber: number;
+  readonly nameAcronym: string | null;
+  readonly fullName: string | null;
+  readonly teamName: string | null;
+  readonly teamColour: string | null;
+  readonly gapToLeader: string | null;
+  readonly interval: string | null;
+  readonly compound: string | null;
+  readonly tyreAge: number | null;
+  readonly lastLap: number | null;
+}
+
+/**
+ * The live timing payload. `rows` is empty (and `requiresCredential` true)
+ * when a session is live but no credential is stored, so the UI can prompt
+ * to connect without erroring.
+ */
+export interface LiveTiming {
+  readonly session: LiveSession | null;
+  readonly rows: readonly TimingRow[];
+  readonly requiresCredential: boolean;
+}
+
+/** The current conditions during a live session. */
+export interface LiveWeather {
+  readonly date: string | null;
+  readonly airTemperature: number | null;
+  readonly trackTemperature: number | null;
+  readonly humidity: number | null;
+  readonly rainfall: number | null;
+  readonly windSpeed: number | null;
+  readonly windDirection: number | null;
+}

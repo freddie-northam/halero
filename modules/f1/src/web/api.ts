@@ -10,6 +10,10 @@ import type {
   DriverStanding,
   DriverStints,
   GridSlot,
+  LiveSession,
+  LiveStatus,
+  LiveTiming,
+  LiveWeather,
   NextUp,
   Overtake,
   PitStop,
@@ -34,6 +38,22 @@ export interface StandingsQuery {
 /** A required session anchor for the phase-2 race-detail queries. */
 export interface SessionQuery {
   readonly sessionKey: number;
+}
+
+/**
+ * The live-timing seam (host f1Live.* router). connect/disconnect are
+ * mutations; status/session/timing/weather are polled queries.
+ */
+export interface F1LiveApi {
+  readonly status: () => Promise<LiveStatus>;
+  readonly connect: (input: {
+    readonly username: string;
+    readonly password: string;
+  }) => Promise<{ readonly connected: true }>;
+  readonly disconnect: () => Promise<{ readonly connected: false }>;
+  readonly session: () => Promise<LiveSession | null>;
+  readonly timing: () => Promise<LiveTiming>;
+  readonly weather: () => Promise<LiveWeather | null>;
 }
 
 /** The board mutations, grouped the way the server router nests them. */
@@ -79,5 +99,6 @@ export interface F1Api {
   readonly startingGrid: (input: {
     readonly raceSessionKey: number;
   }) => Promise<GridSlot[]>;
+  readonly live: F1LiveApi;
   readonly boards: F1BoardsApi;
 }

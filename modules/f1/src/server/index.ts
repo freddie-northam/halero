@@ -27,8 +27,13 @@ export const f1ServerModule = defineServerModule({
 export type {
   Board,
   DriverStanding,
+  LiveSession,
+  LiveStatus,
+  LiveTiming,
+  LiveWeather,
   SeasonSchedule,
   SessionResult,
   TeamStanding,
+  TimingRow,
   Weekend,
 } from "../contract";

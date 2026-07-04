@@ -199,6 +199,14 @@ export const buildF1Api = (
       overtakes: (input) => client.modules.f1.overtakes.query(input),
       weather: (input) => client.modules.f1.weather.query(input),
       startingGrid: (input) => client.modules.f1.startingGrid.query(input),
+      live: {
+        status: () => client.f1Live.status.query(),
+        connect: (input) => client.f1Live.connect.mutate(input),
+        disconnect: () => client.f1Live.disconnect.mutate(),
+        session: () => client.f1Live.session.query(),
+        timing: () => client.f1Live.timing.query(),
+        weather: () => client.f1Live.weather.query(),
+      },
       boards: {
         list: () => client.modules.f1.boards.list.query(),
         create: (input) => client.modules.f1.boards.create.mutate(input),

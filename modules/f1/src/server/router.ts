@@ -1095,6 +1095,15 @@ const defaultBoards = (
       w("calendar", "l", now),
     ],
   },
+  {
+    name: "Live",
+    layout: [
+      w("live-timing-tower", "l", now),
+      w("live-control", "m", now),
+      w("live-weather", "m", now),
+      w("next-race", "m", now),
+    ],
+  },
 ];
 
 const seedBoards = (db: ModuleDb, now: number): void => {
