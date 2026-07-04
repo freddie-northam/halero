@@ -197,6 +197,21 @@ export const notes = sqliteTable("notes", {
   tags: text("tags"),
 });
 
+// Added by migrations/0008_activity.sql for the Progress heatmap.
+export const activityDaily = sqliteTable(
+  "activity_daily",
+  {
+    source: text("source").notNull(),
+    date: text("date").notNull(),
+    count: integer("count").notNull().default(0),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.source, t.date] }),
+    index("idx_activity_daily_date").on(t.date),
+  ],
+);
+
 export const apiTokens = sqliteTable("api_tokens", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),

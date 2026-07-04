@@ -10,6 +10,7 @@
 @source "../../../modules/today/src/web";
 @source "../../../modules/tasks/src/web";
 @source "../../../modules/notes/src/web";
+@source "../../../modules/progress/src/web";
 
 /* The vendored shadcn sidebar hardcodes a width transition on collapse; drop
    it for users who prefer reduced motion. */

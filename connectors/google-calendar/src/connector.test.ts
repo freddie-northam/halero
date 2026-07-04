@@ -54,6 +54,9 @@ describe("googleCalendarConnector manifest and auth", () => {
 
   test("declares offline access and forced consent as auth params", () => {
     const { auth } = googleCalendarConnector;
+    if (auth.kind !== "oauth2") {
+      throw new Error("expected the Google connector to use OAuth2");
+    }
 
     expect(auth.authorizationEndpoint).toBe(
       "https://accounts.google.com/o/oauth2/v2/auth",

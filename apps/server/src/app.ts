@@ -18,9 +18,7 @@ import {
 import { type AppEnv, sessionMiddleware } from "./middleware/session";
 import { createNotifier, type Notifier } from "./notifier";
 import { createSpaHandler, defaultWebDistDir } from "./spa";
-import { GOOGLE_CONNECTOR_ID } from "./sync/connection";
-import { createGoogleOauthRoutes } from "./sync/oauth-routes";
-import { requireConnector } from "./sync/registry";
+import { createOauthRoutes } from "./sync/oauth-routes";
 import { createSyncRunner, type SyncRunner } from "./sync/runner";
 import { createTrpcHandler } from "./trpc/handler";
 
@@ -109,15 +107,8 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
     }),
   );
   app.route(
-    "/api/oauth/google",
-    createGoogleOauthRoutes({
-      config,
-      database,
-      key,
-      now,
-      outboundFetch,
-      connector: requireConnector(GOOGLE_CONNECTOR_ID),
-    }),
+    "/api/oauth",
+    createOauthRoutes({ config, database, key, now, outboundFetch }),
   );
   app.get("*", createSpaHandler(options.webDistDir ?? defaultWebDistDir()));
 

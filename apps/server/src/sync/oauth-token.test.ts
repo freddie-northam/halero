@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { decryptCredentials, encryptCredentials } from "@halero/core";
 import { connections } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { saveOauthClient } from "../connections/oauth-client";
 import { makeTestApp, type TestApp } from "../test-utils";
-import { saveGoogleClient } from "./client-config";
 import type { ConnectionRow } from "./connection";
 import { getOauthAccessToken } from "./oauth-token";
 
@@ -18,7 +18,7 @@ const seedConnection = (
   credentials: StoredCredentials,
 ): ConnectionRow => {
   const { database, key, clock } = testApp;
-  saveGoogleClient(database.db, key, {
+  saveOauthClient(database.db, key, "google-calendar", {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: "GOCSPX-super-secret-value",
   });

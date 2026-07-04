@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { saveOauthClient } from "../connections/oauth-client";
 import { createNotifier, type NotificationPayload } from "../notifier";
 import { setSetting } from "../settings";
 import { makeTestApp, type TestApp } from "../test-utils";
-import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { createSyncRunner, type SyncRunnerContext } from "./runner";
 
@@ -20,7 +20,7 @@ interface SeedOptions {
 
 const seedConnection = (testApp: TestApp, options: SeedOptions = {}): void => {
   const { database, key, clock } = testApp;
-  saveGoogleClient(database.db, key, {
+  saveOauthClient(database.db, key, "google-calendar", {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: "GOCSPX-super-secret-value",
   });

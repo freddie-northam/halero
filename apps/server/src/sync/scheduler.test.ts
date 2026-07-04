@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { encryptCredentials } from "@halero/core";
 import { connections, syncRuns } from "@halero/db";
 import { eq } from "drizzle-orm";
+import { saveOauthClient } from "../connections/oauth-client";
 import { makeTestApp, type TestApp } from "../test-utils";
-import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { createSyncRunner, type SyncRunnerContext } from "./runner";
 import {
@@ -68,7 +68,7 @@ const makeContexts = (
   testApp: TestApp,
   outboundFetch: SyncRunnerContext["outboundFetch"] = happyFetch,
 ): { runner: ReturnType<typeof createSyncRunner>; ctx: SchedulerContext } => {
-  saveGoogleClient(testApp.database.db, testApp.key, {
+  saveOauthClient(testApp.database.db, testApp.key, "google-calendar", {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: "GOCSPX-super-secret-value",
   });

@@ -6,20 +6,23 @@
 
 export type { LucideIcon } from "lucide-react";
 // Sanctioned lucide icons: Loader2 with animate-spin is the busy
-// indicator; the chevrons drive prev/next navigation; House/CalendarDays/
-// ListTodo/Settings are the primary nav-rail glyphs, with Circle the
-// fallback when a module declares no icon; PanelLeftClose/PanelLeftOpen are
-// the stateful sidebar-toggle icons and LogOut the footer sign-out;
-// Eye/EyeOff toggle password visibility on the auth screens; Pencil is the
-// edit affordance (opens the task detail dialog); Plus marks an inline add
-// affordance (the board's per-column "+ Add task" row); Repeat marks
-// recurring calendar items; StickyNote marks tasks carrying notes; X is the
-// inline delete/dismiss affordance.
+// indicator; House/CalendarDays/ListTodo/Settings are the primary nav-rail
+// glyphs, with Circle the fallback when a module declares no icon;
+// PanelLeftClose/PanelLeftOpen toggle the sidebar and LogOut signs out;
+// Eye/EyeOff toggle password visibility; the chevrons drive prev/next
+// navigation; Pencil edits; Plus marks an inline add; Repeat marks recurring
+// calendar items; StickyNote marks notes; X dismisses. The Integrations
+// marketplace adds Check, Search, ExternalLink, AlertCircle, ChevronDown,
+// Plug (connector fallback), and Trash2 (disconnect).
 export {
+  AlertCircle,
   CalendarDays,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
+  ExternalLink,
   Eye,
   EyeOff,
   House,
@@ -29,12 +32,17 @@ export {
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
+  Plug,
   Plus,
   Repeat,
+  Search,
   Settings,
   StickyNote,
+  Trash2,
   X,
 } from "lucide-react";
+export { ConnectorLogo } from "./brand/connector-logo";
+export { InterestedAvatars } from "./brand/interested-avatars";
 export { DatePicker } from "./components/date-picker";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
@@ -50,6 +58,11 @@ export {
   CardTitle,
 } from "./components/ui/card";
 export { Checkbox } from "./components/ui/checkbox";
+export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 export {
   Command,
   CommandDialog,

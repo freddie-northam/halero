@@ -14,6 +14,11 @@ import {
   type NotesApi,
   withNotesInvalidation,
 } from "@halero/module-notes/web";
+import {
+  createProgressWebModule,
+  type ProgressApi,
+  withProgressInvalidation,
+} from "@halero/module-progress/web";
 import type {
   CommandContribution,
   EntityLinkContribution,
@@ -34,16 +39,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 
-/** Core-owned navigation. Settings stays core; modules slot in around it. */
-const coreNav: readonly NavContribution[] = [
-  {
-    label: "Settings",
-    path: "/settings",
-    order: 100,
-    icon: "settings",
-    group: "secondary",
-  },
-];
+// Settings is reached from the top-right avatar in the shell, not the
+// sidebar, so core contributes no nav entries; modules own the sidebar.
+const coreNav: readonly NavContribution[] = [];
 
 /**
  * The Today page's sections, hardcoded per the v0.1 plan's YAGNI call:
@@ -174,6 +172,7 @@ export const buildWebModules = (
   const calendarApi = buildCalendarApi(client, queryClient);
   const tasksApi = buildTasksApi(client, queryClient);
   const notesApi = buildNotesApi(client, queryClient);
+  const progressApi = buildProgressApi(client, queryClient);
   return [
     createTodayWebModule({
       api: {
@@ -187,16 +186,42 @@ export const buildWebModules = (
           ]);
           return { ...today, displayName: status.displayName };
         },
-        googleConnectionStatus: async () =>
-          (await api.googleStatus()).connection?.status ?? null,
+        // Settings' connection framework replaced api.googleStatus(); the
+        // Today card reads Google's status off the generic catalog now.
+        googleConnectionStatus: async () => {
+          const catalog = await api.connectionsCatalog();
+          return (
+            catalog.find((item) => item.id === "google-calendar")?.connection
+              ?.status ?? null
+          );
+        },
       },
       sections: buildTodaySections(calendarApi, tasksApi),
     }),
     createCalendarWebModule(calendarApi),
     createTasksWebModule(tasksApi),
     createNotesWebModule(notesApi),
+    createProgressWebModule(progressApi),
   ];
 };
+
+/**
+ * The progress seam: the module's procedures off the tRPC client, wrapped
+ * with its own invalidation helper so refresh refreshes the heatmap.
+ */
+export const buildProgressApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): ProgressApi =>
+  withProgressInvalidation(
+    {
+      status: () => client.progress.status.query(),
+      heatmap: (range, source) =>
+        client.progress.heatmap.query({ range, source }),
+      refresh: () => client.progress.refresh.mutate(),
+    },
+    queryClient,
+  );
 
 const duplicateEntityLinkMessage = (
   kind: string,

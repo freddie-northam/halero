@@ -14,6 +14,7 @@ const fakeConnector = (manifest: ConnectorManifest): AnyConnector => {
   const connector: Connector<Record<string, never>> = {
     manifest,
     auth: {
+      kind: "oauth2",
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
       scopes: ["readonly"],

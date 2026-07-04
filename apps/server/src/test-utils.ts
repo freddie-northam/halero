@@ -82,6 +82,8 @@ export interface TrpcCallOptions {
   readonly origin?: string;
   /** Raw Authorization header value, e.g. "Bearer halero_...". */
   readonly authorization?: string;
+  /** Query input; appended as tRPC's ?input=<json> for query procedures. */
+  readonly input?: unknown;
 }
 
 export const trpcQuery = (
@@ -96,9 +98,15 @@ export const trpcQuery = (
   if (options.authorization !== undefined) {
     headers.authorization = options.authorization;
   }
+  const query =
+    options.input === undefined
+      ? ""
+      : `?input=${encodeURIComponent(JSON.stringify(options.input))}`;
   return Promise.resolve(
     app.fetch(
-      new Request(`http://localhost/api/trpc/${procedure}`, { headers }),
+      new Request(`http://localhost/api/trpc/${procedure}${query}`, {
+        headers,
+      }),
     ),
   );
 };

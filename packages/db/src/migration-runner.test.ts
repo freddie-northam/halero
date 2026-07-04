@@ -58,6 +58,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
     expect(ledgerNames(sqlite)).toEqual([
       "0001_core",
@@ -68,6 +69,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
     expect(tableExists(sqlite, "entities")).toBe(true);
     expect(tableExists(sqlite, "settings")).toBe(true);
@@ -88,6 +90,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
   });
 
@@ -188,6 +191,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
     expect(tableExists(snapshot, "widgets")).toBe(false);
     snapshot.close();
@@ -238,6 +242,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
     expect(result.snapshotPath).not.toBeNull();
     const row = sqlite
@@ -656,6 +661,7 @@ describe("runMigrations", () => {
       "0006_tasks_board",
       "0007_notes",
       "0008_calendar_event_notes_url",
+      "0009_activity",
     ]);
   });
 });

@@ -1,6 +1,28 @@
 import type { EntryStatus } from "./resolve-entry-route";
 import type { TrpcClient } from "./trpc";
 
+// Connection + Progress shapes are inferred straight from the typed tRPC
+// client so the web never re-declares (and never drifts from) them.
+export type ConnectionCatalog = Awaited<
+  ReturnType<TrpcClient["connections"]["catalog"]["query"]>
+>;
+export type ConnectionCatalogItem = ConnectionCatalog[number];
+export type ConnectionDetail = Awaited<
+  ReturnType<TrpcClient["connections"]["status"]["query"]>
+>;
+export type OauthClientConfig = Awaited<
+  ReturnType<TrpcClient["connections"]["oauthConfig"]["query"]>
+>;
+export type SyncNowResult = Awaited<
+  ReturnType<TrpcClient["connections"]["syncNow"]["mutate"]>
+>;
+export type ProgressStatus = Awaited<
+  ReturnType<TrpcClient["progress"]["status"]["query"]>
+>;
+export type ProgressHeatmap = Awaited<
+  ReturnType<TrpcClient["progress"]["heatmap"]["query"]>
+>;
+
 export interface SetupInput {
   readonly password: string;
   readonly name: string;
@@ -8,47 +30,9 @@ export interface SetupInput {
   readonly baseUrl?: string;
 }
 
-export interface GoogleSyncRun {
-  readonly startedAt: number;
-  readonly finishedAt: number | null;
-  readonly status: string;
-  readonly upserts: number;
-  readonly deletes: number;
-  readonly error: string | null;
-}
-
-export interface GoogleConnection {
-  readonly id: string;
-  readonly status: string;
-  readonly email: string | null;
-  readonly lastError: string | null;
-  /** Epoch ms of the next scheduled sync; null when unscheduled. */
-  readonly nextSyncAt: number | null;
-  readonly consecutiveFailures: number;
-  readonly lastRun: GoogleSyncRun | null;
-  /** Epoch ms when the most recent successful run finished. */
-  readonly lastSuccessAt: number | null;
-  /** The newest runs, newest first, for the Recent activity list. */
-  readonly recentRuns: readonly GoogleSyncRun[];
-}
-
-export interface GoogleStatus {
-  readonly clientConfigured: boolean;
-  readonly httpsOk: boolean;
-  readonly redirectUri: string;
-  readonly connection: GoogleConnection | null;
-}
-
-export interface SaveGoogleClientInput {
+export interface SaveOauthClientInput {
   readonly clientId: string;
   readonly clientSecret: string;
-}
-
-export interface SyncNowResult {
-  readonly status: "success" | "failed";
-  readonly upserts: number;
-  readonly deletes: number;
-  readonly error: string | null;
 }
 
 export interface NotificationSettings {
@@ -112,9 +96,22 @@ export interface HaleroApi {
   readonly setup: (input: SetupInput) => Promise<void>;
   readonly login: (password: string) => Promise<void>;
   readonly logout: () => Promise<void>;
-  readonly googleStatus: () => Promise<GoogleStatus>;
-  readonly saveGoogleClient: (input: SaveGoogleClientInput) => Promise<void>;
-  readonly syncGoogleNow: () => Promise<SyncNowResult>;
+  readonly connectionsCatalog: () => Promise<ConnectionCatalog>;
+  readonly connectionStatus: (connectorId: string) => Promise<ConnectionDetail>;
+  readonly connectionOauthConfig: (
+    connectorId: string,
+  ) => Promise<OauthClientConfig>;
+  readonly saveOauthClient: (
+    connectorId: string,
+    input: SaveOauthClientInput,
+  ) => Promise<void>;
+  readonly connectApiKey: (
+    connectorId: string,
+    token: string,
+  ) => Promise<{ connected: true; accountLabel: string }>;
+  readonly connectLocal: (connectorId: string) => Promise<void>;
+  readonly disconnectConnection: (connectorId: string) => Promise<void>;
+  readonly syncConnection: (connectorId: string) => Promise<SyncNowResult>;
   readonly notificationSettings: () => Promise<NotificationSettings>;
   /** An empty string turns notifications off. */
   readonly saveNotifyUrl: (url: string) => Promise<void>;
@@ -141,11 +138,24 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   logout: async () => {
     await client.auth.logout.mutate();
   },
-  googleStatus: () => client.connections.google.status.query(),
-  saveGoogleClient: async (input) => {
-    await client.connections.google.saveClient.mutate(input);
+  connectionsCatalog: () => client.connections.catalog.query(),
+  connectionStatus: (connectorId) =>
+    client.connections.status.query({ connectorId }),
+  connectionOauthConfig: (connectorId) =>
+    client.connections.oauthConfig.query({ connectorId }),
+  saveOauthClient: async (connectorId, input) => {
+    await client.connections.saveOauthClient.mutate({ connectorId, ...input });
   },
-  syncGoogleNow: () => client.connections.google.syncNow.mutate(),
+  connectApiKey: (connectorId, token) =>
+    client.connections.connectApiKey.mutate({ connectorId, token }),
+  connectLocal: async (connectorId) => {
+    await client.connections.connectLocal.mutate({ connectorId });
+  },
+  disconnectConnection: async (connectorId) => {
+    await client.connections.disconnect.mutate({ connectorId });
+  },
+  syncConnection: (connectorId) =>
+    client.connections.syncNow.mutate({ connectorId }),
   notificationSettings: () => client.notifications.settings.query(),
   saveNotifyUrl: async (url) => {
     await client.notifications.save.mutate({ url });

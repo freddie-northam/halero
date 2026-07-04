@@ -4,6 +4,7 @@
 // cursors, counts, sweeps, retention hooks, and error surfacing.
 
 import {
+  type ConnectorAuth,
   type DeleteSyncOp,
   type FetchLike,
   ResyncRequired,
@@ -32,6 +33,7 @@ import {
 import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import { kindRegistry } from "../registry";
 import { getSetting } from "../settings";
+import { readApiKeyToken } from "./api-key-credential";
 import {
   type ConnectionIdentity,
   type ConnectionRow,
@@ -148,15 +150,8 @@ const NO_COUNTS: SyncCounts = { upserts: 0, deletes: 0 };
 const createAuthorizedFetch = (
   ctx: SyncEngineContext,
   connectionId: string,
-  tokenEndpoint: string,
+  auth: ConnectorAuth,
 ): FetchLike => {
-  const tokenCtx = {
-    db: ctx.database.db,
-    key: ctx.key,
-    now: ctx.now,
-    outboundFetch: ctx.outboundFetch,
-    tokenEndpoint,
-  };
   const loadConnection = (): ConnectionRow => {
     const row = ctx.database.db
       .select()
@@ -168,13 +163,11 @@ const createAuthorizedFetch = (
     }
     return row;
   };
-  const request = async (
+  const send = async (
     input: string | URL,
     init: RequestInit | undefined,
-    accessToken: string,
+    headers: Headers,
   ): Promise<Response> => {
-    const headers = new Headers(init?.headers);
-    headers.set("authorization", `Bearer ${accessToken}`);
     const response = await ctx
       .outboundFetch(input, { ...init, headers })
       .catch(() => null);
@@ -182,6 +175,39 @@ const createAuthorizedFetch = (
       throw new Error(NETWORK_MESSAGE);
     }
     return response;
+  };
+  if (auth.kind === "none") {
+    // A local no-auth source: no header injection, just a network-safe
+    // passthrough so connectors never see raw fetch rejections.
+    return (input, init) => send(input, init, new Headers(init?.headers));
+  }
+  if (auth.kind === "apiKey") {
+    // A static token is injected on every request; there is nothing to
+    // refresh, so a 401 is a plain failure, not a retry trigger.
+    const value = (token: string): string =>
+      auth.scheme === undefined ? token : `${auth.scheme} ${token}`;
+    return (input, init) => {
+      const token = readApiKeyToken(ctx.key, loadConnection());
+      const headers = new Headers(init?.headers);
+      headers.set(auth.header, value(token));
+      return send(input, init, headers);
+    };
+  }
+  const tokenCtx = {
+    db: ctx.database.db,
+    key: ctx.key,
+    now: ctx.now,
+    outboundFetch: ctx.outboundFetch,
+    tokenEndpoint: auth.tokenEndpoint,
+  };
+  const request = async (
+    input: string | URL,
+    init: RequestInit | undefined,
+    accessToken: string,
+  ): Promise<Response> => {
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${accessToken}`);
+    return send(input, init, headers);
   };
   let cachedToken: string | null = null;
   return async (input, init) => {
@@ -715,11 +741,7 @@ export const syncConnection = async (
   const log = ctx.log ?? ((message: string) => console.log(message));
   const syncCtx: SyncContext<unknown> = {
     config: parseConnectorConfig(connector, identity, homeTimezone),
-    fetch: createAuthorizedFetch(
-      ctx,
-      connectionId,
-      connector.auth.tokenEndpoint,
-    ),
+    fetch: createAuthorizedFetch(ctx, connectionId, connector.auth),
     log: (message) => log(`[sync:${connection.connectorId}] ${message}`),
     now: ctx.now,
   };

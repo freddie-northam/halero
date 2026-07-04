@@ -25,7 +25,9 @@ export {
   startOfDayInZone,
 } from "./time";
 export {
+  type ApiKeyAuth,
   type Connector,
+  type ConnectorAuth,
   type ConnectorCapability,
   type ConnectorIdentity,
   type ConnectorManifest,
@@ -33,6 +35,8 @@ export {
   defineConnector,
   type FetchLike,
   type IdTokenClaims,
+  type NoAuth,
+  type OAuth2Auth,
   type OAuth2Spec,
   PROTOCOL_VERSION,
   type ProducedKind,

@@ -25,6 +25,9 @@ import migration0007Notes from "../migrations/0007_notes.sql" with {
 import migration0008CalendarEventNotesUrl from "../migrations/0008_calendar_event_notes_url.sql" with {
   type: "text",
 };
+import migration0009Activity from "../migrations/0009_activity.sql" with {
+  type: "text",
+};
 
 export interface Migration {
   readonly name: string;
@@ -46,4 +49,5 @@ export const coreMigrations: readonly Migration[] = [
     name: "0008_calendar_event_notes_url",
     sql: migration0008CalendarEventNotesUrl,
   },
+  { name: "0009_activity", sql: migration0009Activity },
 ];

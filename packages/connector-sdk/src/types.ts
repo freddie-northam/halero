@@ -40,6 +40,37 @@ export interface OAuth2Spec {
   readonly extraAuthParams?: Readonly<Record<string, string>>;
 }
 
+/** OAuth2 variant of {@link ConnectorAuth}: the host runs the redirect flow. */
+export interface OAuth2Auth extends OAuth2Spec {
+  readonly kind: "oauth2";
+}
+
+/**
+ * Static-token variant: the user pastes a personal access token / API
+ * key, the host stores it encrypted and injects it as `<header>:
+ * <scheme?> <token>` on every request. No refresh, no redirect.
+ */
+export interface ApiKeyAuth {
+  readonly kind: "apiKey";
+  /** Header the token is injected under, e.g. "authorization". */
+  readonly header: string;
+  /** Optional scheme prefix, e.g. "bearer" -> "authorization: bearer <token>". */
+  readonly scheme?: string;
+}
+
+/** Credential-free variant: a local source that needs no auth at all. */
+export interface NoAuth {
+  readonly kind: "none";
+}
+
+/**
+ * How the host authenticates a connector's outbound requests. A
+ * discriminated union so non-OAuth integrations (static PAT, local
+ * no-auth) are expressible; the host switches on `kind` when it builds
+ * the connector's injecting fetch.
+ */
+export type ConnectorAuth = OAuth2Auth | ApiKeyAuth | NoAuth;
+
 /** One independently cursored unit of sync, e.g. a single calendar. */
 export interface StreamDef {
   readonly id: string;
@@ -129,8 +160,8 @@ export interface SyncContext<TConfig> {
 
 export interface Connector<TConfig> {
   readonly manifest: ConnectorManifest;
-  /** apiKey auth is deferred; the capability enum reserves it. */
-  readonly auth: OAuth2Spec;
+  /** How the host authenticates this connector's requests. */
+  readonly auth: ConnectorAuth;
   readonly configSchema: z.ZodType<TConfig>;
   /** Returns null when the claims carry no usable account identity. */
   identify(profile: IdTokenClaims): ConnectorIdentity | null;

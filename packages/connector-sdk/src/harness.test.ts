@@ -24,6 +24,7 @@ const makeEchoConnector = (): Connector<EchoConfig> =>
       produces: [{ kind: "echo.item", schemaVersion: 1 }],
     },
     auth: {
+      kind: "oauth2",
       authorizationEndpoint: "https://auth.example.com/authorize",
       tokenEndpoint: "https://auth.example.com/token",
       scopes: ["echo.readonly"],

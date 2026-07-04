@@ -104,13 +104,7 @@ const stubClient = {
 } as unknown as TrpcClient;
 
 const stubApi = {
-  googleStatus: () =>
-    Promise.resolve({
-      clientConfigured: false,
-      httpsOk: true,
-      redirectUri: "http://localhost:4253/api/oauth/google/callback",
-      connection: null,
-    }),
+  connectionsCatalog: () => Promise.resolve([]),
 } as unknown as HaleroApi;
 
 const stubCalendarApi: CalendarApi = {
@@ -272,7 +266,9 @@ describe("buildTasksApi", () => {
 });
 
 describe("buildNav", () => {
-  test("keeps Settings in core and sorts everything by order", () => {
+  // Settings moved to the top-right avatar, so core contributes no nav; the
+  // sidebar is entirely module-owned, sorted by order.
+  test("lists the module entries sorted by order", () => {
     const nav = buildNav(modulesUnderTest());
 
     expect(nav.map((entry) => entry.label)).toEqual([
@@ -280,29 +276,28 @@ describe("buildNav", () => {
       "Calendar",
       "Tasks",
       "Notes",
-      "Settings",
+      "Progress",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
       "/calendar",
       "/tasks",
       "/notes",
-      "/settings",
+      "/progress",
     ]);
   });
 
-  test("renders core-only nav when no modules contribute", () => {
-    const nav = buildNav([]);
-
-    expect(nav.map((entry) => entry.label)).toEqual(["Settings"]);
+  test("renders an empty nav when no modules contribute", () => {
+    expect(buildNav([])).toEqual([]);
   });
 
-  test("orders a module entry after Settings when its order says so", () => {
+  test("orders module entries purely by their order value", () => {
     const nav = buildNav([
       { id: "late", nav: [{ label: "Late", path: "/late", order: 900 }] },
+      { id: "early", nav: [{ label: "Early", path: "/early", order: 10 }] },
     ]);
 
-    expect(nav.map((entry) => entry.label)).toEqual(["Settings", "Late"]);
+    expect(nav.map((entry) => entry.label)).toEqual(["Early", "Late"]);
   });
 });
 

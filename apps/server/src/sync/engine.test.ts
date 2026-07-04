@@ -19,9 +19,9 @@ import {
 } from "@halero/module-sdk/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { saveOauthClient } from "../connections/oauth-client";
 import { kindRegistry } from "../registry";
 import { makeTestApp, type TestApp } from "../test-utils";
-import { saveGoogleClient } from "./client-config";
 import { GOOGLE_CONNECTOR_ID } from "./connection";
 import { type SyncEngineContext, syncConnection } from "./engine";
 import { type AnyConnector, registerConnectors } from "./registry";
@@ -36,7 +36,7 @@ interface SeedOptions {
 
 const seedConnection = (testApp: TestApp, options: SeedOptions = {}): void => {
   const { database, key, clock } = testApp;
-  saveGoogleClient(database.db, key, {
+  saveOauthClient(database.db, key, "google-calendar", {
     clientId: "1234-abc.apps.googleusercontent.com",
     clientSecret: "GOCSPX-super-secret-value",
   });
@@ -205,6 +205,7 @@ const replayConnector = (
       produces: [{ kind: "calendar.event", schemaVersion: 1 }],
     },
     auth: {
+      kind: "oauth2",
       authorizationEndpoint: "https://example.com/auth",
       tokenEndpoint: "https://example.com/token",
       scopes: ["readonly"],
@@ -669,6 +670,7 @@ describe("syncConnection connector misbehavior", () => {
         produces: [{ kind: "calendar.event", schemaVersion: 1 }],
       },
       auth: {
+        kind: "oauth2",
         authorizationEndpoint: "https://example.com/auth",
         tokenEndpoint: "https://example.com/token",
         scopes: ["readonly"],
@@ -1202,6 +1204,7 @@ describe("syncConnection write budget", () => {
         produces: [{ kind: "tick.item", schemaVersion: 1 }],
       },
       auth: {
+        kind: "oauth2",
         authorizationEndpoint: "https://example.com/auth",
         tokenEndpoint: "https://example.com/token",
         scopes: ["readonly"],

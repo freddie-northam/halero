@@ -99,6 +99,7 @@ export const ShellScreen = ({
       <SidebarInset className="min-w-0">
         <CommandBarSlot
           onSearchClick={() => setSearchOpen(true)}
+          onSettingsClick={() => onNavigate("/settings")}
           title={title}
         />
         <div className="flex-1 overflow-auto">{children}</div>

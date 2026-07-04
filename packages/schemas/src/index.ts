@@ -10,6 +10,18 @@ export {
   noteSatelliteSchema,
 } from "./note-item";
 export {
+  type ConnectionAuthKind,
+  type ConnectionConsumer,
+  connectionAuthKindSchema,
+  connectionConsumerSchema,
+  type ProviderAvailability,
+  type ProviderCatalogEntry,
+  type ProviderCategory,
+  providerAvailabilitySchema,
+  providerCatalogEntrySchema,
+  providerCategorySchema,
+} from "./provider-catalog";
+export {
   TASK_ITEM_KIND,
   type TaskSatellite,
   taskSatelliteSchema,
