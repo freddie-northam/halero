@@ -6,6 +6,7 @@
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { TASK_ITEM_KIND } from "@halero/schemas";
+import type { ReactNode } from "react";
 import type { TasksApi } from "./api";
 import { normalizeTasksSearch } from "./helpers/board-search";
 import { createNewTaskCommand } from "./new-task-command";
@@ -30,14 +31,22 @@ export type {
 export { withTasksInvalidation } from "./queries";
 export { createTasksTodaySection } from "./today-due-section";
 
-export const createTasksWebModule = (api: TasksApi): WebModule =>
+export interface TasksWebModuleOptions {
+  /** Host slot: renders an entity's relationships in the task editor. */
+  readonly renderRelated?: (entityId: string) => ReactNode;
+}
+
+export const createTasksWebModule = (
+  api: TasksApi,
+  options: TasksWebModuleOptions = {},
+): WebModule =>
   defineWebModule({
     id: "tasks",
     nav: [{ label: "Tasks", path: "/tasks", order: 30, icon: "tasks" }],
     pages: [
       {
         path: "/tasks",
-        component: createTasksScreen(api),
+        component: createTasksScreen(api, options.renderRelated),
         validateSearch: normalizeTasksSearch,
       },
     ],

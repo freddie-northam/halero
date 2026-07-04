@@ -41,6 +41,8 @@ import {
   type TodaySection,
 } from "@halero/module-today/web";
 import type { QueryClient } from "@tanstack/react-query";
+import { createElement } from "react";
+import { HostRelatedPanel } from "./components/host-related-panel";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 
@@ -259,7 +261,10 @@ export const buildWebModules = (
       sections: buildTodaySections(calendarApi, tasksApi),
     }),
     createCalendarWebModule(calendarApi),
-    createTasksWebModule(tasksApi),
+    createTasksWebModule(tasksApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
     createNotesWebModule(notesApi),
     createProgressWebModule(progressApi),
     createF1WebModule(f1Api),
