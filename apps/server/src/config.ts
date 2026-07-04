@@ -4,6 +4,12 @@ export interface HaleroConfig {
   readonly dataDir: string;
   readonly port: number;
   readonly baseUrl: URL;
+  /**
+   * Opt-in for the Developer terminal (arbitrary command execution over a
+   * PTY). Off by default; even when on, the route only serves loopback
+   * requests. Never enable on a network-exposed instance.
+   */
+  readonly developerTerminal: boolean;
 }
 
 /**
@@ -43,6 +49,12 @@ const envSchema = z.object({
         'https://, like "https://halero.example.com".',
     )
     .optional(),
+  // Deliberately strict: only the exact strings "1" or "true" opt in, so
+  // a stray value never silently exposes command execution.
+  HALERO_DEVELOPER_TERMINAL: z
+    .enum(["0", "1", "true", "false"])
+    .optional()
+    .transform((value) => value === "1" || value === "true"),
 });
 
 export const loadConfig = (
@@ -52,6 +64,7 @@ export const loadConfig = (
     HALERO_DATA_DIR: env.HALERO_DATA_DIR,
     HALERO_PORT: env.HALERO_PORT,
     HALERO_BASE_URL: env.HALERO_BASE_URL,
+    HALERO_DEVELOPER_TERMINAL: env.HALERO_DEVELOPER_TERMINAL,
   });
   if (!parsed.success) {
     const details = parsed.error.issues.map((issue) => issue.message).join(" ");
@@ -61,5 +74,10 @@ export const loadConfig = (
   }
   const { HALERO_DATA_DIR, HALERO_PORT, HALERO_BASE_URL } = parsed.data;
   const baseUrl = new URL(HALERO_BASE_URL ?? `http://localhost:${HALERO_PORT}`);
-  return { dataDir: HALERO_DATA_DIR, port: HALERO_PORT, baseUrl };
+  return {
+    dataDir: HALERO_DATA_DIR,
+    port: HALERO_PORT,
+    baseUrl,
+    developerTerminal: parsed.data.HALERO_DEVELOPER_TERMINAL,
+  };
 };
