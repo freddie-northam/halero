@@ -12,7 +12,6 @@ import type {
 } from "@halero/module-f1/server";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { TrpcContext } from "./../trpc/context";
 import { protectedProcedure, router } from "./../trpc/init";
 import {
   clearLiveCredential,
@@ -24,8 +23,6 @@ import { buildLiveSession, buildTimingRows, fetchLiveRows } from "./live-data";
 import { exchangeToken, getLiveToken } from "./token";
 
 const OPENF1_FREE_BASE = "https://api.openf1.org/v1";
-
-const NOT_CONNECTED_MESSAGE = "Add your OpenF1 account to enable live timing.";
 
 const badRequest = (message: string, cause?: unknown): TRPCError =>
   new TRPCError({ code: "BAD_REQUEST", message, cause });
@@ -47,14 +44,6 @@ const fetchLatestSession = async (
       ? (body[0] as Record<string, unknown>)
       : undefined;
   return buildLiveSession(row, now);
-};
-
-const requireCredential = (ctx: TrpcContext) => {
-  const credential = readLiveCredential(ctx.db, ctx.key);
-  if (credential === null) {
-    throw badRequest(NOT_CONNECTED_MESSAGE);
-  }
-  return credential;
 };
 
 export const f1LiveRouter = router({
@@ -117,10 +106,17 @@ export const f1LiveRouter = router({
     };
   }),
 
-  /** Current track/air conditions during a live session. */
+  /**
+   * Current track/air conditions during a live session. Returns null (not
+   * an error) when no credential is stored, so the widget shows a calm
+   * empty/connect state instead of a failure.
+   */
   weather: protectedProcedure.query(
     async ({ ctx }): Promise<LiveWeather | null> => {
-      const credential = requireCredential(ctx);
+      const credential = readLiveCredential(ctx.db, ctx.key);
+      if (credential === null) {
+        return null;
+      }
       const token = await getLiveToken(ctx.outboundFetch, credential, ctx.now);
       const rows = await fetchLiveRows(
         ctx.outboundFetch,

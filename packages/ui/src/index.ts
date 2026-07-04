@@ -21,6 +21,7 @@ export {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeftRight,
   Circle,
   CircleHelp,
   ExternalLink,
@@ -46,6 +47,7 @@ export {
 export { ConnectorLogo } from "./brand/connector-logo";
 export { InterestedAvatars } from "./brand/interested-avatars";
 export { DatePicker } from "./components/date-picker";
+export { Switcher, type SwitcherOption } from "./components/switcher";
 export { Terminal } from "./components/terminal";
 export { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 export { Badge, badgeVariants } from "./components/ui/badge";
@@ -164,6 +166,6 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-// Custom nav glyph: lucide has no Formula 1 car, so this one is authored.
-export { F1Car } from "./f1-car-icon";
 export { cn } from "./lib/utils";
+// Custom nav glyph: lucide has no motorsport tyre, so this one is authored.
+export { RacingTyre } from "./racing-tyre-icon";
