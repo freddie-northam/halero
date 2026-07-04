@@ -2,6 +2,7 @@ import {
   CalendarDays,
   Circle,
   CircleHelp,
+  F1Car,
   Gift,
   House,
   ListTodo,
@@ -61,6 +62,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   calendar: CalendarDays,
   tasks: ListTodo,
   notes: StickyNote,
+  f1: F1Car,
   settings: Settings,
 };
 

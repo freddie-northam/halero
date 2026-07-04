@@ -231,3 +231,265 @@ export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+// Added by migrations/0010_f1.sql for the F1 module.
+
+// f1.session satellite: one row per F1 session, keyed to the entity spine.
+export const f1Sessions = sqliteTable(
+  "f1_sessions",
+  {
+    entityId: text("entity_id")
+      .primaryKey()
+      .references(() => entities.id),
+    sessionKey: integer("session_key").notNull().unique(),
+    meetingKey: integer("meeting_key").notNull(),
+    sessionName: text("session_name").notNull(),
+    sessionType: text("session_type").notNull(),
+    year: integer("year").notNull(),
+    dateStart: text("date_start"),
+    dateEnd: text("date_end"),
+    gmtOffset: text("gmt_offset"),
+    circuitKey: integer("circuit_key"),
+    circuitShortName: text("circuit_short_name"),
+    countryName: text("country_name"),
+    countryCode: text("country_code"),
+    location: text("location"),
+    meetingName: text("meeting_name"),
+    countryFlagUrl: text("country_flag_url"),
+    circuitImageUrl: text("circuit_image_url"),
+    circuitInfoUrl: text("circuit_info_url"),
+    isCancelled: integer("is_cancelled").notNull().default(0),
+    raw: text("raw"),
+  },
+  (table) => [
+    index("idx_f1_sessions_meeting").on(table.meetingKey),
+    index("idx_f1_sessions_year_type").on(table.year, table.sessionType),
+  ],
+);
+
+export const f1Meetings = sqliteTable(
+  "f1_meetings",
+  {
+    meetingKey: integer("meeting_key").primaryKey(),
+    year: integer("year").notNull(),
+    meetingName: text("meeting_name"),
+    meetingOfficialName: text("meeting_official_name"),
+    countryName: text("country_name"),
+    countryCode: text("country_code"),
+    countryFlagUrl: text("country_flag_url"),
+    circuitKey: integer("circuit_key"),
+    circuitShortName: text("circuit_short_name"),
+    circuitImageUrl: text("circuit_image_url"),
+    circuitInfoUrl: text("circuit_info_url"),
+    location: text("location"),
+    gmtOffset: text("gmt_offset"),
+    dateStart: text("date_start"),
+    dateEnd: text("date_end"),
+  },
+  (table) => [index("idx_f1_meetings_year").on(table.year)],
+);
+
+export const f1Drivers = sqliteTable(
+  "f1_drivers",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    meetingKey: integer("meeting_key"),
+    fullName: text("full_name"),
+    broadcastName: text("broadcast_name"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    nameAcronym: text("name_acronym"),
+    teamName: text("team_name"),
+    teamColour: text("team_colour"),
+    headshotUrl: text("headshot_url"),
+    countryCode: text("country_code"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1SessionResults = sqliteTable(
+  "f1_session_results",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    position: integer("position"),
+    points: real("points"),
+    dnf: integer("dnf").notNull().default(0),
+    dns: integer("dns").notNull().default(0),
+    dsq: integer("dsq").notNull().default(0),
+    duration: real("duration"),
+    // number OR "+1 LAP" OR null -> stored as text.
+    gapToLeader: text("gap_to_leader"),
+    numberOfLaps: integer("number_of_laps"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1StandingsDrivers = sqliteTable(
+  "f1_standings_drivers",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    positionCurrent: integer("position_current"),
+    positionStart: integer("position_start"),
+    pointsCurrent: real("points_current"),
+    pointsStart: real("points_start"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.driverNumber] })],
+);
+
+export const f1StandingsTeams = sqliteTable(
+  "f1_standings_teams",
+  {
+    sessionKey: integer("session_key").notNull(),
+    teamName: text("team_name").notNull(),
+    positionCurrent: integer("position_current"),
+    positionStart: integer("position_start"),
+    pointsCurrent: real("points_current"),
+    pointsStart: real("points_start"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.teamName] })],
+);
+
+export const f1Boards = sqliteTable("f1_boards", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  sortOrder: real("sort_order").notNull().default(0),
+  layout: text("layout").notNull().default("[]"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+// Added by migrations/0011_f1_detail.sql: fetch-on-view race detail.
+
+export const f1Laps = sqliteTable(
+  "f1_laps",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    lapNumber: integer("lap_number").notNull(),
+    dateStart: text("date_start"),
+    lapDuration: real("lap_duration"),
+    durationSector1: real("duration_sector_1"),
+    durationSector2: real("duration_sector_2"),
+    durationSector3: real("duration_sector_3"),
+    i1Speed: integer("i1_speed"),
+    i2Speed: integer("i2_speed"),
+    stSpeed: integer("st_speed"),
+    isPitOutLap: integer("is_pit_out_lap").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.lapNumber],
+    }),
+  ],
+);
+
+export const f1Stints = sqliteTable(
+  "f1_stints",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    stintNumber: integer("stint_number").notNull(),
+    lapStart: integer("lap_start"),
+    lapEnd: integer("lap_end"),
+    compound: text("compound"),
+    tyreAgeAtStart: integer("tyre_age_at_start"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.stintNumber],
+    }),
+  ],
+);
+
+export const f1Pits = sqliteTable(
+  "f1_pits",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    lapNumber: integer("lap_number").notNull(),
+    date: text("date"),
+    laneDuration: real("lane_duration"),
+    stopDuration: real("stop_duration"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.lapNumber],
+    }),
+  ],
+);
+
+export const f1Positions = sqliteTable(
+  "f1_positions",
+  {
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number").notNull(),
+    date: text("date").notNull(),
+    position: integer("position"),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.sessionKey, table.driverNumber, table.date],
+    }),
+  ],
+);
+
+export const f1RaceControl = sqliteTable(
+  "f1_race_control",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    date: text("date"),
+    lapNumber: integer("lap_number"),
+    category: text("category"),
+    flag: text("flag"),
+    scope: text("scope"),
+    sector: integer("sector"),
+    driverNumber: integer("driver_number"),
+    message: text("message"),
+  },
+  (table) => [index("idx_f1_race_control_session").on(table.sessionKey)],
+);
+
+export const f1TeamRadio = sqliteTable(
+  "f1_team_radio",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    driverNumber: integer("driver_number"),
+    date: text("date"),
+    recordingUrl: text("recording_url"),
+  },
+  (table) => [index("idx_f1_team_radio_session").on(table.sessionKey)],
+);
+
+export const f1Overtakes = sqliteTable(
+  "f1_overtakes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionKey: integer("session_key").notNull(),
+    date: text("date"),
+    position: integer("position"),
+    overtakingDriverNumber: integer("overtaking_driver_number"),
+    overtakenDriverNumber: integer("overtaken_driver_number"),
+  },
+  (table) => [index("idx_f1_overtakes_session").on(table.sessionKey)],
+);
+
+export const f1Weather = sqliteTable(
+  "f1_weather",
+  {
+    sessionKey: integer("session_key").notNull(),
+    date: text("date").notNull(),
+    airTemperature: real("air_temperature"),
+    trackTemperature: real("track_temperature"),
+    humidity: real("humidity"),
+    pressure: real("pressure"),
+    rainfall: real("rainfall"),
+    windSpeed: real("wind_speed"),
+    windDirection: integer("wind_direction"),
+  },
+  (table) => [primaryKey({ columns: [table.sessionKey, table.date] })],
+);
