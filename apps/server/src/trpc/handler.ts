@@ -3,7 +3,7 @@ import { createEntityStore } from "@halero/core";
 import type { HaleroDatabase } from "@halero/db";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { Handler } from "hono";
-import { createAgentRunManager } from "../agents/create-manager";
+import type { AgentRunManager } from "../agents/agent-run";
 import {
   buildClearSessionCookie,
   buildSessionCookie,
@@ -26,6 +26,8 @@ export interface TrpcHandlerOptions {
   readonly outboundFetch: FetchLike;
   readonly syncRunner: SyncRunner;
   readonly notifier: Notifier;
+  /** Shared with the agents WS route so both see the same live runs. */
+  readonly agentRunManager: AgentRunManager | null;
 }
 
 const withCookies = (
@@ -51,9 +53,9 @@ export const createTrpcHandler = (
   // One store per app, not per request: it is a stateless bundle of
   // closures over the shared database handle.
   const entities = createEntityStore(database);
-  // One agent-run registry per app (null unless enabled): it holds live
-  // run state across requests, so it cannot be per-request.
-  const agents = createAgentRunManager(config, now);
+  // The agent-run registry is created once in createApp and shared with
+  // the agents WS route, so a run started over tRPC streams over the socket.
+  const agents = options.agentRunManager;
   // Evaluated when a cookie is built, not when the handler is created, so
   // the Secure flag follows the same base-URL authority as everything else
   // (even for the setup request that stores base_url itself).

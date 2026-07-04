@@ -1,6 +1,8 @@
 import type { FetchLike } from "@halero/connector-sdk";
 import type { HaleroDatabase } from "@halero/db";
 import { Hono } from "hono";
+import { createAgentRunManager } from "./agents/create-manager";
+import { createAgentRoutes } from "./agents/routes";
 import { createLoginRateLimiter } from "./auth";
 import { resolveBaseUrl } from "./base-url";
 import type { HaleroConfig } from "./config";
@@ -87,6 +89,10 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   app.get("/healthz", (c) =>
     c.json(buildHealthReport(database.db, schedulerHealth.read(), now())),
   );
+  // One agent-run registry, shared by the tRPC API and the per-run
+  // terminal WebSocket, so both see the same live runs. Null unless
+  // agent orchestration is enabled.
+  const agentRunManager = createAgentRunManager(config, now);
   app.all(
     "/api/trpc/*",
     createTrpcHandler({
@@ -98,6 +104,7 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
       outboundFetch,
       syncRunner,
       notifier,
+      agentRunManager,
     }),
   );
   app.route(
@@ -120,6 +127,10 @@ export const createApp = (options: CreateAppOptions): Hono<AppEnv> => {
   app.route(
     "/api/terminal",
     createTerminalRoutes({ config, manager: terminalManager }),
+  );
+  app.route(
+    "/api/agents",
+    createAgentRoutes({ config, manager: agentRunManager }),
   );
   app.get("*", createSpaHandler(options.webDistDir ?? defaultWebDistDir()));
 

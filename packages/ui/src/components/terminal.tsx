@@ -19,12 +19,20 @@ const THEME = {
   selectionBackground: "#3f3f46",
 };
 
-const wsUrl = (cols: number, rows: number): string => {
+const wsUrl = (path: string, cols: number, rows: number): string => {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/api/terminal/ws?cols=${cols}&rows=${rows}`;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${protocol}//${window.location.host}${path}${separator}cols=${cols}&rows=${rows}`;
 };
 
-export const Terminal = (): ReactElement => {
+export interface TerminalProps {
+  /** WebSocket path to attach to; defaults to the Developer shell terminal. */
+  readonly wsPath?: string;
+}
+
+export const Terminal = ({
+  wsPath = "/api/terminal/ws",
+}: TerminalProps = {}): ReactElement => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>("connecting");
 
@@ -45,7 +53,7 @@ export const Terminal = (): ReactElement => {
     term.open(mount);
     fit.fit();
 
-    const socket = new WebSocket(wsUrl(term.cols, term.rows));
+    const socket = new WebSocket(wsUrl(wsPath, term.cols, term.rows));
     let everOpened = false;
 
     const sendResize = (): void => {
@@ -95,7 +103,7 @@ export const Terminal = (): ReactElement => {
       socket.close();
       term.dispose();
     };
-  }, []);
+  }, [wsPath]);
 
   return (
     <div className="overflow-hidden rounded-lg border bg-[#0a0a0b]">

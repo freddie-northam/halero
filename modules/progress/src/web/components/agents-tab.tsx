@@ -13,6 +13,7 @@ import {
   Checkbox,
   Separator,
   Skeleton,
+  Terminal,
 } from "@halero/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactElement, useState } from "react";
@@ -155,13 +156,13 @@ const RunDetail = ({
             : "No file changes were produced."}
         </p>
       )}
-      <details>
+      <details open={run.status === "running"}>
         <summary className="cursor-pointer text-muted-foreground text-sm">
-          Output
+          Live output
         </summary>
-        <pre className="mt-1 max-h-72 overflow-auto rounded-md border bg-black/80 p-2 text-white/80 text-xs">
-          {run.output || "(no output yet)"}
-        </pre>
+        <div className="mt-1">
+          <Terminal wsPath={`/api/agents/ws?id=${runId}`} />
+        </div>
       </details>
     </div>
   );
