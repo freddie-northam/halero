@@ -8,9 +8,12 @@ import {
   Alert,
   AlertDescription,
   Button,
-  cn,
   Loader2,
+  PageHeader,
   Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
 } from "@halero/ui";
 import {
   type UseMutationResult,
@@ -130,23 +133,15 @@ const SourceTabs = ({
     ...sources.map((s) => ({ id: s.id, label: s.displayName })),
   ];
   return (
-    <div className="flex flex-wrap gap-1">
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          onClick={() => onSelect(option.id)}
-          className={cn(
-            "rounded-md px-2.5 py-1 text-sm",
-            option.id === selected
-              ? "bg-accent font-medium text-foreground"
-              : "text-muted-foreground hover:bg-accent/60",
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <Tabs value={selected} onValueChange={onSelect}>
+      <TabsList aria-label="Activity source">
+        {options.map((option) => (
+          <TabsTrigger key={option.id} value={option.id}>
+            {option.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 };
 
@@ -247,15 +242,13 @@ export const createProgressScreen = (
     };
 
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 py-8">
-        <header className="mb-8">
-          <h1 className="text-lg font-semibold tracking-tight">Progress</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your activity across GitHub, Claude Code, Codex, and Wispr Flow.
-          </p>
-        </header>
-        {body()}
-      </div>
+      <>
+        <PageHeader
+          title="Progress"
+          description="Your activity across GitHub, Claude Code, Codex, and Wispr Flow."
+        />
+        <div className="mt-6">{body()}</div>
+      </>
     );
   };
   return ProgressScreen;

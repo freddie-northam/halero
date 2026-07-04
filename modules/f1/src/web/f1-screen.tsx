@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
   Loader2,
+  PageHeader,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -32,8 +33,6 @@ import { BoardNameDialog } from "./board/board-name-dialog";
 import { f1BoardsKey } from "./queries";
 import { readableError } from "./readable-error";
 import type { WidgetDef } from "./widgets/registry";
-
-const PAGE_CLASS = "mx-auto w-full max-w-6xl px-6 py-6";
 
 /**
  * One board's widgets plus its edit affordances. It keeps a working copy
@@ -193,24 +192,20 @@ export const createF1Screen = (api: F1Api): ComponentType => {
 
     if (boardsQuery.error !== null) {
       return (
-        <div className={PAGE_CLASS}>
-          <Alert variant="destructive">
-            <AlertDescription>
-              {readableError(boardsQuery.error)}
-            </AlertDescription>
-          </Alert>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {readableError(boardsQuery.error)}
+          </AlertDescription>
+        </Alert>
       );
     }
     const boards = boardsQuery.data;
     if (boards === undefined) {
       return (
-        <div className={PAGE_CLASS}>
-          <Loader2
-            aria-hidden="true"
-            className="size-4 animate-spin text-muted-foreground"
-          />
-        </div>
+        <Loader2
+          aria-hidden="true"
+          className="size-4 animate-spin text-muted-foreground"
+        />
       );
     }
 
@@ -224,11 +219,10 @@ export const createF1Screen = (api: F1Api): ComponentType => {
       boards.find((board) => board.id === selectedId) ?? boards[0] ?? null;
 
     return (
-      <div className={PAGE_CLASS}>
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-lg font-semibold tracking-tight">F1</h1>
+      <>
+        <PageHeader title="F1">
           {selected === null ? null : (
-            <div className="flex items-center gap-2">
+            <>
               <Button
                 type="button"
                 size="sm"
@@ -247,15 +241,15 @@ export const createF1Screen = (api: F1Api): ComponentType => {
                   </Button>
                 }
               />
-            </div>
+            </>
           )}
-        </div>
+        </PageHeader>
 
         {selected === null ? (
           <NoBoards onCreate={createBoard} />
         ) : (
           <>
-            <div className="mt-4 flex items-center justify-between gap-2">
+            <div className="mt-6 flex items-center justify-between gap-2">
               <Tabs
                 value={selected.id}
                 onValueChange={(value) => setSelectedId(value)}
@@ -301,7 +295,7 @@ export const createF1Screen = (api: F1Api): ComponentType => {
             />
           </>
         )}
-      </div>
+      </>
     );
   };
   return F1Screen;

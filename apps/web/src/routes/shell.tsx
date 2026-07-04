@@ -3,21 +3,24 @@ import type {
   EntityLink,
   EntityLinkContribution,
 } from "@halero/module-sdk/web";
-import { SidebarInset, SidebarProvider } from "@halero/ui";
-import { useMutation } from "@tanstack/react-query";
+import {
+  PageContainer,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@halero/ui";
+import { useQuery } from "@tanstack/react-query";
 import {
   type CSSProperties,
   type ReactElement,
   type ReactNode,
   useState,
 } from "react";
-import { CommandBarSlot } from "../components/command-bar-slot";
 import { CommandPalette } from "../components/command-palette";
 import { AppSidebar, type SidebarNavItem } from "../components/sidebar";
 import { useApi } from "../lib/api-context";
 
 export interface ShellScreenProps {
-  readonly onLoggedOut: () => void;
   /** Nav entries from the web module registry, already sorted. */
   readonly nav: readonly SidebarNavItem[];
   readonly activePath: string;
@@ -64,7 +67,6 @@ const readSidebarState = (): boolean => {
 };
 
 export const ShellScreen = ({
-  onLoggedOut,
   nav,
   activePath,
   onNavigate,
@@ -76,12 +78,12 @@ export const ShellScreen = ({
   const api = useApi();
   const [searchOpen, setSearchOpen] = useState(false);
   const [defaultSidebarOpen] = useState(readSidebarState);
-  const logout = useMutation({
-    mutationFn: () => api.logout(),
-    onSuccess: onLoggedOut,
-  });
   const activeItem = navItemFor(nav, activePath);
-  const title = activeItem?.label;
+  // The owner's name for the sidebar account row (present once signed in).
+  const status = useQuery({
+    queryKey: ["system-status"],
+    queryFn: () => api.systemStatus(),
+  });
 
   return (
     <SidebarProvider
@@ -93,16 +95,24 @@ export const ShellScreen = ({
         items={nav}
         activePath={activeItem?.path ?? activePath}
         onNavigate={onNavigate}
-        onLogout={() => logout.mutate()}
-        logoutPending={logout.isPending}
+        onSearchClick={() => setSearchOpen(true)}
+        accountName={status.data?.displayName ?? null}
       />
-      <SidebarInset className="min-w-0">
-        <CommandBarSlot
-          onSearchClick={() => setSearchOpen(true)}
-          onSettingsClick={() => onNavigate("/settings")}
-          title={title}
-        />
-        <div className="flex-1 overflow-auto">{children}</div>
+      {/* The routed content is the single white panel, floating in the warm
+          inset frame with a uniform margin so its padding reads even on every
+          side. A hairline border carries the edge; no shadow. Search and the
+          account live in the sidebar, so on desktop there is no top bar. */}
+      <SidebarInset className="min-w-0 overflow-hidden border bg-card md:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:shadow-none">
+        {/* Mobile only: the sidebar is an off-canvas drawer, so keep a trigger
+            to open it. Hidden at md+, where the sidebar is always present. */}
+        <div className="flex h-12 shrink-0 items-center px-4 md:hidden">
+          <SidebarTrigger />
+        </div>
+        {/* PageContainer is the single width/padding authority: wrapping every
+            routed page here means no page can set its own width. */}
+        <div className="min-h-0 flex-1 overflow-auto">
+          <PageContainer>{children}</PageContainer>
+        </div>
       </SidebarInset>
       <CommandPalette
         open={searchOpen}

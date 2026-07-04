@@ -26,10 +26,21 @@ const NAV_ITEMS = [
 
 // The sidebar components read shadcn's sidebar context, so the tests
 // render them inside the provider just like the shell does.
-const renderSidebar = (props: AppSidebarProps): RenderResult =>
+// onSearchClick defaults to a no-op so the nav tests stay focused; the search
+// test overrides it.
+// onSearchClick and accountName default so the nav tests stay focused; the
+// search and account tests override them.
+const renderSidebar = (
+  props: Omit<AppSidebarProps, "onSearchClick" | "accountName"> &
+    Partial<Pick<AppSidebarProps, "onSearchClick" | "accountName">>,
+): RenderResult =>
   render(
     <SidebarProvider>
-      <AppSidebar {...props} />
+      <AppSidebar
+        onSearchClick={() => undefined}
+        accountName="Freddie"
+        {...props}
+      />
     </SidebarProvider>,
   );
 
@@ -38,7 +49,6 @@ test("renders the nav items with aria-current on the active one", () => {
     items: NAV_ITEMS,
     activePath: "/",
     onNavigate: () => undefined,
-    onLogout: () => undefined,
   });
   expect(view.getByRole("navigation", { name: "Primary" })).toBeTruthy();
   const today = view.getByRole("button", { name: "Today" });
@@ -54,12 +64,37 @@ test("marks a module-contributed item active on its own path", () => {
     items: NAV_ITEMS,
     activePath: "/calendar",
     onNavigate: () => undefined,
-    onLogout: () => undefined,
   });
   const calendar = view.getByRole("button", { name: "Calendar" });
   const today = view.getByRole("button", { name: "Today" });
   expect(calendar.getAttribute("aria-current")).toBe("page");
   expect(today.getAttribute("aria-current")).toBeNull();
+});
+
+test("opens Settings from the account row", () => {
+  const visited: string[] = [];
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: (path) => visited.push(path),
+    accountName: "Freddie",
+  });
+  fireEvent.click(view.getByRole("button", { name: "Freddie" }));
+  expect(visited).toEqual(["/settings"]);
+});
+
+test("opens the command palette from the sidebar search", () => {
+  let opened = 0;
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: () => undefined,
+    onSearchClick: () => {
+      opened += 1;
+    },
+  });
+  fireEvent.click(view.getByRole("button", { name: "Search Halero" }));
+  expect(opened).toBe(1);
 });
 
 test("reports the path a click asks to navigate to", () => {
@@ -68,8 +103,22 @@ test("reports the path a click asks to navigate to", () => {
     items: NAV_ITEMS,
     activePath: "/",
     onNavigate: (path) => visited.push(path),
-    onLogout: () => undefined,
   });
   fireEvent.click(view.getByRole("button", { name: "Settings" }));
   expect(visited).toEqual(["/settings"]);
+});
+
+test("offers Refer a friend and Help as external repo links, not sign out", () => {
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: () => undefined,
+  });
+  const refer = view.getByRole("link", { name: "Refer a friend" });
+  const help = view.getByRole("link", { name: "Help" });
+  expect(refer.getAttribute("href")).toContain("github.com");
+  expect(refer.getAttribute("target")).toBe("_blank");
+  expect(help.getAttribute("href")).toContain("github.com");
+  // Sign out lives in Settings now, never in the sidebar.
+  expect(view.queryByRole("button", { name: /sign out|log out/i })).toBeNull();
 });

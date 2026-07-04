@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import type { CalendarView } from "../helpers/calendar-search";
 import { ViewSwitcher } from "./view-switcher";
 
-export interface CalendarHeaderProps {
+export interface CalendarActionsProps {
   /** The current range, e.g. "July 2026"; empty while the anchor loads. */
   readonly label: string;
   readonly view: CalendarView;
@@ -17,8 +17,12 @@ export interface CalendarHeaderProps {
   readonly onNewEvent: () => void;
 }
 
-/** Title row plus the date navigation, New event action, and view switcher. */
-export const CalendarHeader = ({
+/**
+ * The calendar's page-header actions: the primary New event button, the date
+ * navigation cluster, and the view switcher. Rendered inside the shared
+ * PageHeader's actions slot, so it carries no title of its own.
+ */
+export const CalendarActions = ({
   label,
   view,
   onViewChange,
@@ -27,13 +31,12 @@ export const CalendarHeader = ({
   onNext,
   navDisabled,
   onNewEvent,
-}: CalendarHeaderProps): ReactElement => (
-  <header className="flex flex-wrap items-center gap-x-3 gap-y-2">
-    <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
-    <Button type="button" size="sm" disabled={navDisabled} onClick={onNewEvent}>
+}: CalendarActionsProps): ReactElement => (
+  <>
+    <Button type="button" disabled={navDisabled} onClick={onNewEvent}>
       New event
     </Button>
-    <div className="ml-auto flex items-center gap-1">
+    <div className="flex items-center gap-1">
       <Button
         type="button"
         variant="outline"
@@ -66,5 +69,5 @@ export const CalendarHeader = ({
       <span className="tnum ml-2 min-w-0 text-sm font-medium">{label}</span>
     </div>
     <ViewSwitcher view={view} onViewChange={onViewChange} />
-  </header>
+  </>
 );

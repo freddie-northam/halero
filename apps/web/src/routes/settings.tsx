@@ -10,6 +10,7 @@ import {
   Input,
   Label,
   Loader2,
+  PageHeader,
 } from "@halero/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
@@ -339,27 +340,29 @@ const sectionBody = (props: SettingsScreenProps): ReactElement => {
 };
 
 export const SettingsScreen = (props: SettingsScreenProps): ReactElement => (
-  <div className="mx-auto flex w-full max-w-4xl gap-8 px-6 py-8">
-    <nav className="w-44 shrink-0">
-      <h1 className="mb-3 text-lg font-semibold tracking-tight">Settings</h1>
-      <ul className="flex flex-col gap-0.5">
-        {NAV.map((item) => (
-          <li key={item.section}>
-            <Link
-              to="/settings/$section"
-              params={{ section: item.section }}
-              className={`block rounded-md px-2.5 py-1.5 text-sm ${
-                item.section === props.section
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60"
-              }`}
-            >
-              {item.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
-    <div className="min-w-0 flex-1">{sectionBody(props)}</div>
-  </div>
+  <>
+    <PageHeader title="Settings" />
+    <div className="mt-6 flex gap-8">
+      <nav className="w-44 shrink-0">
+        <ul className="flex flex-col gap-0.5">
+          {NAV.map((item) => (
+            <li key={item.section}>
+              <Link
+                to="/settings/$section"
+                params={{ section: item.section }}
+                className={`block rounded-md px-2.5 py-1.5 text-sm ${
+                  item.section === props.section
+                    ? "bg-accent font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-accent/60"
+                }`}
+              >
+                {item.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <div className="min-w-0 flex-1">{sectionBody(props)}</div>
+    </div>
+  </>
 );

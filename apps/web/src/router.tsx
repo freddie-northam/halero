@@ -80,9 +80,6 @@ const useShellProps = (activePath: string) => {
     onOpenLink: (link: EntityLink) => {
       void router.navigate({ to: link.path, search: link.search ?? {} });
     },
-    onLoggedOut: () => {
-      void router.navigate({ to: "/login" });
-    },
   };
 };
 

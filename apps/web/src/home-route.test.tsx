@@ -194,25 +194,25 @@ test("the index route serves the Today page with the agenda from the stub", asyn
   expect(view.queryByText("Nothing here yet.")).toBeNull();
 });
 
-test("the sidebar marks Today active on the home route only", async () => {
+test("the sidebar marks Home active on the home route only", async () => {
   const view = await renderApp("/");
   await view.findByText(/Good (morning|afternoon|evening)/);
 
   const nav = within(view.getByRole("navigation", { name: "Primary" }));
-  const today = nav.getByRole("button", { name: "Today" });
+  const home = nav.getByRole("button", { name: "Home" });
   const calendar = nav.getByRole("button", { name: "Calendar" });
-  expect(today.getAttribute("aria-current")).toBe("page");
+  expect(home.getAttribute("aria-current")).toBe("page");
   expect(calendar.getAttribute("aria-current")).toBeNull();
 });
 
-test("Today goes inactive on /calendar: '/' must exact-match, not prefix-match", async () => {
+test("Home goes inactive on /calendar: '/' must exact-match, not prefix-match", async () => {
   const view = await renderApp("/calendar");
   await view.findByRole("tab", { name: "Agenda" });
 
   const nav = within(view.getByRole("navigation", { name: "Primary" }));
-  const today = nav.getByRole("button", { name: "Today" });
+  const home = nav.getByRole("button", { name: "Home" });
   const calendar = nav.getByRole("button", { name: "Calendar" });
-  expect(today.getAttribute("aria-current")).toBeNull();
+  expect(home.getAttribute("aria-current")).toBeNull();
   expect(calendar.getAttribute("aria-current")).toBe("page");
 });
 

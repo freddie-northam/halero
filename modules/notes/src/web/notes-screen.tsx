@@ -11,6 +11,7 @@ import {
   Button,
   Input,
   Loader2,
+  PageHeader,
   StickyNote,
 } from "@halero/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -76,9 +77,8 @@ export const createNotesScreen = (api: NotesApi) => {
     });
 
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 py-6">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">Notes</h1>
+      <>
+        <PageHeader title="Notes">
           <Button
             type="button"
             onClick={() => createNote.mutate()}
@@ -86,7 +86,7 @@ export const createNotesScreen = (api: NotesApi) => {
           >
             New note
           </Button>
-        </div>
+        </PageHeader>
 
         {createNote.error !== null && (
           <Alert variant="destructive" className="mt-4">
@@ -96,16 +96,18 @@ export const createNotesScreen = (api: NotesApi) => {
           </Alert>
         )}
 
-        <Body
-          api={api}
-          query={query}
-          onQueryChange={setQuery}
-          onOpen={open}
-          onCreate={() => createNote.mutate()}
-          creating={createNote.isPending}
-          listQuery={listQuery}
-        />
-      </div>
+        <div className="mt-6">
+          <Body
+            api={api}
+            query={query}
+            onQueryChange={setQuery}
+            onOpen={open}
+            onCreate={() => createNote.mutate()}
+            creating={createNote.isPending}
+            listQuery={listQuery}
+          />
+        </div>
+      </>
     );
   };
   return NotesScreen;
