@@ -139,7 +139,10 @@ export const createNoteDetailScreen = (api: NotesApi) => {
     };
 
     return (
-      <div className="mx-auto w-full max-w-3xl px-6 py-6">
+      // The editor keeps a centred reading column (the one sanctioned page
+      // exception, see the layout guard's exemptions); the shell's
+      // PageContainer already supplies the page padding.
+      <div className="mx-auto w-full max-w-3xl">
         <Button
           type="button"
           variant="ghost"
