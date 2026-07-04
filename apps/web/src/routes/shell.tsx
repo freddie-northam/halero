@@ -3,7 +3,7 @@ import type {
   EntityLink,
   EntityLinkContribution,
 } from "@halero/module-sdk/web";
-import { SidebarInset, SidebarProvider } from "@halero/ui";
+import { PageContainer, SidebarInset, SidebarProvider } from "@halero/ui";
 import {
   type CSSProperties,
   type ReactElement,
@@ -87,13 +87,19 @@ export const ShellScreen = ({
       {/* The routed content floats as a white rounded panel inside the warm
           inset frame: a hairline border carries the edge instead of a shadow,
           and an even margin on every side (overriding the inset's flush ml-0)
-          lets the warm frame wrap all the way around it. */}
-      <SidebarInset className="min-w-0 overflow-hidden border bg-card shadow-none md:peer-data-[variant=inset]:ml-2">
+          lets the warm frame wrap all the way around it. The panel caps at a
+          comfortable working width so the warm frame mats the overflow on wide
+          screens instead of the content stranding in white. */}
+      <SidebarInset className="min-w-0 max-w-[1280px] overflow-hidden border bg-card shadow-none md:peer-data-[variant=inset]:ml-2">
         <CommandBarSlot
           onSearchClick={() => setSearchOpen(true)}
           onSettingsClick={() => onNavigate("/settings")}
         />
-        <div className="flex-1 overflow-auto">{children}</div>
+        {/* PageContainer is the single width/padding authority: wrapping every
+            routed page here means no page can set its own width. */}
+        <div className="flex-1 overflow-auto">
+          <PageContainer>{children}</PageContainer>
+        </div>
       </SidebarInset>
       <CommandPalette
         open={searchOpen}
