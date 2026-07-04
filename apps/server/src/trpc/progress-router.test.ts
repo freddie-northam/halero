@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { dateStringInZone } from "@halero/connector-sdk";
 import { upsertDailyCounts } from "../progress/store";
-import { upsertApiKeyConnection } from "../sync/connection";
+import {
+  upsertApiKeyConnection,
+  upsertLocalConnection,
+} from "../sync/connection";
 import {
   completeSetup,
   type MakeTestAppOptions,
@@ -203,5 +206,176 @@ describe("progress.refresh", () => {
     });
     // Only connected sources appear.
     expect(data.sources.map((s) => s.id)).toEqual(["github"]);
+  });
+});
+
+const githubFetch =
+  (
+    body: unknown,
+    status = 200,
+  ): NonNullable<MakeTestAppOptions["outboundFetch"]> =>
+  (input) => {
+    const url = new URL(String(input));
+    if (url.host !== "api.github.com") {
+      throw new Error(`unexpected call: ${url.toString()}`);
+    }
+    return Promise.resolve(Response.json(body, { status }));
+  };
+
+describe("progress developer live reads", () => {
+  test("reviewRequests reports not connected when GitHub is absent", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const res = await trpcQuery(testApp.app, "progress.reviewRequests", {
+      cookie,
+    });
+    const data = (
+      (await res.json()) as TrpcSuccess<{
+        connected: boolean;
+        items: unknown[];
+      }>
+    ).result.data;
+    expect(data).toEqual({ connected: false, items: [] });
+  });
+
+  test("myOpenPullRequests returns items with rolled-up checks", async () => {
+    const body = {
+      data: {
+        search: {
+          nodes: [
+            {
+              __typename: "PullRequest",
+              title: "Fix auth",
+              number: 214,
+              url: "https://github.com/acme/api/pull/214",
+              updatedAt: "2026-07-03T10:00:00Z",
+              repository: { nameWithOwner: "acme/api" },
+              reviewDecision: "APPROVED",
+              commits: {
+                nodes: [
+                  { commit: { statusCheckRollup: { state: "SUCCESS" } } },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    };
+    const testApp = makeTestApp({ outboundFetch: githubFetch(body) });
+    const cookie = await completeSetup(testApp.app);
+    connectGithub(testApp);
+    const res = await trpcQuery(testApp.app, "progress.myOpenPullRequests", {
+      cookie,
+    });
+    const data = (
+      (await res.json()) as TrpcSuccess<{
+        connected: boolean;
+        items: { checks: string; repo: string }[];
+      }>
+    ).result.data;
+    expect(data.connected).toBe(true);
+    expect(data.items[0]).toMatchObject({
+      repo: "acme/api",
+      checks: "success",
+    });
+  });
+
+  test("a 403 from GitHub surfaces as a reconnect (403) error", async () => {
+    const testApp = makeTestApp({
+      outboundFetch: githubFetch({ message: "Forbidden" }, 403),
+    });
+    const cookie = await completeSetup(testApp.app);
+    connectGithub(testApp);
+    const res = await trpcQuery(testApp.app, "progress.assignedIssues", {
+      cookie,
+    });
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain("more GitHub access");
+  });
+});
+
+describe("progress.summary", () => {
+  test("covers only developer-category sources (excludes Wispr)", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const today = todayOf(testApp);
+    connectGithub(testApp);
+    upsertLocalConnection(testApp.database.db, testApp.clock.value, {
+      connectorId: "wispr-flow",
+      displayName: "Wispr Flow",
+    });
+    upsertDailyCounts(
+      testApp.database.db,
+      "github",
+      [{ date: today, count: 5 }],
+      testApp.clock.value,
+    );
+    upsertDailyCounts(
+      testApp.database.db,
+      "wispr-flow",
+      [{ date: today, count: 9 }],
+      testApp.clock.value,
+    );
+
+    const res = await trpcQuery(testApp.app, "progress.summary", {
+      cookie,
+      input: { range: "month" },
+    });
+    const data = (
+      (await res.json()) as TrpcSuccess<{
+        total: number;
+        bySource: { id: string; total: number }[];
+      }>
+    ).result.data;
+    expect(data.total).toBe(5);
+    expect(data.bySource.map((s) => s.id)).toEqual(["github"]);
+  });
+});
+
+describe("progress.status category + heatmap category filter", () => {
+  test("status carries each source's catalog category", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const res = await trpcQuery(testApp.app, "progress.status", { cookie });
+    const sources = (
+      (await res.json()) as TrpcSuccess<{
+        sources: { id: string; category: string | null }[];
+      }>
+    ).result.data.sources;
+    expect(sources.find((s) => s.id === "github")?.category).toBe("developer");
+    expect(sources.find((s) => s.id === "wispr-flow")?.category).toBe(
+      "productivity",
+    );
+  });
+
+  test("heatmap category:developer merges only dev sources", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const today = todayOf(testApp);
+    connectGithub(testApp);
+    upsertLocalConnection(testApp.database.db, testApp.clock.value, {
+      connectorId: "wispr-flow",
+      displayName: "Wispr Flow",
+    });
+    upsertDailyCounts(
+      testApp.database.db,
+      "github",
+      [{ date: today, count: 5 }],
+      testApp.clock.value,
+    );
+    upsertDailyCounts(
+      testApp.database.db,
+      "wispr-flow",
+      [{ date: today, count: 9 }],
+      testApp.clock.value,
+    );
+
+    const res = await trpcQuery(testApp.app, "progress.heatmap", {
+      cookie,
+      input: { range: "month", category: "developer" },
+    });
+    const data = ((await res.json()) as TrpcSuccess<{ total: number }>).result
+      .data;
+    expect(data.total).toBe(5);
   });
 });

@@ -19,9 +19,7 @@ import {
   DialogTrigger,
   Loader2,
   PageHeader,
-  Tabs,
-  TabsList,
-  TabsTrigger,
+  Switcher,
 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { type ComponentType, type ReactElement, useState } from "react";
@@ -52,11 +50,18 @@ const BoardEditor = ({
 }): ReactElement => {
   const [layout, setLayout] = useState<readonly WidgetInstance[]>(board.layout);
 
+  const existingTypes = new Set(layout.map((instance) => instance.type));
+
   const persist = (next: readonly WidgetInstance[]): void => {
     setLayout(next);
     void api.boards.saveLayout({ id: board.id, layout: next });
   };
   const addWidget = (def: WidgetDef): void => {
+    // One of each widget type per board: adding is idempotent, and the menu
+    // already shows added types as disabled.
+    if (existingTypes.has(def.type)) {
+      return;
+    }
     persist([
       ...layout,
       {
@@ -72,7 +77,7 @@ const BoardEditor = ({
     <div className="mt-4 flex flex-col gap-4">
       {editing ? (
         <div className="flex justify-end">
-          <AddWidget onAdd={addWidget} />
+          <AddWidget onAdd={addWidget} existingTypes={existingTypes} />
         </div>
       ) : null}
       {layout.length === 0 ? (
@@ -220,50 +225,11 @@ export const createF1Screen = (api: F1Api): ComponentType => {
 
     return (
       <>
-        <PageHeader title="F1">
+        <PageHeader title="Formula 1">
           {selected === null ? null : (
             <>
-              <Button
-                type="button"
-                size="sm"
-                variant={editing ? "default" : "outline"}
-                onClick={() => setEditing((value) => !value)}
-              >
-                {editing ? "Done" : "Edit"}
-              </Button>
-              <BoardNameDialog
-                title="New board"
-                submitLabel="Create"
-                onSubmit={createBoard}
-                trigger={
-                  <Button type="button" size="sm" variant="outline">
-                    New board
-                  </Button>
-                }
-              />
-            </>
-          )}
-        </PageHeader>
-
-        {selected === null ? (
-          <NoBoards onCreate={createBoard} />
-        ) : (
-          <>
-            <div className="mt-6 flex items-center justify-between gap-2">
-              <Tabs
-                value={selected.id}
-                onValueChange={(value) => setSelectedId(value)}
-              >
-                <TabsList aria-label="Boards">
-                  {boards.map((board) => (
-                    <TabsTrigger key={board.id} value={board.id}>
-                      {board.name}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
               {editing ? (
-                <div className="flex items-center gap-1">
+                <>
                   <BoardNameDialog
                     title="Rename board"
                     submitLabel="Save"
@@ -284,8 +250,44 @@ export const createF1Screen = (api: F1Api): ComponentType => {
                       setSelectedId(null);
                     }}
                   />
-                </div>
+                  <BoardNameDialog
+                    title="New board"
+                    submitLabel="Create"
+                    onSubmit={createBoard}
+                    trigger={
+                      <Button type="button" size="sm" variant="ghost">
+                        New board
+                      </Button>
+                    }
+                  />
+                </>
               ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={editing ? "default" : "outline"}
+                onClick={() => setEditing((value) => !value)}
+              >
+                {editing ? "Done" : "Edit"}
+              </Button>
+            </>
+          )}
+        </PageHeader>
+
+        {selected === null ? (
+          <NoBoards onCreate={createBoard} />
+        ) : (
+          <>
+            <div className="mt-6">
+              <Switcher
+                ariaLabel="Boards"
+                value={selected.id}
+                onValueChange={setSelectedId}
+                options={boards.map((board) => ({
+                  value: board.id,
+                  label: board.name,
+                }))}
+              />
             </div>
             <BoardEditor
               key={selected.id}

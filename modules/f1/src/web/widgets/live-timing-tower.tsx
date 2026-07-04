@@ -11,19 +11,11 @@ import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import type { LiveSession, TimingRow } from "../../contract";
 import type { F1Api } from "../api";
-import {
-  formatGap,
-  formatLapTime,
-  formatSessionDay,
-  teamColour,
-  tyreColour,
-} from "../palette";
+import { formatGap, formatLapTime, teamColour, tyreColour } from "../palette";
 import { f1LiveLeafKey } from "../queries";
 import { readableError } from "../readable-error";
 import { WidgetEmpty, WidgetError, WidgetSkeleton } from "../widget-chrome";
 import { LiveConnectDialog } from "./live-control";
-
-const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** The pulsing "LIVE" marker that heads the tower during a live session. */
 const LiveDot = (): ReactElement => (
@@ -97,40 +89,10 @@ const sessionLabel = (session: LiveSession): string => {
     : `${meeting} - ${session.sessionName}`;
 };
 
-const IdleState = ({
-  session,
-}: {
-  readonly session: LiveSession | null;
-}): ReactElement => {
-  if (session === null) {
-    return <WidgetEmpty message="No session is live right now." />;
-  }
-  const day = formatSessionDay(session.dateStart, BROWSER_TZ);
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
-      <p className="text-sm font-semibold">{sessionLabel(session)}</p>
-      <p className="text-sm text-muted-foreground">
-        Not live right now{day === "TBC" ? "" : ` - ${day}`}
-      </p>
-    </div>
-  );
-};
-
-const CredentialCta = ({ api }: { readonly api: F1Api }): ReactElement => (
-  <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
-    <p className="text-sm text-muted-foreground">
-      Connect your OpenF1 account to see live timing.
-    </p>
-    <LiveConnectDialog
-      api={api}
-      trigger={
-        <Button type="button" size="sm">
-          Connect
-        </Button>
-      }
-    />
-  </div>
-);
+const idleMessage = (session: LiveSession | null): string =>
+  session === null
+    ? "No session is live right now."
+    : `${sessionLabel(session)} is not live right now.`;
 
 export const LiveTimingTowerWidget = ({
   api,
@@ -152,11 +114,25 @@ export const LiveTimingTowerWidget = ({
     return <WidgetSkeleton rows={6} />;
   }
   if (timing.requiresCredential) {
-    return <CredentialCta api={api} />;
+    return (
+      <WidgetEmpty
+        message="Connect your OpenF1 account to see live timing."
+        action={
+          <LiveConnectDialog
+            api={api}
+            trigger={
+              <Button type="button" size="sm">
+                Connect
+              </Button>
+            }
+          />
+        }
+      />
+    );
   }
   const { session, rows } = timing;
   if (session === null || !session.isLive || rows.length === 0) {
-    return <IdleState session={session} />;
+    return <WidgetEmpty message={idleMessage(session)} />;
   }
 
   return (

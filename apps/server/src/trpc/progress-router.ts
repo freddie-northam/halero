@@ -11,8 +11,18 @@ import type { HaleroDatabase } from "@halero/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getCatalogEntry } from "../connections/catalog";
-import { isConnected } from "../connections/connection-token";
+import {
+  isConnected,
+  readConnectionToken,
+} from "../connections/connection-token";
 import { densify, type HeatmapRange, rangeStart } from "../progress/date-range";
+import {
+  fetchAssignedIssues,
+  fetchMyPullRequests,
+  fetchRepositories,
+  fetchReviewRequests,
+  GithubScopeError,
+} from "../progress/github-work";
 import type { ActivitySourceContext } from "../progress/source";
 import { ACTIVITY_SOURCES } from "../progress/sources";
 import { computeStats } from "../progress/stats";
@@ -40,6 +50,45 @@ const connectedSourceIds = (ctx: TrpcContext): string[] =>
     (source) => source.id,
   );
 
+/** Connected source ids, optionally narrowed to one catalog category. */
+const sourcesFor = (ctx: TrpcContext, category?: string): string[] =>
+  connectedSourceIds(ctx).filter(
+    (id) =>
+      category === undefined || getCatalogEntry(id)?.category === category,
+  );
+
+const GITHUB_ID = "github";
+
+/**
+ * Runs a live GitHub read with the stored token: returns { connected:false }
+ * when GitHub is not connected, throws FORBIDDEN (reconnect) when the token
+ * lacks scope, and BAD_REQUEST on other failures.
+ */
+const githubWork = async <T>(
+  ctx: TrpcContext,
+  fetcher: (fetch: TrpcContext["outboundFetch"], token: string) => Promise<T[]>,
+): Promise<{ connected: boolean; items: T[] }> => {
+  const token = readConnectionToken(ctx.db, ctx.key, GITHUB_ID);
+  if (token === null) {
+    return { connected: false, items: [] };
+  }
+  try {
+    return { connected: true, items: await fetcher(ctx.outboundFetch, token) };
+  } catch (error) {
+    if (error instanceof GithubScopeError) {
+      throw new TRPCError({ code: "FORBIDDEN", message: error.message });
+    }
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "GitHub request failed.",
+      cause: error,
+    });
+  }
+};
+
 const heatmapRangeSchema = z.enum(["year", "6months", "month"]);
 
 export const progressRouter = router({
@@ -48,11 +97,55 @@ export const progressRouter = router({
     sources: ACTIVITY_SOURCES.map((source) => ({
       id: source.id,
       displayName: getCatalogEntry(source.id)?.displayName ?? source.id,
+      category: getCatalogEntry(source.id)?.category ?? null,
       connected: isConnected(ctx.db, source.id),
       lastSyncedAt: lastUpdatedAt(ctx.db, source.id),
       lastError: getSetting(ctx.db, lastErrorKey(source.id)),
     })),
   })),
+
+  /**
+   * Activity headline for the Developer page: totals + streaks over the
+   * connected developer-category sources, plus a per-source breakdown.
+   */
+  summary: protectedProcedure
+    .input(z.object({ range: heatmapRangeSchema }))
+    .query(({ ctx, input }) => {
+      const today = todayOf(ctx);
+      const from = rangeStart(today, input.range as HeatmapRange);
+      const devIds = sourcesFor(ctx, "developer");
+      const bySource = devIds.map((id) => ({
+        id,
+        displayName: getCatalogEntry(id)?.displayName ?? id,
+        total: readRange(ctx.db, id, from, today).reduce(
+          (sum, row) => sum + row.count,
+          0,
+        ),
+      }));
+      const days = densify(
+        readMergedRange(ctx.db, devIds, from, today),
+        from,
+        today,
+      );
+      return { ...computeStats(days, today), bySource };
+    }),
+
+  /** Pull requests where my review is requested (live GitHub read). */
+  reviewRequests: protectedProcedure.query(({ ctx }) =>
+    githubWork(ctx, fetchReviewRequests),
+  ),
+  /** My open pull requests with review + CI state (live GitHub read). */
+  myOpenPullRequests: protectedProcedure.query(({ ctx }) =>
+    githubWork(ctx, fetchMyPullRequests),
+  ),
+  /** Issues assigned to me (live GitHub read). */
+  assignedIssues: protectedProcedure.query(({ ctx }) =>
+    githubWork(ctx, fetchAssignedIssues),
+  ),
+  /** Per-repo contribution totals (live GitHub read). */
+  repositories: protectedProcedure.query(({ ctx }) =>
+    githubWork(ctx, fetchRepositories),
+  ),
 
   /**
    * A heatmap for one source, or the merged total across every connected
@@ -63,6 +156,9 @@ export const progressRouter = router({
       z.object({
         range: heatmapRangeSchema,
         source: z.string().min(1).optional(),
+        // Narrows the merged "all" view to one catalog category (the
+        // Developer page passes "developer").
+        category: z.string().min(1).optional(),
       }),
     )
     .query(({ ctx, input }) => {
@@ -70,7 +166,12 @@ export const progressRouter = router({
       const from = rangeStart(today, input.range as HeatmapRange);
       const rows =
         input.source === undefined || input.source === "all"
-          ? readMergedRange(ctx.db, connectedSourceIds(ctx), from, today)
+          ? readMergedRange(
+              ctx.db,
+              sourcesFor(ctx, input.category),
+              from,
+              today,
+            )
           : readRange(ctx.db, input.source, from, today);
       const days = densify(rows, from, today);
       const stats = computeStats(days, today);

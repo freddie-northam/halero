@@ -27,7 +27,7 @@ import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 import type { F1Api } from "../api";
 import { f1LiveLeafKey } from "../queries";
 import { readableError } from "../readable-error";
-import { WidgetError, WidgetSkeleton } from "../widget-chrome";
+import { WidgetEmpty, WidgetError, WidgetSkeleton } from "../widget-chrome";
 
 type ConnectResult = { readonly connected: true };
 type ConnectInput = { readonly username: string; readonly password: string };
@@ -154,7 +154,7 @@ const ConnectedState = ({ api }: { readonly api: F1Api }): ReactElement => {
     mutationFn: () => api.live.disconnect(),
   });
   return (
-    <div className="flex h-full flex-col items-start justify-center gap-3">
+    <div className="flex h-full min-h-24 flex-col items-center justify-center gap-3 px-2 text-center">
       <Badge className="border-transparent bg-[#43B02A] text-white">
         Connected
       </Badge>
@@ -180,22 +180,19 @@ const ConnectedState = ({ api }: { readonly api: F1Api }): ReactElement => {
 };
 
 const DisconnectedState = ({ api }: { readonly api: F1Api }): ReactElement => (
-  <div className="flex h-full flex-col items-start justify-center gap-3">
-    <Badge className="border-transparent bg-muted text-muted-foreground">
-      Not connected
-    </Badge>
-    <p className="text-sm text-muted-foreground">
-      Connect your OpenF1 account to stream live timing during a session.
-    </p>
-    <LiveConnectDialog
-      api={api}
-      trigger={
-        <Button type="button" size="sm">
-          Connect
-        </Button>
-      }
-    />
-  </div>
+  <WidgetEmpty
+    message="Connect your OpenF1 account to see live timing."
+    action={
+      <LiveConnectDialog
+        api={api}
+        trigger={
+          <Button type="button" size="sm">
+            Connect
+          </Button>
+        }
+      />
+    }
+  />
 );
 
 export const LiveControlWidget = ({

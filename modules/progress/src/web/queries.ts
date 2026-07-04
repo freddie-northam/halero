@@ -7,25 +7,33 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { HeatmapRange } from "../contract";
 import type { ProgressApi } from "./api";
 
-const progressRootKey = ["progress"] as const;
+export const progressRootKey = ["progress"] as const;
 
 export const progressStatusKey = [...progressRootKey, "status"] as const;
+
+/** Prefix over the four live GitHub reads, for a scoped Work-tab refresh. */
+export const progressWorkRootKey = [...progressRootKey, "work"] as const;
 
 export const progressHeatmapKey = (range: HeatmapRange, source: string) =>
   [...progressRootKey, "heatmap", source, range] as const;
 
+export const progressSummaryKey = (range: HeatmapRange) =>
+  [...progressRootKey, "summary", range] as const;
+
+/** kind: "reviews" | "prs" | "issues" | "repos" (the live GitHub reads). */
+export const progressWorkKey = (kind: string) =>
+  [...progressRootKey, "work", kind] as const;
+
 /**
  * Wraps a ProgressApi so a successful refresh invalidates the module's
- * queries (status and the heatmap under every range) and resolves only
- * after active ones refetched. Reads pass straight through; only refresh
- * mutates the world, so it is the only method that invalidates.
+ * queries (status, heatmaps, summary) and resolves only after active ones
+ * refetch. Reads pass straight through; only refresh mutates the world.
  */
 export const withProgressInvalidation = (
   api: ProgressApi,
   queryClient: QueryClient,
 ): ProgressApi => ({
-  status: api.status,
-  heatmap: api.heatmap,
+  ...api,
   refresh: async () => {
     const result = await api.refresh();
     await queryClient.invalidateQueries({ queryKey: progressRootKey });
