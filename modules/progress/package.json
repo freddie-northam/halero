@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@halero/module-sdk": "workspace:*",
+    "@halero/schemas": "workspace:*",
     "@halero/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.17"

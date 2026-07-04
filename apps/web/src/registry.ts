@@ -20,6 +20,7 @@ import {
   withNotesInvalidation,
 } from "@halero/module-notes/web";
 import {
+  type AgentsApi,
   createProgressWebModule,
   type ProgressApi,
   withProgressInvalidation,
@@ -41,6 +42,8 @@ import {
   type TodaySection,
 } from "@halero/module-today/web";
 import type { QueryClient } from "@tanstack/react-query";
+import { createElement } from "react";
+import { HostRelatedPanel } from "./components/host-related-panel";
 import type { HaleroApi } from "./lib/api";
 import type { TrpcClient } from "./lib/trpc";
 
@@ -232,6 +235,7 @@ export const buildWebModules = (
   const tasksApi = buildTasksApi(client, queryClient);
   const notesApi = buildNotesApi(client, queryClient);
   const progressApi = buildProgressApi(client, queryClient);
+  const agentsApi = buildAgentsApi(client);
   const f1Api = buildF1Api(client, queryClient);
   return [
     createTodayWebModule({
@@ -258,10 +262,19 @@ export const buildWebModules = (
       },
       sections: buildTodaySections(calendarApi, tasksApi),
     }),
-    createCalendarWebModule(calendarApi),
-    createTasksWebModule(tasksApi),
-    createNotesWebModule(notesApi),
-    createProgressWebModule(progressApi),
+    createCalendarWebModule(calendarApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
+    createTasksWebModule(tasksApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
+    createNotesWebModule(notesApi, {
+      renderRelated: (entityId) =>
+        createElement(HostRelatedPanel, { entityId }),
+    }),
+    createProgressWebModule(progressApi, agentsApi),
     createF1WebModule(f1Api),
   ];
 };
@@ -288,6 +301,20 @@ export const buildProgressApi = (
     },
     queryClient,
   );
+
+export const buildAgentsApi = (client: TrpcClient): AgentsApi => ({
+  catalog: () => client.agents.catalog.query(),
+  start: (input) =>
+    client.agents.start.mutate({
+      prompt: input.prompt,
+      agentIds: [...input.agentIds],
+    }),
+  list: () => client.agents.list.query(),
+  get: (id) => client.agents.get.query({ id }),
+  remove: async (id) => {
+    await client.agents.remove.mutate({ id });
+  },
+});
 
 const duplicateEntityLinkMessage = (
   kind: string,

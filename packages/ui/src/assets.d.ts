@@ -6,3 +6,6 @@ declare module "*.png" {
   // biome-ignore lint/style/noDefaultExport: Vite asset imports expose the URL through the default binding.
   export default src;
 }
+
+// Side-effect CSS imports (Vite injects the stylesheet); no runtime shape.
+declare module "*.css" {}

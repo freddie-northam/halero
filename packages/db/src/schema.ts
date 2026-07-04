@@ -57,6 +57,35 @@ export const calendarEvents = sqliteTable("calendar_events", {
   url: text("url"),
 });
 
+// The agent.run satellite (migrations/0012_agent_runs.sql): a Developer-page
+// agent run's durable, kind-specific fields, so a run's outcome survives a
+// restart. The diff patch and terminal output are transient and not stored.
+export const agentRuns = sqliteTable(
+  "agent_runs",
+  {
+    entityId: text("entity_id")
+      .primaryKey()
+      .references(() => entities.id),
+    runId: text("run_id").notNull(),
+    agentId: text("agent_id").notNull(),
+    repo: text("repo").notNull(),
+    branch: text("branch").notNull(),
+    status: text("status", {
+      enum: ["running", "succeeded", "failed"],
+    }).notNull(),
+    exitCode: integer("exit_code"),
+    files: integer("files"),
+    insertions: integer("insertions"),
+    deletions: integer("deletions"),
+    createdAt: integer("created_at").notNull(),
+    endedAt: integer("ended_at"),
+  },
+  (table) => [
+    index("idx_agent_runs_run_id").on(table.runId),
+    index("idx_agent_runs_created_at").on(table.createdAt),
+  ],
+);
+
 export const links = sqliteTable(
   "links",
   {

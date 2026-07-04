@@ -1,3 +1,4 @@
+export { AGENT_RUN_KIND } from "./agent-run";
 export {
   CALENDAR_EVENT_KIND,
   type CalendarEventSatellite,

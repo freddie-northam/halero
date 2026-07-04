@@ -22,6 +22,19 @@ export type ProgressStatus = Awaited<
 export type ProgressHeatmap = Awaited<
   ReturnType<TrpcClient["progress"]["heatmap"]["query"]>
 >;
+// Relationship-layer shapes inferred from the typed links router so the
+// web never re-declares (and never drifts from) the edge model.
+export type EntityLinkList = Awaited<
+  ReturnType<TrpcClient["links"]["for"]["query"]>
+>;
+export type EntityLinkItem = EntityLinkList["links"][number];
+export type EntityLinkNeighbor = EntityLinkItem["neighbor"];
+
+export interface CreateEntityLinkInput {
+  readonly fromId: string;
+  readonly toId: string;
+  readonly kind: string;
+}
 
 export interface SetupInput {
   readonly password: string;
@@ -125,6 +138,12 @@ export interface HaleroApi {
     query: string,
     opts?: SearchOptions,
   ) => Promise<readonly SearchResult[]>;
+  /** Every relationship touching an entity, with its neighbors resolved. */
+  readonly entityLinks: (entityId: string) => Promise<EntityLinkList>;
+  readonly createEntityLink: (
+    input: CreateEntityLinkInput,
+  ) => Promise<{ readonly id: string }>;
+  readonly deleteEntityLink: (id: string) => Promise<void>;
 }
 
 export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
@@ -172,4 +191,9 @@ export const createHaleroApi = (client: TrpcClient): HaleroApi => ({
   },
   search: async (query, opts) =>
     (await client.system.search.query({ query, ...opts })).results,
+  entityLinks: (entityId) => client.links.for.query({ entityId }),
+  createEntityLink: (input) => client.links.create.mutate(input),
+  deleteEntityLink: async (id) => {
+    await client.links.delete.mutate({ id });
+  },
 });

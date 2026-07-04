@@ -10,7 +10,10 @@ import { f1ServerModule } from "@halero/module-f1/server";
 import { notesServerModule } from "@halero/module-notes/server";
 import {
   buildKindRegistry,
+  buildLinkKindRegistry,
   type KindRegistry,
+  type LinkKindContribution,
+  type LinkKindRegistry,
   type ModuleRequestContext,
   type ServerModule,
   type UserEntityStore,
@@ -33,6 +36,31 @@ export const serverModules: readonly ServerModule[] = [
  * before the server can start.
  */
 export const kindRegistry: KindRegistry = buildKindRegistry(serverModules);
+
+/**
+ * Host-owned link kinds every build ships with. The generic, symmetric
+ * "relates_to" lets a person connect any two items by hand; modules add
+ * typed kinds (e.g. "task.blocks") through their own linkKinds.
+ */
+export const HOST_LINK_KINDS: readonly LinkKindContribution[] = [
+  {
+    kind: "relates_to",
+    label: "Related to",
+    from: "*",
+    to: "*",
+    symmetric: true,
+  },
+];
+
+/**
+ * The link-kind vocabulary the links router validates edges against,
+ * built and validated at boot. A duplicate link-kind id (host or module)
+ * throws a readable error here before the server can start.
+ */
+export const linkKindRegistry: LinkKindRegistry = buildLinkKindRegistry([
+  ...HOST_LINK_KINDS,
+  ...serverModules.flatMap((module) => module.linkKinds ?? []),
+]);
 
 /**
  * Module routers, mounted under modules.<id>.*. The keys are written out

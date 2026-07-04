@@ -8,7 +8,7 @@
 import { Alert, AlertDescription, Loader2, PageHeader } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { type ReactElement, useState } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 import type { Task } from "../contract";
 import type { TasksApi } from "./api";
 import { TaskDetailDialog } from "./components/task-detail-dialog";
@@ -74,7 +74,10 @@ const BoardBody = ({
 };
 
 /** Builds the page component around the host-wired tasks queries. */
-export const createTasksScreen = (api: TasksApi) => {
+export const createTasksScreen = (
+  api: TasksApi,
+  renderRelated?: (entityId: string) => ReactNode,
+) => {
   const TasksScreen = (): ReactElement => {
     const rawSearch: unknown = useSearch({ strict: false });
     const { view } = normalizeTasksSearch(rawSearch);
@@ -99,6 +102,7 @@ export const createTasksScreen = (api: TasksApi) => {
         </div>
         <TaskDetailDialog
           task={selectedTask}
+          renderRelated={renderRelated}
           onClose={() => setSelectedTask(null)}
           onSave={async (input) => {
             await api.update(input);

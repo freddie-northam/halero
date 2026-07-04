@@ -11,11 +11,14 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Terminal,
 } from "@halero/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import type { AgentsApi } from "./agents-api";
 import type { ProgressApi } from "./api";
 import { ActivityTab } from "./components/activity-tab";
+import { AgentsTab } from "./components/agents-tab";
 import {
   developerSourcesOf,
   ErrorAlert,
@@ -26,7 +29,10 @@ import { WorkTab } from "./components/work-tab";
 import { progressStatusKey } from "./queries";
 
 /** Builds the Developer page around the host-wired ProgressApi. */
-export const createDeveloperScreen = (api: ProgressApi) => {
+export const createDeveloperScreen = (
+  api: ProgressApi,
+  agentsApi: AgentsApi,
+) => {
   const DeveloperScreen = (): ReactElement => {
     const status = useQuery({
       queryKey: progressStatusKey,
@@ -48,6 +54,8 @@ export const createDeveloperScreen = (api: ProgressApi) => {
             <TabsTrigger value="work">Work</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="repositories">Repositories</TabsTrigger>
+            <TabsTrigger value="agents">Agents</TabsTrigger>
+            <TabsTrigger value="terminal">Terminal</TabsTrigger>
           </TabsList>
           <TabsContent value="work" className="mt-6">
             <WorkTab api={api} githubConnected={githubConnected} />
@@ -57,6 +65,12 @@ export const createDeveloperScreen = (api: ProgressApi) => {
           </TabsContent>
           <TabsContent value="repositories" className="mt-6">
             <RepositoriesTab api={api} githubConnected={githubConnected} />
+          </TabsContent>
+          <TabsContent value="agents" className="mt-6">
+            <AgentsTab api={agentsApi} />
+          </TabsContent>
+          <TabsContent value="terminal" className="mt-6">
+            <Terminal />
           </TabsContent>
         </Tabs>
       );

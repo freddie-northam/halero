@@ -9,6 +9,7 @@ export type { HaleroDatabase } from "./open-database";
 export { openDatabase } from "./open-database";
 export {
   activityDaily,
+  agentRuns,
   apiTokens,
   calendarEvents,
   connections,
