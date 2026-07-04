@@ -28,6 +28,7 @@ Two supported deployments:
 | `HALERO_BASE_URL` | `http://localhost:<port>` | The address you open Halero at. Must match the browser address exactly (scheme, host, port): the CSRF origin check, the session cookie's Secure flag, and the Google OAuth redirect URI are all derived from it. A wrong value breaks sign-in and mutations. A base URL saved during first-run setup takes precedence over this variable. |
 | `HALERO_KEY` | unset | Optional 64-character hex string (a 32-byte key). When set, it is used instead of the `<data>/key` file. When unset, Halero generates `<data>/key` on first start with mode 0600. |
 | `HALERO_DEVELOPER_TERMINAL` | unset (off) | Set to `1` to enable the terminal on the Developer page. This runs a real shell on the host with your privileges, so it is opt-in and, even when on, the socket only accepts loopback connections from a signed-in session. Never enable it on a network-exposed instance. |
+| `HALERO_AGENTS_REPO` | unset (off) | Absolute path to a git repository for the Developer page's agent runs. With this set AND `HALERO_DEVELOPER_TERMINAL=1`, you can fan a prompt out to coding agents (Claude Code, Codex); each runs in its own git worktree branched from the repo's HEAD and never touches your working tree. Requires the agent CLIs installed and authenticated. Arbitrary command execution: keep it off on network-exposed instances. |
 
 ## Mac with launchd (recommended)
 
