@@ -156,4 +156,6 @@ export {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+// Custom nav glyph: lucide has no Formula 1 car, so this one is authored.
+export { F1Car } from "./f1-car-icon";
 export { cn } from "./lib/utils";

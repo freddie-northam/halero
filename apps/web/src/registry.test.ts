@@ -277,7 +277,7 @@ describe("buildNav", () => {
       "Tasks",
       "Notes",
       "Progress",
-      "F1",
+      "Formula 1",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
