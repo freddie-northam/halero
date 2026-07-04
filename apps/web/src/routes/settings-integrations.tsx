@@ -306,9 +306,17 @@ const ApiKeyConnect = ({
       <DialogHeader>
         <DialogTitle>Connect {item.displayName}</DialogTitle>
         <DialogDescription>
-          Paste a {item.displayName} personal access token. For GitHub, create
-          one with the read:user scope (and enable private contributions to
-          include private activity).
+          {item.id === "github" ? (
+            <>
+              Paste a GitHub personal access token. Create a fine-grained,
+              read-only token with Pull requests, Issues, and Contents set to
+              Read, plus organization read for org repos. The Work and
+              Repositories tabs need this access; a narrower token still shows
+              your heatmap but prompts you to reconnect.
+            </>
+          ) : (
+            <>Paste a {item.displayName} personal access token.</>
+          )}
         </DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-1.5">

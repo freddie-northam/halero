@@ -2,10 +2,12 @@
 // returns and its web page consumes. Pure types so both entries can
 // import them without dragging the other side's dependencies along.
 
-/** One activity source's health for the Progress page's source selector. */
+/** One activity source's health for the source selector. */
 export interface SourceStatus {
   readonly id: string;
   readonly displayName: string;
+  /** Catalog category, e.g. "developer" / "productivity"; null if unknown. */
+  readonly category: string | null;
   readonly connected: boolean;
   /** Epoch ms of the last refresh, or null when never refreshed. */
   readonly lastSyncedAt: number | null;
@@ -16,6 +18,53 @@ export interface SourceStatus {
 /** Every activity source and whether it is connected. */
 export interface ProgressStatus {
   readonly sources: readonly SourceStatus[];
+}
+
+// --- Developer "Work" tab (live GitHub reads) ---
+
+export type ChecksState = "success" | "failure" | "pending" | "none";
+
+/** A PR or issue row in a work queue. */
+export interface WorkItem {
+  readonly title: string;
+  readonly repo: string;
+  readonly number: number;
+  readonly url: string;
+  readonly updatedAt: string;
+}
+
+export interface PullRequestItem extends WorkItem {
+  readonly reviewDecision: string | null;
+  readonly checks: ChecksState;
+}
+
+/** A live-read result: not `connected` shows the connect prompt. */
+export interface WorkList<T> {
+  readonly connected: boolean;
+  readonly items: readonly T[];
+}
+
+// --- Developer "Activity" + "Repositories" tabs ---
+
+/** One source's total for the Activity breakdown card. */
+export interface SourceTotal {
+  readonly id: string;
+  readonly displayName: string;
+  readonly total: number;
+}
+
+/** Headline stats for the Activity tab's card grid. */
+export interface DeveloperSummary {
+  readonly total: number;
+  readonly currentStreak: number;
+  readonly longestStreak: number;
+  readonly bySource: readonly SourceTotal[];
+}
+
+/** One repository's activity for the Repositories tab. */
+export interface RepoStat {
+  readonly repo: string;
+  readonly contributions: number;
 }
 
 /** How much history the heatmap covers. */

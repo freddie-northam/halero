@@ -276,14 +276,14 @@ describe("buildNav", () => {
       "Calendar",
       "Tasks",
       "Notes",
-      "Progress",
+      "Developer",
     ]);
     expect(nav.map((entry) => entry.path)).toEqual([
       "/",
       "/calendar",
       "/tasks",
       "/notes",
-      "/progress",
+      "/developer",
     ]);
   });
 
