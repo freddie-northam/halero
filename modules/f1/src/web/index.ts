@@ -30,7 +30,7 @@ export { withF1Invalidation } from "./queries";
 export const createF1WebModule = (api: F1Api): WebModule =>
   defineWebModule({
     id: "f1",
-    nav: [{ label: "F1", path: "/f1", order: 50 }],
+    nav: [{ label: "Formula 1", path: "/f1", order: 50, icon: "f1" }],
     pages: [{ path: "/f1", component: createF1Screen(api) }],
     entityLinks: [
       {
