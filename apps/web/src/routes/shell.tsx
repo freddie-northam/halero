@@ -4,7 +4,6 @@ import type {
   EntityLinkContribution,
 } from "@halero/module-sdk/web";
 import { SidebarInset, SidebarProvider } from "@halero/ui";
-import { useMutation } from "@tanstack/react-query";
 import {
   type CSSProperties,
   type ReactElement,
@@ -14,10 +13,8 @@ import {
 import { CommandBarSlot } from "../components/command-bar-slot";
 import { CommandPalette } from "../components/command-palette";
 import { AppSidebar, type SidebarNavItem } from "../components/sidebar";
-import { useApi } from "../lib/api-context";
 
 export interface ShellScreenProps {
-  readonly onLoggedOut: () => void;
   /** Nav entries from the web module registry, already sorted. */
   readonly nav: readonly SidebarNavItem[];
   readonly activePath: string;
@@ -64,7 +61,6 @@ const readSidebarState = (): boolean => {
 };
 
 export const ShellScreen = ({
-  onLoggedOut,
   nav,
   activePath,
   onNavigate,
@@ -73,15 +69,9 @@ export const ShellScreen = ({
   onOpenLink,
   children,
 }: ShellScreenProps): ReactElement => {
-  const api = useApi();
   const [searchOpen, setSearchOpen] = useState(false);
   const [defaultSidebarOpen] = useState(readSidebarState);
-  const logout = useMutation({
-    mutationFn: () => api.logout(),
-    onSuccess: onLoggedOut,
-  });
   const activeItem = navItemFor(nav, activePath);
-  const title = activeItem?.label;
 
   return (
     <SidebarProvider
@@ -93,14 +83,15 @@ export const ShellScreen = ({
         items={nav}
         activePath={activeItem?.path ?? activePath}
         onNavigate={onNavigate}
-        onLogout={() => logout.mutate()}
-        logoutPending={logout.isPending}
       />
-      <SidebarInset className="min-w-0">
+      {/* The routed content floats as a white rounded panel inside the warm
+          inset frame: a hairline border carries the edge instead of a shadow,
+          and an even margin on every side (overriding the inset's flush ml-0)
+          lets the warm frame wrap all the way around it. */}
+      <SidebarInset className="min-w-0 overflow-hidden border bg-card shadow-none md:peer-data-[variant=inset]:ml-2">
         <CommandBarSlot
           onSearchClick={() => setSearchOpen(true)}
           onSettingsClick={() => onNavigate("/settings")}
-          title={title}
         />
         <div className="flex-1 overflow-auto">{children}</div>
       </SidebarInset>

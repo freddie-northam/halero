@@ -37,7 +37,11 @@
   --ring: #ff5a5f;
   /* 6px for controls, 10px for panels (rounded-md / rounded-xl). */
   --radius: 6px;
-  --sidebar: #ffffff;
+  /* A distinctly warmer, dimmer tone than the white content panel: the
+     sidebar and the inset frame share it so the white (--card) panel reads
+     as floating inside them. Kept subtle, but far enough from #ffffff that
+     the float carries on contrast alone, no shadow. */
+  --sidebar: #efece7;
   --sidebar-foreground: #1c1917;
   --sidebar-primary: #ff5a5f;
   --sidebar-primary-foreground: #ffffff;

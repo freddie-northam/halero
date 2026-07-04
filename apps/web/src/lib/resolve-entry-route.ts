@@ -1,6 +1,8 @@
 export interface EntryStatus {
   readonly needsSetup: boolean;
   readonly authenticated: boolean;
+  /** The owner's name, present only once authenticated; for the header avatar. */
+  readonly displayName?: string | null;
 }
 
 export type EntryRoute = "/setup" | "/login" | "/";

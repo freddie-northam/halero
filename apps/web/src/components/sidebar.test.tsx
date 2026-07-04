@@ -38,7 +38,6 @@ test("renders the nav items with aria-current on the active one", () => {
     items: NAV_ITEMS,
     activePath: "/",
     onNavigate: () => undefined,
-    onLogout: () => undefined,
   });
   expect(view.getByRole("navigation", { name: "Primary" })).toBeTruthy();
   const today = view.getByRole("button", { name: "Today" });
@@ -54,7 +53,6 @@ test("marks a module-contributed item active on its own path", () => {
     items: NAV_ITEMS,
     activePath: "/calendar",
     onNavigate: () => undefined,
-    onLogout: () => undefined,
   });
   const calendar = view.getByRole("button", { name: "Calendar" });
   const today = view.getByRole("button", { name: "Today" });
@@ -68,8 +66,22 @@ test("reports the path a click asks to navigate to", () => {
     items: NAV_ITEMS,
     activePath: "/",
     onNavigate: (path) => visited.push(path),
-    onLogout: () => undefined,
   });
   fireEvent.click(view.getByRole("button", { name: "Settings" }));
   expect(visited).toEqual(["/settings"]);
+});
+
+test("offers Refer a friend and Help as external repo links, not sign out", () => {
+  const view = renderSidebar({
+    items: NAV_ITEMS,
+    activePath: "/",
+    onNavigate: () => undefined,
+  });
+  const refer = view.getByRole("link", { name: "Refer a friend" });
+  const help = view.getByRole("link", { name: "Help" });
+  expect(refer.getAttribute("href")).toContain("github.com");
+  expect(refer.getAttribute("target")).toBe("_blank");
+  expect(help.getAttribute("href")).toContain("github.com");
+  // Sign out lives in Settings now, never in the sidebar.
+  expect(view.queryByRole("button", { name: /sign out|log out/i })).toBeNull();
 });
