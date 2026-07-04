@@ -2,6 +2,12 @@
 // dnd-kit. A click opens the detail sheet; a drag past the pointer
 // sensor's activation distance moves the card instead, so the two
 // gestures never fight over the same pointer-down.
+//
+// The row is a flex row (stacked on narrow screens) with items-start:
+// each column caps and scrolls its own height (see board-column.tsx),
+// and items-start keeps a short column from being stretched to a tall
+// sibling's height, which is what used to turn an empty column into a
+// dead box.
 
 import {
   DndContext,
@@ -19,10 +25,8 @@ import { type ComputedMove, createDragEndHandler } from "../helpers/board-drag";
 export interface BoardViewProps {
   readonly board: TaskBoard;
   readonly onMove: (move: ComputedMove) => void;
-  readonly onCreate: (input: {
-    readonly title: string;
-    readonly dueDate?: string;
-  }) => Promise<void>;
+  /** Creates a task directly into the given column's status. */
+  readonly onCreate: (status: TaskStatus, title: string) => Promise<void>;
   readonly onOpenTask: (task: Task) => void;
 }
 
@@ -57,7 +61,7 @@ export const BoardView = ({
 
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {COLUMNS.map(({ status, label }) => (
           <BoardColumn
             key={status}
@@ -66,7 +70,7 @@ export const BoardView = ({
             tasks={board.columns[status]}
             today={board.today}
             onOpenTask={onOpenTask}
-            onCreate={status === "todo" ? onCreate : undefined}
+            onCreate={(title) => onCreate(status, title)}
           />
         ))}
       </div>

@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ComponentType, ReactElement, ReactNode } from "react";
 import type { AgendaEvent } from "../contract";
-import type { CalendarApi } from "./calendar-screen";
+import type { CalendarApi } from "./api";
 import { RecurrenceIcon } from "./components/recurrence-icon";
 import type { CalendarSearch } from "./helpers/calendar-search";
 import { addDays } from "./helpers/date-matrix";

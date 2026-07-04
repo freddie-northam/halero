@@ -7,6 +7,7 @@ import {
   type CalendarApi,
   createCalendarWebModule,
   createTodayAgendaSection,
+  withCalendarInvalidation,
 } from "@halero/module-calendar/web";
 import {
   createNotesWebModule,
@@ -35,7 +36,13 @@ import type { TrpcClient } from "./lib/trpc";
 
 /** Core-owned navigation. Settings stays core; modules slot in around it. */
 const coreNav: readonly NavContribution[] = [
-  { label: "Settings", path: "/settings", order: 100 },
+  {
+    label: "Settings",
+    path: "/settings",
+    order: 100,
+    icon: "settings",
+    group: "secondary",
+  },
 ];
 
 /**
@@ -60,6 +67,34 @@ export const buildTodaySections = (
     component: createTasksTodaySection(tasksApi),
   },
 ];
+
+/**
+ * The calendar seam: the module's procedures off the tRPC client,
+ * wrapped with the module's own invalidation helper so every create,
+ * update, or delete refreshes the calendar queries through the
+ * host-held QueryClient. The query keys stay inside the module; core
+ * only holds the client.
+ */
+export const buildCalendarApi = (
+  client: TrpcClient,
+  queryClient: QueryClient,
+): CalendarApi =>
+  withCalendarInvalidation(
+    {
+      today: () => client.modules.calendar.today.query(),
+      range: (from, to) => client.modules.calendar.range.query({ from, to }),
+      events: (from, to) => client.modules.calendar.events.query({ from, to }),
+      upcoming: (limit) =>
+        client.modules.calendar.upcoming.query(
+          limit === undefined ? undefined : { limit },
+        ),
+      createEvent: (input) => client.modules.calendar.createEvent.mutate(input),
+      updateEvent: (input) => client.modules.calendar.updateEvent.mutate(input),
+      deleteEvent: (entityId) =>
+        client.modules.calendar.deleteEvent.mutate({ entityId }),
+    },
+    queryClient,
+  );
 
 /**
  * The tasks seam: the module's procedures off the tRPC client, wrapped
@@ -136,10 +171,7 @@ export const buildWebModules = (
   api: HaleroApi,
   queryClient: QueryClient,
 ): readonly WebModule[] => {
-  const calendarApi: CalendarApi = {
-    today: () => client.modules.calendar.today.query(),
-    range: (from, to) => client.modules.calendar.range.query({ from, to }),
-  };
+  const calendarApi = buildCalendarApi(client, queryClient);
   const tasksApi = buildTasksApi(client, queryClient);
   const notesApi = buildNotesApi(client, queryClient);
   return [

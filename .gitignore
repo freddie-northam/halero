@@ -21,6 +21,11 @@ data/
 # scratch
 .superpowers/
 
+# agent worktrees for concurrent sessions (each carries its own checkout,
+# including its own biome.json, which trips biome's nested-root-config
+# check when run from the main checkout)
+.claude/worktrees/
+
 # editor
 .vscode/*
 !.vscode/extensions.json

@@ -1,5 +1,5 @@
 import { cn } from "@halero/ui";
-import type { ReactElement } from "react";
+import type { MouseEvent, ReactElement } from "react";
 import type { AgendaEvent } from "../../contract";
 import { formatTime } from "../helpers/format";
 import { RecurrenceIcon } from "./recurrence-icon";
@@ -7,24 +7,35 @@ import { RecurrenceIcon } from "./recurrence-icon";
 export interface EventChipProps {
   readonly event: AgendaEvent;
   readonly timeZone: string;
+  /** Fires for every event, editable or not; selection is read-only. */
+  readonly onSelect: (event: AgendaEvent) => void;
 }
 
+const chipClassName = (event: AgendaEvent): string =>
+  cn(
+    "flex min-w-0 items-center gap-1 rounded-sm px-1 text-xs leading-4",
+    event.allDay ? "bg-primary/10 text-primary" : "text-foreground",
+  );
+
 /**
- * A one-line event marker for grid cells: all-day events get the tinted
- * accent chip, timed events lead with their start time in tabular
- * numerals.
+ * User-created events get a small leading accent dot so they read as
+ * distinct from Google-synced ones at a glance, on top of the timed/
+ * all-day styling both already share.
  */
-export const EventChip = ({
+const ChipContent = ({
   event,
   timeZone,
-}: EventChipProps): ReactElement => (
-  <div
-    className={cn(
-      "flex min-w-0 items-center gap-1 rounded-sm px-1 text-xs leading-4",
-      event.allDay ? "bg-primary/10 text-primary" : "text-foreground",
-    )}
-    title={event.title}
-  >
+}: {
+  readonly event: AgendaEvent;
+  readonly timeZone: string;
+}): ReactElement => (
+  <>
+    {event.editable ? (
+      <span
+        aria-hidden="true"
+        className="size-1.5 shrink-0 rounded-full bg-primary"
+      />
+    ) : null}
     {event.allDay ? null : (
       <span className="tnum shrink-0 text-muted-foreground">
         {formatTime(event.start, timeZone)}
@@ -32,5 +43,37 @@ export const EventChip = ({
     )}
     <span className="truncate">{event.title}</span>
     {event.recurring ? <RecurrenceIcon /> : null}
-  </div>
+  </>
 );
+
+/**
+ * A one-line event marker for grid cells: all-day events get the tinted
+ * accent chip, timed events lead with their start time in tabular
+ * numerals. Every event is a keyboard-focusable button that selects it
+ * into the context panel, stopping propagation so it never also triggers
+ * the day's create affordance; the accent dot still marks editable (user)
+ * events at a glance.
+ */
+export const EventChip = ({
+  event,
+  timeZone,
+  onSelect,
+}: EventChipProps): ReactElement => {
+  const handleClick = (domEvent: MouseEvent<HTMLButtonElement>): void => {
+    domEvent.stopPropagation();
+    onSelect(event);
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      title={event.title}
+      className={cn(
+        chipClassName(event),
+        "w-full text-left focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+      )}
+    >
+      <ChipContent event={event} timeZone={timeZone} />
+    </button>
+  );
+};

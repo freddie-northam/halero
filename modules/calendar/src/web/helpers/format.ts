@@ -21,6 +21,39 @@ export const formatTime = (epochMs: number, timeZone: string): string =>
     timeZone,
   }).format(epochMs);
 
+/**
+ * Minutes since local midnight for an instant in a given zone, parsed
+ * from formatTime's "HH:MM" rather than any offset arithmetic on the
+ * epoch (the week grid's only source of wall-clock minutes). Used to
+ * position timed events in the hour-axis grid.
+ */
+export const minutesOfDayInZone = (
+  epochMs: number,
+  timeZone: string,
+): number => {
+  const [hoursText, minutesText] = formatTime(epochMs, timeZone).split(":");
+  return Number(hoursText) * 60 + Number(minutesText);
+};
+
+/**
+ * "YYYY-MM-DD" for that instant in that zone, assembled from the
+ * formatter's own labeled parts rather than a locale date string (ICU's
+ * string format differs across builds; the part types do not). Mirrors
+ * the server's dateStringInZone, so the edit modal's prefill needs no
+ * client-side timezone math of its own.
+ */
+export const formatDateInZone = (epochMs: number, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone,
+  }).formatToParts(epochMs);
+  const part = (type: "year" | "month" | "day"): string =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+
 /** "July 2026" for the month view header. */
 export const formatMonthLabel = (date: string): string =>
   new Intl.DateTimeFormat("en-GB", {
@@ -62,3 +95,24 @@ export const formatWeekdayShort = (date: string): string =>
 
 /** The day-of-month number for grid cells. */
 export const dayOfMonth = (date: string): number => Number(date.slice(8, 10));
+
+/**
+ * "1h 30m" / "45m" / "2h" for a timed event's [start, end) span: plain
+ * epoch-ms arithmetic, never timezone math. Zero or negative spans (and
+ * all-day events, which the caller never passes here) return "".
+ */
+export const formatDuration = (startMs: number, endMs: number): string => {
+  const totalMinutes = Math.floor((endMs - startMs) / 60_000);
+  if (totalMinutes <= 0) {
+    return "";
+  }
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+  return `${hours}h ${minutes}m`;
+};

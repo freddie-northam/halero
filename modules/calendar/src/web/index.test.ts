@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
-import type { CalendarApi } from "./calendar-screen";
+import type { CalendarApi } from "./api";
 import { createCalendarWebModule } from "./index";
 
 const stubApi: CalendarApi = {
   today: () => Promise.resolve({ homeTimezone: "UTC", today: "2023-11-14" }),
   range: () => Promise.resolve({ homeTimezone: "UTC", days: [] }),
+  events: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+  upcoming: () => Promise.resolve({ homeTimezone: "UTC", events: [] }),
+  createEvent: () => Promise.reject(new Error("not under test")),
+  updateEvent: () => Promise.reject(new Error("not under test")),
+  deleteEvent: () => Promise.reject(new Error("not under test")),
 };
 
 describe("the calendar module's entity link", () => {

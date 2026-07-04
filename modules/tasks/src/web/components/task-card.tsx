@@ -6,7 +6,9 @@
 // coexist through the sensor's activation distance (see BoardView), not
 // through anything this component does. Since the card's Space/Enter are
 // claimed by the dnd keyboard sensor, the EditTaskButton is the
-// keyboard/SR path to the detail sheet.
+// keyboard/SR path to the detail sheet. A subtle border/bg hover signals
+// the card is interactive, on top of the EditTaskButton's own
+// reveal-on-hover/focus.
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -141,7 +143,7 @@ export const TaskCard = ({
       {...listeners}
       onClick={onOpen}
       className={cn(
-        "group cursor-pointer overflow-hidden rounded-md border bg-card",
+        "group cursor-pointer overflow-hidden rounded-md border bg-card transition-colors hover:border-foreground/15 hover:bg-muted/50",
         isDragging && "opacity-50",
       )}
     >

@@ -111,6 +111,11 @@ export const mapGoogleEvent = (
       status,
       recurringEventId: stringOrNull(event.recurringEventId),
       originalStartTime: originalStart.dateTime ?? originalStart.date,
+      // The full description, not the 280-char snippet: user and Google
+      // events show the same notes detail.
+      notes: stringOrNull(event.description),
+      // The meeting/join link, preferred over the event's own page.
+      url: stringOrNull(event.hangoutLink) ?? stringOrNull(event.htmlLink),
     },
     raw: event,
   };

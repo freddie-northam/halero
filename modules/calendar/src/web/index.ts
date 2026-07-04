@@ -5,23 +5,33 @@
 
 import { defineWebModule, type WebModule } from "@halero/module-sdk/web";
 import { CALENDAR_EVENT_KIND } from "@halero/schemas";
-import { type CalendarApi, createCalendarScreen } from "./calendar-screen";
+import type { CalendarApi } from "./api";
+import { createCalendarScreen } from "./calendar-screen";
 import { normalizeCalendarSearch } from "./helpers/calendar-search";
 
 export type {
   Agenda,
   AgendaDay,
   AgendaEvent,
+  CalendarEventList,
   CalendarRange,
   CalendarToday,
+  CalendarUpcoming,
 } from "../contract";
-export type { CalendarApi } from "./calendar-screen";
+export type {
+  CalendarApi,
+  CalendarEventInput,
+  CalendarEventUpdateInput,
+} from "./api";
+export { withCalendarInvalidation } from "./queries";
 export { createTodayAgendaSection } from "./today-agenda-section";
 
 export const createCalendarWebModule = (api: CalendarApi): WebModule =>
   defineWebModule({
     id: "calendar",
-    nav: [{ label: "Calendar", path: "/calendar", order: 20 }],
+    nav: [
+      { label: "Calendar", path: "/calendar", order: 20, icon: "calendar" },
+    ],
     pages: [
       {
         path: "/calendar",

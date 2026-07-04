@@ -3,6 +3,7 @@ import {
   addDaysToDateString,
   dateStringInZone,
   dayBoundsInZone,
+  instantInZone,
   startOfDayInZone,
 } from "./time";
 
@@ -104,5 +105,58 @@ describe("addDaysToDateString", () => {
 
   test("handles leap-year February", () => {
     expect(addDaysToDateString("2024-02-28", 1)).toBe("2024-02-29");
+  });
+});
+
+describe("instantInZone", () => {
+  test("agrees with startOfDayInZone at 00:00 on an ordinary day", () => {
+    expect(instantInZone("2025-06-15", "00:00", "Europe/London")).toBe(
+      startOfDayInZone("2025-06-15", "Europe/London"),
+    );
+  });
+
+  test("adds the wall-clock offset from midnight on an ordinary day", () => {
+    const midnight = startOfDayInZone("2025-06-15", "Europe/London");
+    expect(instantInZone("2025-06-15", "14:30", "Europe/London")).toBe(
+      midnight + 14 * HOUR + 30 * 60_000,
+    );
+  });
+
+  test("rejects a malformed time of day with a readable error", () => {
+    for (const bad of ["1:30", "24:00", "12:60", "noon", "12:5"]) {
+      expect(() => instantInZone("2025-06-15", bad, "UTC")).toThrow(
+        /time of day.*HH:MM/i,
+      );
+    }
+  });
+
+  test("stays monotonic across a spring-forward gap, including gapped times", () => {
+    // 2025-03-30 in Europe/London: clocks jump 01:00 GMT to 02:00 BST,
+    // so 01:00-01:59 do not exist that day.
+    const times = ["00:30", "01:15", "01:45", "02:15", "03:30"];
+    const instants = times.map((time) =>
+      instantInZone("2025-03-30", time, "Europe/London"),
+    );
+    for (let index = 1; index < instants.length; index += 1) {
+      expect(instants[index]).toBeGreaterThanOrEqual(
+        instants[index - 1] as number,
+      );
+    }
+  });
+
+  test("resolves a gapped wall time to a real instant on the correct date", () => {
+    // 01:00-01:59 do not exist in London on 2025-03-30 (clocks jump
+    // straight from 01:00 GMT to 02:00 BST), so a request for a wall
+    // time inside the gap must still resolve to a real, later instant
+    // whose own local reading is the correct side of the transition
+    // (never one computed as if the gap had not happened).
+    const gapped = instantInZone("2025-03-30", "01:30", "Europe/London");
+    expect(dateStringInZone(gapped, "Europe/London")).toBe("2025-03-30");
+    expect(gapped).toBeGreaterThan(
+      instantInZone("2025-03-30", "00:30", "Europe/London"),
+    );
+    expect(gapped).toBeLessThan(
+      instantInZone("2025-03-30", "03:30", "Europe/London"),
+    );
   });
 });

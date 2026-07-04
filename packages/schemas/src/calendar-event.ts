@@ -24,6 +24,8 @@ export const calendarEventSatelliteSchema = z.object({
   status: z.string().nullable(),
   recurringEventId: z.string().nullable(),
   originalStartTime: z.string().nullable(),
+  notes: z.string().nullable(),
+  url: z.string().nullable(),
 });
 
 export type CalendarEventSatellite = z.infer<

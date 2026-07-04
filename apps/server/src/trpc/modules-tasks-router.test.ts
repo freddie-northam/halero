@@ -63,6 +63,7 @@ interface CreateTaskInput {
   readonly priority?: string;
   readonly tags?: readonly string[];
   readonly estimateMinutes?: number;
+  readonly status?: string;
 }
 
 const createTask = async (
@@ -388,6 +389,86 @@ describe("modules.tasks.create", () => {
 
     expect(fresh.sortOrder).toBeGreaterThan(5);
     expect(readSatelliteRow(testApp, fresh.entityId)?.sortOrder).toBe(6);
+  });
+
+  test("creates directly into doing, leaving completed_at null", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const task = await createTask(testApp.app, cookie, {
+      title: "Already underway",
+      status: "doing",
+    });
+
+    expect(task.status).toBe("doing");
+    expect(task.completedAt).toBeNull();
+    expect(readSatelliteRow(testApp, task.entityId)?.status).toBe("doing");
+  });
+
+  test("creates directly into done, setting completed_at from the injected clock", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    testApp.clock.value = 1_700_000_555_000;
+
+    const task = await createTask(testApp.app, cookie, {
+      title: "Already finished",
+      status: "done",
+    });
+
+    expect(task.status).toBe("done");
+    expect(task.completedAt).toBe(1_700_000_555_000);
+    expect(readSatelliteRow(testApp, task.entityId)?.completedAt).toBe(
+      1_700_000_555_000,
+    );
+  });
+
+  test("defaults to todo when status is omitted", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const task = await createTask(testApp.app, cookie, { title: "Plain" });
+
+    expect(task.status).toBe("todo");
+    expect(task.completedAt).toBeNull();
+  });
+
+  test("lands at the end of the doing column, not the todo column", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+    const existingDoing = await createTask(testApp.app, cookie, {
+      title: "Already doing",
+      status: "doing",
+    });
+    const existingTodo = await createTask(testApp.app, cookie, {
+      title: "Sitting in todo",
+    });
+    setSortOrder(testApp, existingDoing.entityId, 5);
+    setSortOrder(testApp, existingTodo.entityId, 99);
+
+    const fresh = await createTask(testApp.app, cookie, {
+      title: "Second doing task",
+      status: "doing",
+    });
+
+    expect(fresh.sortOrder).toBe(6);
+    expect(readSatelliteRow(testApp, fresh.entityId)?.sortOrder).toBe(6);
+  });
+
+  test("rejects an unknown status readably", async () => {
+    const testApp = makeTestApp();
+    const cookie = await completeSetup(testApp.app);
+
+    const message = await mutationError(
+      testApp.app,
+      cookie,
+      "modules.tasks.create",
+      { title: "Rank me", status: "blocked" },
+      400,
+    );
+
+    expect(message).toBe(
+      '"blocked" is not a task status; expected todo, doing, or done.',
+    );
   });
 
   test("mirrors tags and notes into the search snippet", async () => {

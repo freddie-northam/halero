@@ -1,7 +1,15 @@
-// One board column: a header (label + count), an optional quick-add
-// (the To do column only), and its cards inside a dnd-kit sortable list.
-// The column's own droppable id lets a drop land past the last card, or
-// into an empty column, even when it isn't over any card.
+// One board column: a header (label + count), its cards inside a
+// dnd-kit sortable list, and a compact "+ Add task" row at the bottom
+// that creates directly into this column's status. The column's own
+// droppable id lets a drop land past the last card, or into an empty
+// column, even when it isn't over any card.
+//
+// The column caps its own height to the viewport (sm and up, where the
+// board's three columns sit in a row) and lets its card list scroll
+// internally past that cap; align-items: start on the row (see
+// board-view.tsx) keeps a short column from being stretched to match a
+// tall sibling, so an empty column stays compact instead of becoming a
+// dead box.
 
 import { useDroppable } from "@dnd-kit/core";
 import {
@@ -12,7 +20,7 @@ import { Badge } from "@halero/ui";
 import type { ReactElement } from "react";
 import type { Task, TaskStatus } from "../../contract";
 import { columnDroppableId } from "../helpers/board-drag";
-import { QuickAddForm } from "./quick-add-form";
+import { AddTaskRow } from "./add-task-row";
 import { TaskCard } from "./task-card";
 
 export interface BoardColumnProps {
@@ -21,11 +29,7 @@ export interface BoardColumnProps {
   readonly tasks: readonly Task[];
   readonly today: string;
   readonly onOpenTask: (task: Task) => void;
-  /** Only the To do column gets a quick-add; new tasks land there. */
-  readonly onCreate?: (input: {
-    readonly title: string;
-    readonly dueDate?: string;
-  }) => Promise<void>;
+  readonly onCreate: (title: string) => Promise<void>;
 }
 
 export const BoardColumn = ({
@@ -38,20 +42,24 @@ export const BoardColumn = ({
 }: BoardColumnProps): ReactElement => {
   const { setNodeRef } = useDroppable({ id: columnDroppableId(status) });
   const cardIds = tasks.map((task) => task.entityId);
+  const headingId = `${status}-column-heading`;
 
   return (
-    <div className="flex flex-col rounded-lg border bg-muted/20 p-2">
-      <div className="flex items-center justify-between px-1 py-1">
-        <h2 className="text-sm font-semibold tracking-tight">{label}</h2>
+    <section
+      aria-labelledby={headingId}
+      className="flex min-w-0 flex-col rounded-lg border bg-muted/60 p-2 sm:flex-1 sm:max-h-[calc(100dvh-11rem)]"
+    >
+      <div className="flex shrink-0 items-center justify-between px-1 py-1">
+        <h2 id={headingId} className="text-sm font-semibold tracking-tight">
+          {label}
+        </h2>
         <Badge variant="secondary">{tasks.length}</Badge>
       </div>
-      {onCreate === undefined ? null : (
-        <div className="px-1 pb-2">
-          <QuickAddForm onCreate={onCreate} />
-        </div>
-      )}
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-        <div ref={setNodeRef} className="mt-1 flex min-h-16 flex-col gap-2">
+        <div
+          ref={setNodeRef}
+          className="mt-1 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto"
+        >
           {tasks.length === 0 ? (
             <p className="px-1 py-2 text-sm text-muted-foreground">
               Nothing here.
@@ -68,6 +76,9 @@ export const BoardColumn = ({
           )}
         </div>
       </SortableContext>
-    </div>
+      <div className="mt-1 shrink-0 px-1">
+        <AddTaskRow onCreate={onCreate} />
+      </div>
+    </section>
   );
 };

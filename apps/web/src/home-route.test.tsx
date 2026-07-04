@@ -43,6 +43,9 @@ const standup = {
   location: null,
   calendarId: "primary",
   recurring: false,
+  notes: null,
+  url: null,
+  editable: false,
 };
 
 const dueTask: Task = {
@@ -226,6 +229,11 @@ test("an interleaved registry section renders strictly by order", async () => {
         homeTimezone: HOME_TZ,
         days: [{ date: TODAY, events: [standup] }],
       }),
+    events: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
+    upcoming: () => Promise.resolve({ homeTimezone: HOME_TZ, events: [] }),
+    createEvent: () => Promise.reject(new Error("not under test")),
+    updateEvent: () => Promise.reject(new Error("not under test")),
+    deleteEvent: () => Promise.reject(new Error("not under test")),
   };
   const tasksApi: TasksApi = {
     list: () => Promise.resolve({ tasks: [] }),

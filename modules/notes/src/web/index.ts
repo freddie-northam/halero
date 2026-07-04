@@ -20,7 +20,7 @@ export { withNotesInvalidation } from "./queries";
 export const createNotesWebModule = (api: NotesApi): WebModule =>
   defineWebModule({
     id: "notes",
-    nav: [{ label: "Notes", path: "/notes", order: 40 }],
+    nav: [{ label: "Notes", path: "/notes", order: 40, icon: "notes" }],
     pages: [
       {
         path: "/notes",

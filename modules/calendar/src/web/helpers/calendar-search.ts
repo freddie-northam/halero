@@ -5,7 +5,7 @@
 
 import { addDays, isCalendarDate, mondayOf, monthMatrix } from "./date-matrix";
 
-export type CalendarView = "month" | "week" | "agenda";
+export type CalendarView = "month" | "week" | "agenda" | "list";
 
 export type CalendarSearch = {
   readonly view: CalendarView;
@@ -17,7 +17,10 @@ export type CalendarSearch = {
 export const AGENDA_DAYS = 7;
 
 const isCalendarView = (value: unknown): value is CalendarView =>
-  value === "month" || value === "week" || value === "agenda";
+  value === "month" ||
+  value === "week" ||
+  value === "agenda" ||
+  value === "list";
 
 /** Drops anything unrenderable; unknown params never survive. */
 export const normalizeCalendarSearch = (search: unknown): CalendarSearch => {
@@ -48,6 +51,8 @@ export const viewWindow = (view: CalendarView, anchor: string): DateWindow => {
     const monday = mondayOf(anchor);
     return { from: monday, to: addDays(monday, 7) };
   }
+  // "month" and "list" share the same fixed 6x7 grid window: the list is
+  // a flat table of the same month's events, just laid out as rows.
   const matrix = monthMatrix(anchor);
   const first = matrix[0]?.[0] ?? anchor;
   const last = matrix[5]?.[6] ?? anchor;

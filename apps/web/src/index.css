@@ -10,3 +10,12 @@
 @source "../../../modules/today/src/web";
 @source "../../../modules/tasks/src/web";
 @source "../../../modules/notes/src/web";
+
+/* The vendored shadcn sidebar hardcodes a width transition on collapse; drop
+   it for users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"] {
+    transition: none;
+  }
+}
